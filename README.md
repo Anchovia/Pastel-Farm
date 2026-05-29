@@ -38,6 +38,8 @@
 - Index Buffer — 정점 재사용
 - UBO + Descriptor Set — MVP 행렬을 셰이더에 전달
 - GLM MVP 행렬 — 모델 회전, 카메라(view), 원근 투영(proj)
+- Depth Buffer — 3D 앞뒤 판별
+- 3D 큐브 — 정점 8개, 면 6개, 색상 그라데이션
 
 ---
 

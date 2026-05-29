@@ -19,6 +19,17 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 파이프라인에 Vertex Input 바인딩 정보 등록
 - `vkCmdBindVertexBuffers` + `vkCmdDraw`로 그라데이션 삼각형 출력
 
+### Depth Buffer + 3D 큐브
+- `createDepthResources()` — depth image/memory/view 생성 (DEVICE_LOCAL, D32_SFLOAT)
+- `createImage()` 헬퍼 추가
+- Render Pass에 depth attachment 추가 (attachment 1번)
+- Framebuffer에 depth image view 연결
+- Pipeline에 `VkPipelineDepthStencilStateCreateInfo` 추가 (depthTest/Write = true, compareOp = LESS)
+- `cleanupSwapchain` / `recreateSwapchain`에 depth 리소스 포함
+- `Vertex.pos` vec2 → vec3, 셰이더도 동일하게 업그레이드
+- `kVertices` 4개 → 큐브 8개, `kIndices` 6개 → 36개
+- 결과: 원근감+depth 정렬이 정상 작동하는 회전 3D 큐브
+
 ### UBO + MVP 행렬
 - `UniformBufferObject` 구조체 정의 (model / view / proj mat4)
 - Descriptor Set Layout, Descriptor Pool, Descriptor Set 생성
@@ -147,6 +158,25 @@ vkUnmapMemory(...);                        // 매핑 해제
 
 나중에 **staging buffer** 방식으로 업그레이드 예정:
 `CPU → HOST_VISIBLE 임시 버퍼 → (GPU가 복사) → DEVICE_LOCAL 버퍼`
+
+---
+
+### Depth Buffer
+
+3D에서 여러 오브젝트가 겹칠 때 어느 픽셀이 앞에 있는지 판별하는 버퍼.
+없으면 나중에 그려진 오브젝트가 무조건 앞에 나온다 (화가 알고리즘 문제).
+
+```
+픽셀을 그릴 때:
+  새 픽셀의 depth < 저장된 depth  → 그리고 depth 갱신
+  새 픽셀의 depth >= 저장된 depth → 버림
+```
+
+Depth Buffer는 스왑체인 이미지와 같은 크기여야 하므로 창 리사이즈 시 함께 재생성한다.
+
+Render Pass에 depth attachment를 추가하고, Framebuffer에 depth image view를 연결하고,
+Pipeline에 `VkPipelineDepthStencilStateCreateInfo`로 depth test를 활성화해야 한다.
+세 군데 모두 연결해야 작동한다.
 
 ---
 
