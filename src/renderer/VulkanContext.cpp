@@ -9,11 +9,16 @@
 #include <fstream>
 #include <cstring>
 
-// 삼각형 버텍스 데이터 (셰이더 하드코딩 → CPU 메모리)
+// 사각형 버텍스 데이터 (4개 정점, 인덱스로 재사용)
 static const std::vector<Vertex> kVertices = {
-    {{ 0.0f, -0.5f}, {1.0f, 0.2f, 0.2f}},
-    {{ 0.5f,  0.5f}, {0.2f, 1.0f, 0.2f}},
-    {{-0.5f,  0.5f}, {0.2f, 0.4f, 1.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 0.2f, 0.2f}},  // 0: 좌상 (빨강)
+    {{ 0.5f, -0.5f}, {0.2f, 1.0f, 0.2f}},  // 1: 우상 (초록)
+    {{ 0.5f,  0.5f}, {0.2f, 0.4f, 1.0f}},  // 2: 우하 (파랑)
+    {{-0.5f,  0.5f}, {1.0f, 1.0f, 0.2f}},  // 3: 좌하 (노랑)
+};
+static const std::vector<uint16_t> kIndices = {
+    0, 1, 2,  // 삼각형 1 (우상단)
+    0, 2, 3,  // 삼각형 2 (좌하단)
 };
 
 // ============================================================
@@ -77,6 +82,7 @@ VulkanContext::VulkanContext(Window& window) : m_window(window) {
     createFramebuffers();
     createCommandPool();
     createVertexBuffer();
+    createIndexBuffer();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -85,6 +91,8 @@ VulkanContext::~VulkanContext() {
     waitIdle();
     cleanupSwapchain();
 
+    vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
+    vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
     vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
     vkDestroyPipeline(m_device, m_pipeline, nullptr);
@@ -589,7 +597,8 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     VkBuffer     vertexBuffers[] = {m_vertexBuffer};
     VkDeviceSize offsets[]       = {0};
     vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
-    vkCmdDraw(cmd, (uint32_t)kVertices.size(), 1, 0, 0);
+    vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
 }
@@ -726,6 +735,19 @@ void VulkanContext::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
         throw std::runtime_error("Failed to allocate buffer memory");
 
     vkBindBufferMemory(m_device, buffer, memory, 0);
+}
+
+void VulkanContext::createIndexBuffer() {
+    VkDeviceSize size = sizeof(kIndices[0]) * kIndices.size();
+    createBuffer(size,
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_indexBuffer, m_indexBufferMemory);
+
+    void* data;
+    vkMapMemory(m_device, m_indexBufferMemory, 0, size, 0, &data);
+    memcpy(data, kIndices.data(), size);
+    vkUnmapMemory(m_device, m_indexBufferMemory);
 }
 
 void VulkanContext::createVertexBuffer() {

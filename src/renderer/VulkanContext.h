@@ -30,6 +30,7 @@ private:
     void createCommandBuffers();
     void createSyncObjects();
     void createVertexBuffer();
+    void createIndexBuffer();
 
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
     void cleanupSwapchain();
@@ -73,6 +74,8 @@ private:
 
     VkBuffer                 m_vertexBuffer       = VK_NULL_HANDLE;
     VkDeviceMemory           m_vertexBufferMemory = VK_NULL_HANDLE;
+    VkBuffer                 m_indexBuffer        = VK_NULL_HANDLE;
+    VkDeviceMemory           m_indexBufferMemory  = VK_NULL_HANDLE;
 
     VkCommandPool            m_commandPool      = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> m_commandBuffers;
