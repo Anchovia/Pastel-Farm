@@ -36,6 +36,13 @@ private:
     void createDescriptorPool();
     void createDescriptorSets();
     void updateUniformBuffer(uint32_t currentFrame);
+    void createDepthResources();
+    void createImage(uint32_t width, uint32_t height, VkFormat format,
+        VkImageTiling tiling, VkImageUsageFlags usage,
+        VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
+    VkFormat findDepthFormat();
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
+        VkImageTiling tiling, VkFormatFeatureFlags features);
 
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
     void cleanupSwapchain();
@@ -81,6 +88,10 @@ private:
     VkDeviceMemory           m_vertexBufferMemory = VK_NULL_HANDLE;
     VkBuffer                 m_indexBuffer        = VK_NULL_HANDLE;
     VkDeviceMemory           m_indexBufferMemory  = VK_NULL_HANDLE;
+
+    VkImage                      m_depthImage           = VK_NULL_HANDLE;
+    VkDeviceMemory               m_depthImageMemory     = VK_NULL_HANDLE;
+    VkImageView                  m_depthImageView       = VK_NULL_HANDLE;
 
     VkDescriptorSetLayout        m_descriptorSetLayout = VK_NULL_HANDLE;
     std::vector<VkBuffer>        m_uniformBuffers;
