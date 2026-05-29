@@ -1,6 +1,7 @@
 #pragma once
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 #include <vector>
 #include <optional>
 #include <string>
@@ -37,6 +38,7 @@ private:
     void createDescriptorSets();
     void updateUniformBuffer(uint32_t currentFrame);
     void createDepthResources();
+    void processInput(float dt);
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
@@ -108,4 +110,10 @@ private:
     std::vector<VkSemaphore> m_renderFinished;
     std::vector<VkFence>     m_inFlight;
     uint32_t                 m_currentFrame     = 0;
+
+    glm::vec3 m_orbitTarget   = {0.0f, 0.0f, 0.0f};
+    float     m_orbitAngle    = 45.0f;
+    float     m_orbitDistance = 5.0f;
+    float     m_orbitPitch    = 45.0f;
+    double    m_lastTime      = 0.0;
 };

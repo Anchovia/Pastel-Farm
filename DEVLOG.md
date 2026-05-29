@@ -19,6 +19,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 파이프라인에 Vertex Input 바인딩 정보 등록
 - `vkCmdBindVertexBuffers` + `vkCmdDraw`로 그라데이션 삼각형 출력
 
+### 궤도 카메라
+- 자유 시점 카메라 → 궤도 카메라로 교체
+- `m_orbitAngle`, `m_orbitDistance`, `m_orbitPitch` 로 카메라 위치 계산
+- Q/E로 `m_orbitAngle` 증감 → 타겟 주위 공전
+- `updateUniformBuffer()`에서 구면 좌표 → 데카르트 좌표 변환 후 `lookAt`
+- 게임 방향: Don't Starve 스타일 고정 시점, 추후 플레이어 위치를 `m_orbitTarget`으로
+
 ### Depth Buffer + 3D 큐브
 - `createDepthResources()` — depth image/memory/view 생성 (DEVICE_LOCAL, D32_SFLOAT)
 - `createImage()` 헬퍼 추가
@@ -158,6 +165,26 @@ vkUnmapMemory(...);                        // 매핑 해제
 
 나중에 **staging buffer** 방식으로 업그레이드 예정:
 `CPU → HOST_VISIBLE 임시 버퍼 → (GPU가 복사) → DEVICE_LOCAL 버퍼`
+
+---
+
+### 궤도 카메라 개념
+
+구면 좌표계로 카메라 위치를 계산한다:
+
+```
+camPos.x = target.x + distance * cos(pitch) * cos(angle)
+camPos.y = target.y + distance * cos(pitch) * sin(angle)
+camPos.z = target.z + distance * sin(pitch)
+view = lookAt(camPos, target, up)
+```
+
+- `angle` (Q/E로 제어): 수평 공전 각도
+- `pitch` (고정): 내려다보는 각도
+- `distance` (고정): 타겟까지 거리
+
+자유 시점 카메라와 달리 항상 타겟을 바라보므로,
+플레이어 위치만 `m_orbitTarget`에 넘기면 카메라가 자동으로 따라간다.
 
 ---
 

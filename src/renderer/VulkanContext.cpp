@@ -705,7 +705,12 @@ void VulkanContext::drawFrame() {
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         throw std::runtime_error("Failed to acquire swapchain image");
 
+    double now = glfwGetTime();
+    float  dt  = (float)(now - m_lastTime);
+    m_lastTime = now;
+
     vkResetFences(m_device, 1, &m_inFlight[m_currentFrame]);
+    processInput(dt);
     updateUniformBuffer(m_currentFrame);
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
@@ -969,18 +974,32 @@ void VulkanContext::createDescriptorSets() {
 //  Update uniform buffer (called every frame)
 // ============================================================
 void VulkanContext::updateUniformBuffer(uint32_t currentFrame) {
-    static auto startTime = std::chrono::high_resolution_clock::now();
-    auto now  = std::chrono::high_resolution_clock::now();
-    float t   = std::chrono::duration<float>(now - startTime).count();
+    float rad   = glm::radians(m_orbitAngle);
+    float pitch = glm::radians(m_orbitPitch);
+    glm::vec3 camPos = m_orbitTarget + glm::vec3{
+        m_orbitDistance * glm::cos(pitch) * glm::cos(rad),
+        m_orbitDistance * glm::cos(pitch) * glm::sin(rad),
+        m_orbitDistance * glm::sin(pitch)
+    };
 
     UniformBufferObject ubo{};
-    ubo.model = glm::rotate(glm::mat4(1.0f), t * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view  = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.model = glm::mat4(1.0f);
+    ubo.view  = glm::lookAt(camPos, m_orbitTarget, glm::vec3{0.0f, 0.0f, 1.0f});
     ubo.proj  = glm::perspective(glm::radians(45.0f),
-        (float)m_swapchainExtent.width / m_swapchainExtent.height, 0.1f, 10.0f);
-    ubo.proj[1][1] *= -1; // Vulkan Y축은 OpenGL과 반대
+        (float)m_swapchainExtent.width / m_swapchainExtent.height, 0.1f, 100.0f);
+    ubo.proj[1][1] *= -1;
 
     memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+}
+
+void VulkanContext::processInput(float dt) {
+    GLFWwindow* win       = m_window.handle();
+    float       rotSpeed  = 90.0f * dt;
+
+    if (glfwGetKey(win, GLFW_KEY_Q)      == GLFW_PRESS) m_orbitAngle -= rotSpeed;
+    if (glfwGetKey(win, GLFW_KEY_E)      == GLFW_PRESS) m_orbitAngle += rotSpeed;
+    if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(win, GLFW_TRUE);
 }
 
 void VulkanContext::createIndexBuffer() {
