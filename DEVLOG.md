@@ -19,6 +19,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 파이프라인에 Vertex Input 바인딩 정보 등록
 - `vkCmdBindVertexBuffers` + `vkCmdDraw`로 그라데이션 삼각형 출력
 
+### 플랫 셰이딩
+- `Vertex`에 `normal` 필드 추가
+- 큐브 정점 8개 → 24개 (면당 4정점, 법선 공유 불가)
+- 셰이더에 `flat` qualifier — 삼각형 내 보간 없이 단일 색상
+- Fragment shader: Lambert 조명 `ambient(0.3) + diffuse(0.7) × dot(normal, lightDir)`
+- 면별 색상: 윗면 밝은 초록 / 옆면 중간·어두운 초록 / 아랫면 갈색
+- 결과: 로우폴리 타일 스타일 큐브
+
 ### 궤도 카메라
 - 자유 시점 카메라 → 궤도 카메라로 교체
 - `m_orbitAngle`, `m_orbitDistance`, `m_orbitPitch` 로 카메라 위치 계산
@@ -54,6 +62,55 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `createIndexBuffer()` 추가
 - `vkCmdDraw` → `vkCmdBindIndexBuffer` + `vkCmdDrawIndexed`
 - 결과: 그라데이션 사각형 출력
+
+---
+
+## 게임 설계 메모
+
+### 게임 방향
+
+스타듀밸리(농지/자원 수집) + 마인크래프트(블록 설치/파괴)를 고정 아이소메트릭 시점으로.
+기본은 평지 한 층. 블록을 쌓으면 단차 발생 → 계단/사다리로 이동.
+
+### 월드: 타일 기반
+
+```
+World[x][y][z] = TileType  // 3D 그리드
+```
+
+모든 블록은 **1×1×1 단위 큐브**로 통일.
+같은 메시를 재사용하고 색상/텍스처만 바꾸면 되므로 인스턴싱과 궁합이 좋다.
+
+```
+월드 로직  → 그리드 좌표 (정수)  : 타일 종류, 충돌, 속성
+렌더링/물리 → 연속 좌표 (float)  : 캐릭터 위치, 이동, 애니메이션
+```
+
+**타일 기반의 장점:**
+- 충돌 판정: 캐릭터 위치 → 그리드 좌표 변환 → 타일 속성 조회 (O(1))
+- 청크 시스템: N×N 타일 묶음으로 가까운 것만 로드/언로드
+- 컬링: 청크 단위로 frustum 밖이면 통째로 제외
+
+### 렌더링: 인스턴싱
+
+타일을 하나하나 개별 드로우콜로 그리면 1000타일 = 드로우콜 1000번.
+인스턴싱은 같은 메시를 위치/색상 데이터만 바꿔서 한 번에 그린다.
+
+```
+// 개별 드로우콜 방식 (느림)
+for each tile: vkCmdDraw(tile)  // N번 호출
+
+// 인스턴싱 방식 (빠름)
+vkCmdDrawIndexed(tileMesh, instanceCount=N)  // 1번 호출
+```
+
+저사양 목표에서 타일 수백~수천 개를 그려야 하므로 인스턴싱은 필수.
+
+### 구현 순서 (예정)
+1. 플랫 셰이딩 (현재)
+2. 인스턴싱
+3. 타일 그리드 + 청크
+4. 플레이어 이동
 
 ---
 
@@ -165,6 +222,34 @@ vkUnmapMemory(...);                        // 매핑 해제
 
 나중에 **staging buffer** 방식으로 업그레이드 예정:
 `CPU → HOST_VISIBLE 임시 버퍼 → (GPU가 복사) → DEVICE_LOCAL 버퍼`
+
+---
+
+### 플랫 셰이딩 개념
+
+스무스 셰이딩은 정점 사이 법선을 보간해서 면이 부드럽게 보인다.
+플랫 셰이딩은 보간 없이 삼각형 전체가 하나의 색상 — 로우폴리 스타일의 핵심.
+
+GLSL `flat` qualifier를 쓰면 provoking vertex(삼각형의 첫 번째 정점)의 값을 그대로 사용한다.
+
+```
+// 스무스: 정점마다 다른 법선 → 면 안에서 보간
+out vec3 fragNormal;
+
+// 플랫: 보간 없음 → 면 전체 동일
+flat out vec3 fragNormal;
+```
+
+플랫 셰이딩에서는 정점을 면끼리 **공유할 수 없다.**
+같은 꼭짓점이라도 면마다 법선이 다르기 때문에 별도 정점이 필요하다.
+→ 큐브: 8 정점(스무스) → 24 정점(플랫, 면 6 × 4)
+
+**Lambert 조명:**
+```
+float diff  = max(dot(normal, lightDir), 0.0);
+float light = ambient + diff * diffuseStrength;
+color       = baseColor * light;
+```
 
 ---
 

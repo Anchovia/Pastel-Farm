@@ -20,24 +20,47 @@ struct UniformBufferObject {
     glm::mat4 proj;
 };
 
-// 큐브 버텍스 (8개 꼭짓점, 꼭짓점마다 다른 색상)
+// 플랫 셰이딩용 큐브 (면당 4정점, 총 24개 — 법선 공유 불가)
+#define FACE(ax,ay,az, bx,by,bz, cx,cy,cz, dx,dy,dz, nx,ny,nz, r,g,b) \
+    {{ax,ay,az},{nx,ny,nz},{r,g,b}}, \
+    {{bx,by,bz},{nx,ny,nz},{r,g,b}}, \
+    {{cx,cy,cz},{nx,ny,nz},{r,g,b}}, \
+    {{dx,dy,dz},{nx,ny,nz},{r,g,b}}
+
+static const glm::vec3 kTop   = {0.45f, 0.75f, 0.30f}; // 밝은 초록 (윗면)
+static const glm::vec3 kSideA = {0.35f, 0.58f, 0.23f}; // 중간 초록 (앞/뒤)
+static const glm::vec3 kSideB = {0.28f, 0.48f, 0.18f}; // 어두운 초록 (좌/우)
+static const glm::vec3 kBot   = {0.30f, 0.20f, 0.10f}; // 갈색 (아랫면)
+
 static const std::vector<Vertex> kVertices = {
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.2f, 0.2f}},  // 0
-    {{ 0.5f, -0.5f, -0.5f}, {0.2f, 1.0f, 0.2f}},  // 1
-    {{ 0.5f,  0.5f, -0.5f}, {0.2f, 0.4f, 1.0f}},  // 2
-    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 0.2f}},  // 3
-    {{-0.5f, -0.5f,  0.5f}, {1.0f, 0.2f, 1.0f}},  // 4
-    {{ 0.5f, -0.5f,  0.5f}, {0.2f, 1.0f, 1.0f}},  // 5
-    {{ 0.5f,  0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},  // 6
-    {{-0.5f,  0.5f,  0.5f}, {0.5f, 0.5f, 0.5f}},  // 7
+    // 윗면 (z+, normal 0,0,1)
+    FACE(-0.5f,-0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f,
+         0,0,1,  kTop.r,kTop.g,kTop.b),
+    // 아랫면 (z-, normal 0,0,-1)
+    FACE(-0.5f, 0.5f,-0.5f,  0.5f, 0.5f,-0.5f,  0.5f,-0.5f,-0.5f, -0.5f,-0.5f,-0.5f,
+         0,0,-1,  kBot.r,kBot.g,kBot.b),
+    // 앞면 (y-, normal 0,-1,0)
+    FACE(-0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f,-0.5f, 0.5f, -0.5f,-0.5f, 0.5f,
+         0,-1,0,  kSideA.r,kSideA.g,kSideA.b),
+    // 뒷면 (y+, normal 0,1,0)
+    FACE( 0.5f, 0.5f,-0.5f, -0.5f, 0.5f,-0.5f, -0.5f, 0.5f, 0.5f,  0.5f, 0.5f, 0.5f,
+         0,1,0,  kSideA.r,kSideA.g,kSideA.b),
+    // 오른면 (x+, normal 1,0,0)
+    FACE( 0.5f,-0.5f,-0.5f,  0.5f, 0.5f,-0.5f,  0.5f, 0.5f, 0.5f,  0.5f,-0.5f, 0.5f,
+         1,0,0,  kSideB.r,kSideB.g,kSideB.b),
+    // 왼면 (x-, normal -1,0,0)
+    FACE(-0.5f, 0.5f,-0.5f, -0.5f,-0.5f,-0.5f, -0.5f,-0.5f, 0.5f, -0.5f, 0.5f, 0.5f,
+         -1,0,0,  kSideB.r,kSideB.g,kSideB.b),
 };
+#undef FACE
+
 static const std::vector<uint16_t> kIndices = {
-    0, 2, 1,  0, 3, 2,  // 아래면 (z-)
-    4, 5, 6,  4, 6, 7,  // 윗면  (z+)
-    0, 1, 5,  0, 5, 4,  // 앞면  (y-)
-    2, 3, 7,  2, 7, 6,  // 뒷면  (y+)
-    1, 2, 6,  1, 6, 5,  // 오른면 (x+)
-    3, 0, 4,  3, 4, 7,  // 왼면  (x-)
+     0, 1, 2,   0, 2, 3,   // 윗면
+     4, 5, 6,   4, 6, 7,   // 아랫면
+     8, 9,10,   8,10,11,   // 앞면
+    12,13,14,  12,14,15,   // 뒷면
+    16,17,18,  16,18,19,   // 오른면
+    20,21,22,  20,22,23,   // 왼면
 };
 
 // ============================================================
@@ -504,7 +527,7 @@ void VulkanContext::createGraphicsPipeline() {
     bindingDesc.stride    = sizeof(Vertex);
     bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    VkVertexInputAttributeDescription attributeDescs[2]{};
+    VkVertexInputAttributeDescription attributeDescs[3]{};
     attributeDescs[0].binding  = 0;
     attributeDescs[0].location = 0;
     attributeDescs[0].format   = VK_FORMAT_R32G32B32_SFLOAT;
@@ -512,13 +535,17 @@ void VulkanContext::createGraphicsPipeline() {
     attributeDescs[1].binding  = 0;
     attributeDescs[1].location = 1;
     attributeDescs[1].format   = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescs[1].offset   = offsetof(Vertex, color);
+    attributeDescs[1].offset   = offsetof(Vertex, normal);
+    attributeDescs[2].binding  = 0;
+    attributeDescs[2].location = 2;
+    attributeDescs[2].format   = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescs[2].offset   = offsetof(Vertex, color);
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInput.vertexBindingDescriptionCount   = 1;
     vertexInput.pVertexBindingDescriptions      = &bindingDesc;
-    vertexInput.vertexAttributeDescriptionCount = 2;
+    vertexInput.vertexAttributeDescriptionCount = 3;
     vertexInput.pVertexAttributeDescriptions    = attributeDescs;
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
