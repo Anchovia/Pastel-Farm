@@ -36,6 +36,8 @@
 - 창 리사이즈 시 Swapchain 자동 재생성
 - Vertex Buffer — 정점 데이터 CPU → GPU 업로드
 - Index Buffer — 정점 재사용
+- UBO + Descriptor Set — MVP 행렬을 셰이더에 전달
+- GLM MVP 행렬 — 모델 회전, 카메라(view), 원근 투영(proj)
 
 ---
 

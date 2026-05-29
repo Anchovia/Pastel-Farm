@@ -29,8 +29,13 @@ private:
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
+    void createDescriptorSetLayout();
     void createVertexBuffer();
     void createIndexBuffer();
+    void createUniformBuffers();
+    void createDescriptorPool();
+    void createDescriptorSets();
+    void updateUniformBuffer(uint32_t currentFrame);
 
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
     void cleanupSwapchain();
@@ -76,6 +81,13 @@ private:
     VkDeviceMemory           m_vertexBufferMemory = VK_NULL_HANDLE;
     VkBuffer                 m_indexBuffer        = VK_NULL_HANDLE;
     VkDeviceMemory           m_indexBufferMemory  = VK_NULL_HANDLE;
+
+    VkDescriptorSetLayout        m_descriptorSetLayout = VK_NULL_HANDLE;
+    std::vector<VkBuffer>        m_uniformBuffers;
+    std::vector<VkDeviceMemory>  m_uniformBuffersMemory;
+    std::vector<void*>           m_uniformBuffersMapped;
+    VkDescriptorPool             m_descriptorPool   = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> m_descriptorSets;
 
     VkCommandPool            m_commandPool      = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> m_commandBuffers;

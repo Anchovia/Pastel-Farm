@@ -4,7 +4,7 @@
 
 int main() {
     try {
-        Window       window(1280, 720, "Game Engine - Phase 1");
+        Window       window(1280, 720, "Pastel Farm");
         VulkanContext ctx(window);
 
         while (!window.shouldClose()) {

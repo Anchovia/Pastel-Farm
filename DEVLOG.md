@@ -19,6 +19,18 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 파이프라인에 Vertex Input 바인딩 정보 등록
 - `vkCmdBindVertexBuffers` + `vkCmdDraw`로 그라데이션 삼각형 출력
 
+### UBO + MVP 행렬
+- `UniformBufferObject` 구조체 정의 (model / view / proj mat4)
+- Descriptor Set Layout, Descriptor Pool, Descriptor Set 생성
+- Uniform Buffer를 프레임마다 (MAX_FRAMES_IN_FLIGHT=2) 각각 생성, 영구 매핑
+- `updateUniformBuffer()` — 매 프레임 GLM으로 MVP 계산 후 memcpy
+  - model: 시간에 따라 Z축 회전
+  - view: `glm::lookAt({2,2,2}, {0,0,0}, {0,0,1})`
+  - proj: `glm::perspective(45°, aspect, 0.1, 10.0)` + Y 반전
+- `recordCommandBuffer`에서 `vkCmdBindDescriptorSets`로 셰이더에 연결
+- frontFace를 `COUNTER_CLOCKWISE`로 수정 (Y반전으로 winding order가 뒤집혀서)
+- 결과: 원근감 있게 기울어진 사각형이 회전
+
 ### Index Buffer
 - 정점 4개 + `kIndices {0,1,2, 0,2,3}`으로 사각형 구성
 - `createIndexBuffer()` 추가
@@ -135,6 +147,47 @@ vkUnmapMemory(...);                        // 매핑 해제
 
 나중에 **staging buffer** 방식으로 업그레이드 예정:
 `CPU → HOST_VISIBLE 임시 버퍼 → (GPU가 복사) → DEVICE_LOCAL 버퍼`
+
+---
+
+### UBO와 Descriptor
+
+**UBO (Uniform Buffer Object)** 는 매 프레임 CPU에서 GPU 셰이더로 데이터를 넘기는 방법이다.
+Vertex Buffer가 "정점마다 다른 데이터"라면, UBO는 "모든 정점에 공통으로 적용되는 데이터"다.
+
+```
+CPU (C++ 코드)          GPU (셰이더)
+UniformBufferObject  →  layout(binding=0) uniform UniformBufferObject { ... } ubo;
+  model matrix            gl_Position = ubo.proj * ubo.view * ubo.model * pos;
+  view  matrix
+  proj  matrix
+```
+
+Vulkan에서 UBO를 셰이더에 넘기려면 **Descriptor** 시스템을 거쳐야 한다:
+
+```
+Descriptor Set Layout  → "binding 0에 UBO가 있다"는 설계도
+Descriptor Pool        → Descriptor Set을 찍어낼 메모리 풀
+Descriptor Set         → 실제 버퍼와 셰이더 바인딩을 연결하는 객체
+```
+
+파이프라인 레이아웃에 Descriptor Set Layout을 등록하고,
+`vkCmdBindDescriptorSets`로 드로우 전에 바인딩한다.
+
+**MVP 행렬:**
+
+| 행렬 | 역할 |
+|------|------|
+| Model | 오브젝트를 월드 공간에 배치 (이동, 회전, 스케일) |
+| View | 카메라 위치/방향에 따라 월드를 카메라 공간으로 변환 |
+| Projection | 카메라 공간을 클립 공간으로 변환 (원근감 적용) |
+
+`gl_Position = proj * view * model * vertex` 순서로 곱한다 (오른쪽부터 적용).
+
+**GLM과 Vulkan의 Y축 차이:**
+GLM은 OpenGL 기준으로 만들어져서 Y축이 위가 양수다.
+Vulkan은 Y축이 위가 음수(화면 아래가 +Y). 그래서 `proj[1][1] *= -1`로 Y를 뒤집는다.
+이 Y반전으로 winding order가 뒤집히므로 `frontFace = COUNTER_CLOCKWISE`로 설정한다.
 
 ---
 
