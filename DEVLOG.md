@@ -315,6 +315,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 **growthTick catch-up fix**
 - `if` → `while` in `World::growthTick`. Previously, crops in a chunk that had been unloaded (moved to `m_modifiedUnloaded`) could only advance one growth stage on the first tick after reloading, regardless of how many days had passed. The while loop now drains all pending stages in one tick: `while (growthStage < 3 && currentDay - lastUpdatedDay >= GROWTH_DAYS)`.
 
+**growthTick visual update fix**
+- `bool changed = false` was declared in `growthTick` but never set to `true` inside the while loop — `if (changed) chunk.dirty = true` never fired.
+- Crops advanced in memory (growthStage incremented, lastUpdatedDay updated) but the chunk mesh was never re-queued for GPU rebuild, so the color change from green → golden never appeared on screen.
+- Fix: add `changed = true` inside the while loop body.
+
 **Deferred deletion queue (vkDeviceWaitIdle removal)**
 - Added `DeferredDelete { VkBuffer, VkDeviceMemory, uint64_t frame }` and `m_deletionQueue` + `m_frameCount` to `VulkanContext`.
 - `deferDestroy(buf, mem)` pushes a buffer onto the queue tagged with the current frame.
@@ -323,6 +328,20 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `rebuildDirtyChunks()`: removed `vkDeviceWaitIdle` + immediate destroy for unloaded chunk buffers; replaced with `deferDestroy` for vertex, index, and object-instance buffers.
 - Destructor flushes the remaining queue after `waitIdle()`.
 - Eliminates full GPU pipeline stalls on every tile change and chunk unload. Most impactful when `growthTick` dirties multiple chunks simultaneously on a day transition.
+### VulkanContext 파일 분리 (리팩토링)
+- `VulkanContext.cpp` (~1716줄) → 4개 .cpp + 1개 비공개 헤더로 분리. 클래스 인터페이스(`VulkanContext.h`) 변경 없음.
+
+| 파일 | 내용 |
+|------|------|
+| `VulkanContext.cpp` (~275줄) | 생성자/소멸자, waitIdle, deferDestroy, createBuffer, copyBuffer, createImage, cleanupSwapchain, recreateSwapchain 등 공유 헬퍼 |
+| `VulkanContext_Init.cpp` (~970줄) | 모든 초기화 `create*` 함수 (device, swapchain, pipeline, descriptor, buffer 생성 등) |
+| `VulkanContext_Frame.cpp` (~264줄) | drawFrame, recordCommandBuffer, updateUniformBuffer, updateHotbar, updateSelectorInstanceBuffer |
+| `VulkanContext_Chunk.cpp` (~173줄) | buildChunkBuffer, buildChunkObjectBuffer, rebuildDirtyChunks |
+| `VulkanContext_Private.h` (~107줄) | 파일 간 공유 상수/타입 (kVertices, kIndices, UniformBufferObject, kEnableValidation, debug helpers) |
+
+- 분리 기준: Init = 시작 시 1회 호출, Frame = 매 프레임, Chunk = 월드 지오메트리. 헬퍼 함수는 Init/Frame/Chunk 양쪽에서 쓰이므로 core 파일에 유지.
+- `buildChunkObjectBuffer`에서 `vkDestroyBuffer`를 즉시 호출하던 버그 수정 → `deferDestroy()`로 교체. GPU가 아직 읽는 도중 버퍼를 파괴해 `VUID-vkDestroyBuffer-buffer-00922` validation error + 블록 설치/파괴 직후 크래시가 발생하던 문제 해결.
+
 ---
 
 ## 게임 설계 메모

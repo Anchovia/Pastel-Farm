@@ -221,6 +221,7 @@ void World::growthTick(int currentDay) {
             while (s.growthStage < 3 && currentDay - (int)s.lastUpdatedDay >= GROWTH_DAYS) {
                 s.growthStage++;
                 s.lastUpdatedDay += GROWTH_DAYS;
+                changed = true;
             }
         }
         if (changed) chunk.dirty = true;

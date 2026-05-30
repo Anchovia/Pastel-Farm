@@ -31,6 +31,9 @@ add_executable(engine
     src/game/GameState.cpp
     src/platform/Window.cpp
     src/renderer/VulkanContext.cpp
+    src/renderer/VulkanContext_Init.cpp
+    src/renderer/VulkanContext_Frame.cpp
+    src/renderer/VulkanContext_Chunk.cpp
     src/world/World.cpp
     src/world/TerrainGen.cpp
  "src/game/Camera.h" "src/platform/InputManager.h" "src/platform/InputManager.cpp")

@@ -98,10 +98,14 @@ game project/
    │  ├─ Window.h          # GLFW 창 래퍼 (RAII, 리사이즈 콜백) 선언
    │  └─ Window.cpp
    ├─ renderer/
-   │  ├─ Types.h           # Vertex/ChunkVertex/UIVertex, InstanceData/ObjectInstance, TileType
-   │  ├─ Frustum.h         # Frustum 구조체 (6평면 추출 + AABB 테스트)
-   │  ├─ VulkanContext.h   # Vulkan 렌더러 선언
-   │  └─ VulkanContext.cpp # Vulkan 렌더러 구현
+   │  ├─ Types.h                   # Vertex/ChunkVertex/UIVertex, InstanceData/ObjectInstance, TileType
+   │  ├─ Frustum.h                 # Frustum 구조체 (6평면 추출 + AABB 테스트)
+   │  ├─ VulkanContext.h           # Vulkan 렌더러 선언
+   │  ├─ VulkanContext.cpp         # 생성자/소멸자, 공유 헬퍼 (createBuffer, copyBuffer 등)
+   │  ├─ VulkanContext_Init.cpp    # 모든 초기화 create* 함수
+   │  ├─ VulkanContext_Frame.cpp   # drawFrame, recordCommandBuffer, updateHotbar 등
+   │  ├─ VulkanContext_Chunk.cpp   # buildChunkBuffer, rebuildDirtyChunks
+   │  └─ VulkanContext_Private.h  # 파일 간 공유 상수/타입 (비공개)
    └─ world/
       ├─ Chunk.h           # Chunk 구조체, TileState, Object, IVec2Hash, 청크 상수
       ├─ World.h           # 청크 맵 기반 월드 인터페이스 선언
