@@ -19,6 +19,15 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 파이프라인에 Vertex Input 바인딩 정보 등록
 - `vkCmdBindVertexBuffers` + `vkCmdDraw`로 그라데이션 삼각형 출력
 
+### 타일 그리드 시스템
+- `TileType` enum 추가 (GRASS, DIRT, WATER, STONE)
+- `Vertex`에서 color 제거 — 색상은 인스턴스에서 담당
+- `InstanceData`에 `color` 추가 (`pos` + `color`)
+- `kWorld[10][10]` 배열로 타일 맵 정의
+- 타일 타입 → 색상 변환 후 인스턴스 버퍼에 업로드
+- 셰이더: `instanceColor`를 base color로 사용, Lambert 조명 적용
+- 결과: 잔디/흙/물/돌이 섞인 플랫 셰이딩 타일 맵
+
 ### 인스턴싱
 - `InstanceData { glm::vec3 pos }` 구조체 추가
 - 인스턴스 버퍼 생성 (10×10 그리드 위치 데이터)

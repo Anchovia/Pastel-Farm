@@ -3,12 +3,19 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
+enum class TileType : uint8_t {
+    GRASS,
+    DIRT,
+    WATER,
+    STONE,
+};
+
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 normal;
-    glm::vec3 color;
 };
 
 struct InstanceData {
     glm::vec3 pos;
+    glm::vec3 color;
 };

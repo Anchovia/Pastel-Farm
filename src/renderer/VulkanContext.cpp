@@ -20,37 +20,20 @@ struct UniformBufferObject {
     glm::mat4 proj;
 };
 
-// 플랫 셰이딩용 큐브 (면당 4정점, 총 24개 — 법선 공유 불가)
-#define FACE(ax,ay,az, bx,by,bz, cx,cy,cz, dx,dy,dz, nx,ny,nz, r,g,b) \
-    {{ax,ay,az},{nx,ny,nz},{r,g,b}}, \
-    {{bx,by,bz},{nx,ny,nz},{r,g,b}}, \
-    {{cx,cy,cz},{nx,ny,nz},{r,g,b}}, \
-    {{dx,dy,dz},{nx,ny,nz},{r,g,b}}
-
-static const glm::vec3 kTop   = {0.45f, 0.75f, 0.30f}; // 밝은 초록 (윗면)
-static const glm::vec3 kSideA = {0.35f, 0.58f, 0.23f}; // 중간 초록 (앞/뒤)
-static const glm::vec3 kSideB = {0.28f, 0.48f, 0.18f}; // 어두운 초록 (좌/우)
-static const glm::vec3 kBot   = {0.30f, 0.20f, 0.10f}; // 갈색 (아랫면)
+// 플랫 셰이딩용 큐브 (면당 4정점, 총 24개 — 법선 공유 불가, 색상은 인스턴스에서)
+#define FACE(ax,ay,az, bx,by,bz, cx,cy,cz, dx,dy,dz, nx,ny,nz) \
+    {{ax,ay,az},{nx,ny,nz}}, \
+    {{bx,by,bz},{nx,ny,nz}}, \
+    {{cx,cy,cz},{nx,ny,nz}}, \
+    {{dx,dy,dz},{nx,ny,nz}}
 
 static const std::vector<Vertex> kVertices = {
-    // 윗면 (z+, normal 0,0,1)
-    FACE(-0.5f,-0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f,
-         0,0,1,  kTop.r,kTop.g,kTop.b),
-    // 아랫면 (z-, normal 0,0,-1)
-    FACE(-0.5f, 0.5f,-0.5f,  0.5f, 0.5f,-0.5f,  0.5f,-0.5f,-0.5f, -0.5f,-0.5f,-0.5f,
-         0,0,-1,  kBot.r,kBot.g,kBot.b),
-    // 앞면 (y-, normal 0,-1,0)
-    FACE(-0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f,-0.5f, 0.5f, -0.5f,-0.5f, 0.5f,
-         0,-1,0,  kSideA.r,kSideA.g,kSideA.b),
-    // 뒷면 (y+, normal 0,1,0)
-    FACE( 0.5f, 0.5f,-0.5f, -0.5f, 0.5f,-0.5f, -0.5f, 0.5f, 0.5f,  0.5f, 0.5f, 0.5f,
-         0,1,0,  kSideA.r,kSideA.g,kSideA.b),
-    // 오른면 (x+, normal 1,0,0)
-    FACE( 0.5f,-0.5f,-0.5f,  0.5f, 0.5f,-0.5f,  0.5f, 0.5f, 0.5f,  0.5f,-0.5f, 0.5f,
-         1,0,0,  kSideB.r,kSideB.g,kSideB.b),
-    // 왼면 (x-, normal -1,0,0)
-    FACE(-0.5f, 0.5f,-0.5f, -0.5f,-0.5f,-0.5f, -0.5f,-0.5f, 0.5f, -0.5f, 0.5f, 0.5f,
-         -1,0,0,  kSideB.r,kSideB.g,kSideB.b),
+    FACE(-0.5f,-0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f,  0, 0, 1),  // 윗면
+    FACE(-0.5f, 0.5f,-0.5f,  0.5f, 0.5f,-0.5f,  0.5f,-0.5f,-0.5f, -0.5f,-0.5f,-0.5f,  0, 0,-1),  // 아랫면
+    FACE(-0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f,-0.5f, 0.5f, -0.5f,-0.5f, 0.5f,  0,-1, 0),  // 앞면
+    FACE( 0.5f, 0.5f,-0.5f, -0.5f, 0.5f,-0.5f, -0.5f, 0.5f, 0.5f,  0.5f, 0.5f, 0.5f,  0, 1, 0),  // 뒷면
+    FACE( 0.5f,-0.5f,-0.5f,  0.5f, 0.5f,-0.5f,  0.5f, 0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  1, 0, 0),  // 오른면
+    FACE(-0.5f, 0.5f,-0.5f, -0.5f,-0.5f,-0.5f, -0.5f,-0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -1, 0, 0),  // 왼면
 };
 #undef FACE
 
@@ -542,14 +525,14 @@ void VulkanContext::createGraphicsPipeline() {
     attributeDescs[1].location = 1;
     attributeDescs[1].format   = VK_FORMAT_R32G32B32_SFLOAT;
     attributeDescs[1].offset   = offsetof(Vertex, normal);
-    attributeDescs[2].binding  = 0;
+    attributeDescs[2].binding  = 1;
     attributeDescs[2].location = 2;
     attributeDescs[2].format   = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescs[2].offset   = offsetof(Vertex, color);
+    attributeDescs[2].offset   = offsetof(InstanceData, pos);
     attributeDescs[3].binding  = 1;
     attributeDescs[3].location = 3;
     attributeDescs[3].format   = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescs[3].offset   = offsetof(InstanceData, pos);
+    attributeDescs[3].offset   = offsetof(InstanceData, color);
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1043,13 +1026,35 @@ void VulkanContext::processInput(float dt) {
 }
 
 void VulkanContext::createInstanceBuffer() {
+    using T = TileType;
+    static const glm::vec3 kTileColor[] = {
+        {0.45f, 0.75f, 0.30f},  // GRASS
+        {0.55f, 0.35f, 0.15f},  // DIRT
+        {0.20f, 0.45f, 0.70f},  // WATER
+        {0.55f, 0.55f, 0.55f},  // STONE
+    };
+    static const TileType kWorld[10][10] = {
+        { T::WATER, T::WATER, T::WATER, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+        { T::WATER, T::WATER, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+        { T::WATER, T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+        { T::GRASS, T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::STONE, T::STONE, T::GRASS },
+        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::STONE, T::STONE, T::GRASS },
+        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+        { T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+        { T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+    };
+
     constexpr int   GRID   = 10;
     constexpr float OFFSET = (GRID - 1) * 0.5f;
     std::vector<InstanceData> instances;
     instances.reserve(GRID * GRID);
     for (int x = 0; x < GRID; x++)
-        for (int y = 0; y < GRID; y++)
-            instances.push_back({{x - OFFSET, y - OFFSET, 0.0f}});
+        for (int y = 0; y < GRID; y++) {
+            glm::vec3 color = kTileColor[(int)kWorld[y][x]];
+            instances.push_back({{x - OFFSET, y - OFFSET, 0.0f}, color});
+        }
     m_instanceCount = (uint32_t)instances.size();
 
     VkDeviceSize size = sizeof(InstanceData) * m_instanceCount;
