@@ -140,6 +140,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 정적 데이터(큐브 정점, 큐브 인덱스, 셀렉터 정점/인덱스)를 CPU 접근 가능 메모리(`HOST_VISIBLE`)에서 GPU 전용 초고속 메모리(`DEVICE_LOCAL`)로 마이그레이션.
 - `copyBuffer` 헬퍼 함수 구현: 임시 버퍼 생성 → 데이터 복사(`vkCmdCopyBuffer`) → 동기화(`vkQueueWaitIdle`) → 임시 버퍼 파괴로 이어지는 정석적인 Vulkan 전송 파이프라인 구축.
 - 매 프레임 업데이트가 필요한 `m_instanceBuffer`, `m_playerInstBuffer` 등은 `HOST_VISIBLE`을 유지하여 불필요한 복사 오버헤드 최소화.
+
+### 입력 시스템 분리 (InputManager)
+- `src/platform/InputManager` 클래스를 신규 생성하여 플랫폼 종속적인 입력 처리(GLFW)를 전담하도록 구조 개선.
+- `main.cpp`의 메인 루프에 하드코딩되어 있던 키보드, 마우스 좌표, 창 크기 계산 로직을 `pollInput()` 메서드 하나로 캡슐화.
+- **메인 루프 다이어트:** 길고 지저분했던 입력 수집 코드를 1줄로 압축하여 가독성을 크게 높임.
+- 추후 커스텀 단축키 설정(Key Binding)이나 UI 클릭 시 월드 클릭 무시 같은 기능을 추가할 때 확장이 용이해짐.
 ---
 
 ## 게임 설계 메모

@@ -1,5 +1,6 @@
 #include "game/GameState.h"
 #include "platform/Window.h"
+#include "platform/InputManager.h"
 #include "renderer/VulkanContext.h"
 #include "world/World.h"
 #include <iostream>
@@ -11,10 +12,10 @@ int main() {
         World         world;
         GameState     gameState;
         VulkanContext ctx(window, world);
-
+        InputManager  inputManager(window.handle());
         Camera camera(45.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
-        float orbitAngle = 45.0f;
 
+        float orbitAngle = 45.0f;
         double        lastTime = glfwGetTime();
 
         while (!window.shouldClose()) {
@@ -33,16 +34,7 @@ int main() {
             if (glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS) orbitAngle -= rotSpeed;
             if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) orbitAngle += rotSpeed;
 
-            PlayerInput input{};
-            input.moveForward  = glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS;
-            input.moveBackward = glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS;
-            input.moveLeft     = glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS;
-            input.moveRight    = glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS;
-
-            // 마우스 및 창 크기 정보 수집
-            glfwGetCursorPos(win, &input.mouseX, &input.mouseY);
-            input.leftClick = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-            glfwGetFramebufferSize(win, &input.windowWidth, &input.windowHeight);
+            PlayerInput input = inputManager.pollInput();
 
             if (input.windowWidth > 0 && input.windowHeight > 0) {
                 camera.setAspectRatio((float)input.windowWidth / input.windowHeight);

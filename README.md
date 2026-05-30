@@ -50,6 +50,7 @@
 - 마우스 피킹 (Raycasting) — 3D 역산환 및 O(1) 평면 교차 판정을 통한 마우스 기반 타일 선택
 - 상호작용 사거리 제한 — 플레이어 기준 반경 1칸(3x3) 내에서만 마우스 타겟팅이 되도록 Clamp 적용
 - Staging Buffer 도입 — 정적 메시 데이터를 임시 버퍼를 거쳐 GPU 전용 메모리(DEVICE_LOCAL)로 이전하여 렌더링 성능 최적화
+- 입력 시스템 분리 (InputManager) — 메인 루프에서 GLFW 입력 로직을 분리하여 확장성 및 가독성 향상
 ---
 
 ## 프로젝트 구조
@@ -71,7 +72,9 @@ game project/
    │  ├─ GameState.h       # 게임 상태 및 입력 스냅샷 선언
    │  └─ GameState.cpp     # 플레이어 이동/충돌 규칙 업데이트
    ├─ platform/
-   │  ├─ Window.h          # GLFW 창 래퍼 (RAII, 리사이즈 콜백)
+   │  ├─ InputManager.h    # GLFW 입력 상태 폴링 및 캡슐화
+   │  ├─ InputManager.cpp  # 입력 처리 구현
+   │  ├─ Window.h          # GLFW 창 래퍼 (RAII, 리사이즈 콜백) 선언
    │  └─ Window.cpp
    ├─ renderer/
    │  ├─ Types.h           # Vertex, InstanceData, TileType 정의
