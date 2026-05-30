@@ -19,6 +19,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 파이프라인에 Vertex Input 바인딩 정보 등록
 - `vkCmdBindVertexBuffers` + `vkCmdDraw`로 그라데이션 삼각형 출력
 
+### World 클래스 분리
+- `src/world/World.h` / `World.cpp` 신규 생성
+- 타일 데이터(`m_grid[H][W]`)와 색상 테이블을 VulkanContext에서 분리
+- `VulkanContext`가 `World&` 참조를 받아 `createInstanceBuffer()`에서 읽도록 변경
+- `main.cpp`에서 `World` 생성 후 `VulkanContext`에 전달
+- 역할 분리: World = 게임 데이터, VulkanContext = 렌더링
+
 ### 플레이어 이동
 - 플레이어 전용 인스턴스 버퍼 1개 (persistently mapped) 별도 생성
 - `processInput()`에서 WASD로 플레이어 이동, 매 프레임 버퍼 업데이트

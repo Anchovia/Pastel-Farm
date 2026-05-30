@@ -7,10 +7,11 @@
 #include <string>
 
 class Window;
+class World;
 
 class VulkanContext {
 public:
-    explicit VulkanContext(Window& window);
+    VulkanContext(Window& window, World& world);
     ~VulkanContext();
 
     void drawFrame();
@@ -68,6 +69,7 @@ private:
 
     // ---- Vulkan handles ----
     Window& m_window;
+    World&  m_world;
 
     VkInstance               m_instance        = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger   = VK_NULL_HANDLE;

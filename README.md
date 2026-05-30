@@ -64,10 +64,13 @@ game project/
    ├─ platform/
    │  ├─ Window.h          # GLFW 창 래퍼 (RAII, 리사이즈 콜백)
    │  └─ Window.cpp
-   └─ renderer/
-      ├─ Types.h           # Vertex 구조체 (pos, color)
-      ├─ VulkanContext.h   # Vulkan 렌더러 선언
-      └─ VulkanContext.cpp # Vulkan 렌더러 구현
+   ├─ renderer/
+   │  ├─ Types.h           # Vertex, InstanceData, TileType 정의
+   │  ├─ VulkanContext.h   # Vulkan 렌더러 선언
+   │  └─ VulkanContext.cpp # Vulkan 렌더러 구현
+   └─ world/
+      ├─ World.h           # 타일 그리드 선언 (WIDTH×HEIGHT)
+      └─ World.cpp         # 타일 데이터 및 색상 정의
 ```
 
 > `build/` 폴더는 CMake 생성물 + 자동으로 받은 GLFW/GLM 소스가 들어있어 git에서 제외됩니다.

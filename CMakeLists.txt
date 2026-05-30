@@ -30,6 +30,7 @@ add_executable(engine
     src/main.cpp
     src/platform/Window.cpp
     src/renderer/VulkanContext.cpp
+    src/world/World.cpp
 )
 
 target_include_directories(engine PRIVATE src ${Vulkan_INCLUDE_DIRS})

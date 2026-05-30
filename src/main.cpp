@@ -1,11 +1,13 @@
 #include "platform/Window.h"
 #include "renderer/VulkanContext.h"
+#include "world/World.h"
 #include <iostream>
 
 int main() {
     try {
-        Window       window(1280, 720, "Pastel Farm");
-        VulkanContext ctx(window);
+        Window        window(1280, 720, "Pastel Farm");
+        World         world;
+        VulkanContext ctx(window, world);
 
         while (!window.shouldClose()) {
             window.pollEvents();

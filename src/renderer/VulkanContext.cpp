@@ -1,6 +1,7 @@
 #include "VulkanContext.h"
 #include "renderer/Types.h"
 #include "platform/Window.h"
+#include "world/World.h"
 
 #include <stdexcept>
 #include <iostream>
@@ -94,7 +95,7 @@ static void DestroyDebugMessenger(VkInstance instance, VkDebugUtilsMessengerEXT 
 // ============================================================
 //  Constructor / Destructor
 // ============================================================
-VulkanContext::VulkanContext(Window& window) : m_window(window) {
+VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m_world(world) {
     createInstance();
     setupDebugMessenger();
     createSurface();
@@ -1073,34 +1074,17 @@ void VulkanContext::createPlayerInstanceBuffer() {
 }
 
 void VulkanContext::createInstanceBuffer() {
-    using T = TileType;
-    static const glm::vec3 kTileColor[] = {
-        {0.45f, 0.75f, 0.30f},  // GRASS
-        {0.55f, 0.35f, 0.15f},  // DIRT
-        {0.20f, 0.45f, 0.70f},  // WATER
-        {0.55f, 0.55f, 0.55f},  // STONE
-    };
-    static const TileType kWorld[10][10] = {
-        { T::WATER, T::WATER, T::WATER, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::WATER, T::WATER, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::WATER, T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::STONE, T::STONE, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::STONE, T::STONE, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-    };
+    const int   W      = m_world.WIDTH;
+    const int   H      = m_world.HEIGHT;
+    const float offX   = (W - 1) * 0.5f;
+    const float offY   = (H - 1) * 0.5f;
 
-    constexpr int   GRID   = 10;
-    constexpr float OFFSET = (GRID - 1) * 0.5f;
     std::vector<InstanceData> instances;
-    instances.reserve(GRID * GRID);
-    for (int x = 0; x < GRID; x++)
-        for (int y = 0; y < GRID; y++) {
-            glm::vec3 color = kTileColor[(int)kWorld[y][x]];
-            instances.push_back({{x - OFFSET, y - OFFSET, 0.0f}, color});
+    instances.reserve(W * H);
+    for (int x = 0; x < W; x++)
+        for (int y = 0; y < H; y++) {
+            glm::vec3 color = World::tileColor(m_world.getTile(x, y));
+            instances.push_back({{x - offX, y - offY, 0.0f}, color});
         }
     m_instanceCount = (uint32_t)instances.size();
 
