@@ -1085,29 +1085,40 @@ void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec2>
 
 void VulkanContext::createSelectorBuffers() {
     VkDeviceSize vertexSize = sizeof(kSelectorVertices[0]) * kSelectorVertices.size();
-    createBuffer(vertexSize,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_selectorVertexBuffer, m_selectorVertexMemory);
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingMemory;
 
+    createBuffer(vertexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingBuffer, stagingMemory);
     void* data;
-    vkMapMemory(m_device, m_selectorVertexMemory, 0, vertexSize, 0, &data);
+    vkMapMemory(m_device, stagingMemory, 0, vertexSize, 0, &data);
     memcpy(data, kSelectorVertices.data(), vertexSize);
-    vkUnmapMemory(m_device, m_selectorVertexMemory);
+    vkUnmapMemory(m_device, stagingMemory);
+
+    createBuffer(vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_selectorVertexBuffer, m_selectorVertexMemory);
+    copyBuffer(stagingBuffer, m_selectorVertexBuffer, vertexSize);
+    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+    vkFreeMemory(m_device, stagingMemory, nullptr);
 
     VkDeviceSize indexSize = sizeof(kSelectorIndices[0]) * kSelectorIndices.size();
-    createBuffer(indexSize,
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+    createBuffer(indexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_selectorIndexBuffer, m_selectorIndexMemory);
+        stagingBuffer, stagingMemory);
 
-    vkMapMemory(m_device, m_selectorIndexMemory, 0, indexSize, 0, &data);
+    vkMapMemory(m_device, stagingMemory, 0, indexSize, 0, &data);
     memcpy(data, kSelectorIndices.data(), indexSize);
-    vkUnmapMemory(m_device, m_selectorIndexMemory);
+    vkUnmapMemory(m_device, stagingMemory);
+
+    createBuffer(indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_selectorIndexBuffer, m_selectorIndexMemory);
+    copyBuffer(stagingBuffer, m_selectorIndexBuffer, indexSize);
+    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+    vkFreeMemory(m_device, stagingMemory, nullptr);
 
     VkDeviceSize instanceSize = sizeof(InstanceData);
-    createBuffer(instanceSize,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    createBuffer(instanceSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         m_selectorInstBuffer, m_selectorInstMemory);
     vkMapMemory(m_device, m_selectorInstMemory, 0, instanceSize, 0, &m_selectorInstMapped);
@@ -1140,28 +1151,82 @@ void VulkanContext::createInstanceBuffer() {
 
 void VulkanContext::createIndexBuffer() {
     VkDeviceSize size = sizeof(kIndices[0]) * kIndices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
     createBuffer(size,
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_indexBuffer, m_indexBufferMemory);
+        stagingBuffer, stagingBufferMemory);
 
     void* data;
-    vkMapMemory(m_device, m_indexBufferMemory, 0, size, 0, &data);
-    memcpy(data, kIndices.data(), size);
-    vkUnmapMemory(m_device, m_indexBufferMemory);
+    vkMapMemory(m_device, stagingBufferMemory, 0, size, 0, &data);
+    memcpy(data, kIndices.data(), (size_t)size);
+    vkUnmapMemory(m_device, stagingBufferMemory);
+
+    createBuffer(size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_indexBuffer, m_indexBufferMemory);
+
+    copyBuffer(stagingBuffer, m_indexBuffer, size);
+    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+    vkFreeMemory(m_device, stagingBufferMemory, nullptr);
 }
 
 void VulkanContext::createVertexBuffer() {
     VkDeviceSize size = sizeof(kVertices[0]) * kVertices.size();
 
-    // HOST_VISIBLE: CPU가 직접 쓸 수 있는 메모리 (Phase 2용 — 나중에 staging buffer로 교체)
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
     createBuffer(size,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_vertexBuffer, m_vertexBufferMemory);
+        stagingBuffer, stagingBufferMemory);
 
     void* data;
-    vkMapMemory(m_device, m_vertexBufferMemory, 0, size, 0, &data);
-    memcpy(data, kVertices.data(), size);
-    vkUnmapMemory(m_device, m_vertexBufferMemory);
+    vkMapMemory(m_device, stagingBufferMemory, 0, size, 0, &data);
+    memcpy(data, kVertices.data(), (size_t)size);
+    vkUnmapMemory(m_device, stagingBufferMemory);
+
+    createBuffer(size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_vertexBuffer, m_vertexBufferMemory);
+
+    copyBuffer(stagingBuffer, m_vertexBuffer, size);
+    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+    vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+}
+
+void VulkanContext::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = m_commandPool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(m_device, &allocInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+    VkBufferCopy copyRegion{};
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(m_graphicsQueue); // 전송 완료 대기
+
+    vkFreeCommandBuffers(m_device, m_commandPool, 1, &commandBuffer);
 }

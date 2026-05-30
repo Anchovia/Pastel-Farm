@@ -19,6 +19,7 @@ public:
     void waitIdle();
 
 private:
+    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     void createInstance();
     void setupDebugMessenger();
     void createSurface();

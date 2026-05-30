@@ -135,6 +135,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - **의존성 분리:** - 렌더러(`VulkanContext`)는 카메라 상태 변수(`orbitAngle` 등)를 소유하지 않고 넘겨받은 행렬만 렌더링에 사용
   - 게임 로직(`GameState`)은 단순 각도가 아닌 카메라의 실제 3D 좌표를 기반으로 플레이어 이동 방향(`forward`, `right`)을 역산하도록 구조 개선
 - `main.cpp`에서 카메라 객체를 소유하며, 창 리사이즈 이벤트 발생 시 카메라의 종횡비(Aspect Ratio)를 실시간 갱신하도록 처리하여 화면 찌그러짐 방지
+
+### Staging Buffer 도입 (VRAM 최적화)
+- 정적 데이터(큐브 정점, 큐브 인덱스, 셀렉터 정점/인덱스)를 CPU 접근 가능 메모리(`HOST_VISIBLE`)에서 GPU 전용 초고속 메모리(`DEVICE_LOCAL`)로 마이그레이션.
+- `copyBuffer` 헬퍼 함수 구현: 임시 버퍼 생성 → 데이터 복사(`vkCmdCopyBuffer`) → 동기화(`vkQueueWaitIdle`) → 임시 버퍼 파괴로 이어지는 정석적인 Vulkan 전송 파이프라인 구축.
+- 매 프레임 업데이트가 필요한 `m_instanceBuffer`, `m_playerInstBuffer` 등은 `HOST_VISIBLE`을 유지하여 불필요한 복사 오버헤드 최소화.
 ---
 
 ## 게임 설계 메모
@@ -292,8 +297,8 @@ vkUnmapMemory(...);                        // 매핑 해제
 | `HOST_VISIBLE` | CPU가 직접 읽고 쓸 수 있음. 느림 | ✅ 현재 |
 | `DEVICE_LOCAL` | GPU 전용 메모리. 빠르지만 CPU 직접 접근 불가 | 나중에 |
 
-나중에 **staging buffer** 방식으로 업그레이드 예정:
-`CPU → HOST_VISIBLE 임시 버퍼 → (GPU가 복사) → DEVICE_LOCAL 버퍼`
+**현재 엔진 적용 상태:**
+정적 데이터(메시, 인덱스)는 **Staging Buffer** 방식을 도입하여 `DEVICE_LOCAL`에 배치해 렌더링 성능을 극대화했고, 매 프레임 값이 변하는 동적 데이터(인스턴스 버퍼)는 `HOST_VISIBLE`에 남겨두어 CPU-GPU 간 데이터 전송 오버헤드를 최소화하는 투트랙 전략을 사용 중이다.
 
 ---
 
