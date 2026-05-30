@@ -208,6 +208,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `m_chunkPipeline` 신규 파이프라인 — binding 1개(ChunkVertex), no instancing. 기존 `m_pipeline`(플레이어/셀렉터 인스턴싱)과 공존.
 - `recordCommandBuffer`: 청크는 `m_chunkPipeline`으로 draw, 이후 `m_pipeline`으로 전환하여 플레이어/셀렉터 draw.
 - 청크 `ChunkRenderData`: 단일 버퍼 → `vertexBuffer + indexBuffer` 쌍으로 교체.
+
+### 다단계 지형 초기 맵
+- `World.cpp` 생성자에 Z=1, Z=2 레이어 추가 — 나머지 시스템(Hidden Face Culling, top/side 색상, 3D 그리드) 변경 없음.
+- 행별 x 범위 테이블(`Row { y, x0, x1 }`)로 불규칙한 타원형 언덕 정의 — Z=1 13개 행, Z=2 7개 행.
+- Z=1 언덕: 맵 상단 중앙부, Z=2 정상: Z=1 안쪽 더 작은 면적. Z=2 아래엔 반드시 Z=1이 있어 부유 타일 없음.
+- 결과: 절벽 옆면 갈색(sideColor), 정상 초록(topColor), Hidden Face Culling으로 내부 면 자동 제거.
 ---
 
 ## 게임 설계 메모

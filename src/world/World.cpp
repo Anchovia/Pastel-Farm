@@ -55,6 +55,28 @@ World::World() {
     for (int y = 0; y < CHUNK_SIZE; y++)
         for (int x = 0; x < CHUNK_SIZE; x++)
             chunk.tiles[0][y][x] = ground[y][x];
+
+    // 높이 지형 — {y, x시작, x끝} 범위로 타일 추가
+    struct Row { int y, x0, x1; };
+
+    // Z=1 언덕 (불규칙한 타원형, 맵 상단)
+    const Row z1[] = {
+        {2, 15,27}, {3, 14,28}, {4, 13,29}, {5, 13,29},
+        {6, 12,30}, {7, 12,30}, {8, 12,30}, {9, 12,29},
+        {10,13,28}, {11,13,27}, {12,14,26}, {13,15,24}, {14,15,22},
+    };
+    for (const auto& r : z1)
+        for (int x = r.x0; x <= r.x1; x++)
+            chunk.tiles[1][r.y][x] = TileType::GRASS;
+
+    // Z=2 정상 (Z=1 안쪽의 더 작은 면적)
+    const Row z2[] = {
+        {4, 17,24}, {5, 16,25}, {6, 16,26}, {7, 15,26},
+        {8, 15,26}, {9, 16,25}, {10,17,24},
+    };
+    for (const auto& r : z2)
+        for (int x = r.x0; x <= r.x1; x++)
+            chunk.tiles[2][r.y][x] = TileType::GRASS;
 }
 
 glm::ivec2 World::chunkCoord(int x, int y) {
