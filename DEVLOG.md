@@ -236,6 +236,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - Left click → `world.setTile(target, TileType::AIR)` (destroy). Right click → `world.setTile(target.xy, z+1, TileType::STONE)` (place on top).
 - Target tile Z improved: after XY raycast hit, scans from `CHUNK_DEPTH-1` down to find topmost non-AIR tile — elevated blocks are now selectable. `delta.z` clamped ±1 instead of forced 0.
 - GPU sync fix: `vkDeviceWaitIdle` called before destroying chunk buffers in `buildChunkBuffer` and before unloaded-chunk cleanup in `rebuildDirtyChunks` — prevents VUID-vkDestroyBuffer-buffer-00922 when tile changes trigger immediate buffer rebuild.
+
+### Terrain Variety (Water / Trees / Biome)
+- `TileType` extended: `WOOD`, `LEAVES` added (indices 5, 6); color + side-color tables updated to match.
+- Water: tiles where height noise < 0.28 become `WATER` at Z=0 with nothing above (low basins / lakes).
+- Biome channel (`BIOME_SCALE = 1/24`): drives GRASS vs DIRT ground and tree density. Dry biome → DIRT patches.
+- Trees (`placeTrees`): on flat GRASS in forest biome (b > 0.58), sparse hash threshold (> 0.90). Trunk WOOD at Z=1/Z=2, 3x3 LEAVES canopy at Z=3, single LEAVES top at Z=4.
+- Trunk kept ≥2 tiles from chunk edge so the canopy fits inside the chunk — avoids cross-chunk writes (chunks generate independently).
+- NOTE: voxel trees are a placeholder. Organic props (trees/crops/rocks) will move to a separate low-poly model layer; terrain stays voxel.
 ---
 
 ## 게임 설계 메모

@@ -9,6 +9,8 @@ enum class TileType : uint8_t {
     DIRT,
     WATER,
     STONE,
+    WOOD,
+    LEAVES,
 };
 
 struct Vertex {

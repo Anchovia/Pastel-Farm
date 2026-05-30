@@ -40,10 +40,10 @@ float TerrainGen::fbm(float x, float y) {
     return value;
 }
 
-void TerrainGen::generate(int cx, int cy, Chunk& chunk) {
-    constexpr float HEIGHT_SCALE = 1.0f / 32.0f;
-    constexpr float BIOME_SCALE  = 1.0f / 24.0f;
+static constexpr float HEIGHT_SCALE = 1.0f / 32.0f;
+static constexpr float BIOME_SCALE  = 1.0f / 24.0f;
 
+void TerrainGen::generate(int cx, int cy, Chunk& chunk) {
     for (int ly = 0; ly < CHUNK_SIZE; ly++) {
         for (int lx = 0; lx < CHUNK_SIZE; lx++) {
             const int wx = cx * CHUNK_SIZE + lx;
@@ -52,17 +52,54 @@ void TerrainGen::generate(int cx, int cy, Chunk& chunk) {
             const float h = fbm(wx * HEIGHT_SCALE, wy * HEIGHT_SCALE);
             const float b = fbm(wx * BIOME_SCALE + 100.0f, wy * BIOME_SCALE + 100.0f);
 
-            // Z=0: always solid ground
-            chunk.tiles[0][ly][lx] = (b < 0.35f) ? TileType::DIRT : TileType::GRASS;
+            // Low basins become water
+            if (h < 0.28f) {
+                chunk.tiles[0][ly][lx] = TileType::WATER;
+                continue;
+            }
+
+            // Z=0: solid ground — grass, dirt in dry biome
+            chunk.tiles[0][ly][lx] = (b < 0.32f) ? TileType::DIRT : TileType::GRASS;
 
             // Z=1: hill
-            if (h > 0.45f)
-                chunk.tiles[1][ly][lx] = (b < 0.3f) ? TileType::DIRT : TileType::GRASS;
+            if (h > 0.52f)
+                chunk.tiles[1][ly][lx] = (b < 0.30f) ? TileType::DIRT : TileType::GRASS;
 
-            // Z=2: peak — stone
-            if (h > 0.65f)
+            // Z=2: stone peak
+            if (h > 0.70f)
                 chunk.tiles[2][ly][lx] = TileType::STONE;
         }
     }
+
+    placeTrees(cx, cy, chunk);
     chunk.dirty = true;
+}
+
+void TerrainGen::placeTrees(int cx, int cy, Chunk& chunk) {
+    // Keep trunk 2 tiles from chunk edge so the 3x3 canopy fits inside this chunk
+    for (int ly = 2; ly < CHUNK_SIZE - 2; ly++) {
+        for (int lx = 2; lx < CHUNK_SIZE - 2; lx++) {
+            // Only on flat grass with open sky above
+            if (chunk.tiles[0][ly][lx] != TileType::GRASS) continue;
+            if (chunk.tiles[1][ly][lx] != TileType::AIR)    continue;
+
+            const int wx = cx * CHUNK_SIZE + lx;
+            const int wy = cy * CHUNK_SIZE + ly;
+
+            const float b = fbm(wx * BIOME_SCALE + 100.0f, wy * BIOME_SCALE + 100.0f);
+            if (b < 0.58f) continue; // forest biome only
+
+            if (hash(wx + 7000, wy + 7000) < 0.90f) continue; // sparse
+
+            // Trunk
+            chunk.tiles[1][ly][lx] = TileType::WOOD;
+            chunk.tiles[2][ly][lx] = TileType::WOOD;
+            // Canopy 3x3
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                    chunk.tiles[3][ly + dy][lx + dx] = TileType::LEAVES;
+            // Top
+            chunk.tiles[4][ly][lx] = TileType::LEAVES;
+        }
+    }
 }

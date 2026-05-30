@@ -61,6 +61,7 @@
 - 3D 충돌 — `canOccupy`에서 발 아래(Z) walkable + 몸통 높이(Z+1) AIR 이중 체크. 높이 차이 있는 블록 측면 통과 방지
 - 청크 로드/언로드 + 절차적 지형 — FBM noise 기반 `TerrainGen`, load radius=3/unload radius=4, 플레이어 이동 시 자동 생성/해제. 무한 월드 실현
 - 블록 설치/파괴 — 좌클릭=파괴(AIR), 우클릭=설치(STONE). 타겟 Z 자동 탐색(topmost non-AIR), dirty 청크 즉시 GPU 재빌드
+- 지형 다양화 — 물(저지대 호수), 바이옴(GRASS/DIRT), 나무(WOOD 트렁크 + LEAVES 캐노피). 복셀 나무는 추후 로우폴리 모델 레이어로 교체 예정
 ---
 
 ## 프로젝트 구조
@@ -113,7 +114,7 @@ game project/
 
 ### 월드 구조
 - **청크 기반 3D 그리드** — `unordered_map<ivec2, Chunk>`, 청크 1개 = `32×32×8`
-- `TileType`: `AIR(0) / GRASS / DIRT / WATER / STONE` — AIR는 렌더링 제외, 블록 없음을 의미
+- `TileType`: `AIR(0) / GRASS / DIRT / WATER / STONE / WOOD / LEAVES` — AIR는 렌더링 제외, 블록 없음을 의미
 - `TileState`: 성장 단계(`growthStage`), 마지막 업데이트 날짜(`lastUpdatedDay`) 예약 — 농경지 Time-based catch-up 방식 대비
 - 모든 블록은 **1×1×1 단위 큐브**로 통일 (메시 하나, 색상/텍스처만 다름)
 - 타일 좌표 = 월드 좌표 직접 매핑, 캐릭터는 연속 좌표(float)로 자유 이동

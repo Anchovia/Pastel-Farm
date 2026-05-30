@@ -4,11 +4,13 @@
 #include <cstdlib>
 
 static const glm::vec3 kTileColors[] = {
-    {0.0f,  0.0f,  0.0f },  // AIR 
+    {0.0f,  0.0f,  0.0f },  // AIR
     {0.45f, 0.75f, 0.30f},  // GRASS
     {0.55f, 0.35f, 0.15f},  // DIRT
     {0.20f, 0.45f, 0.70f},  // WATER
     {0.55f, 0.55f, 0.55f},  // STONE
+    {0.42f, 0.28f, 0.15f},  // WOOD
+    {0.30f, 0.55f, 0.25f},  // LEAVES
 };
 
 World::World() {
@@ -111,6 +113,8 @@ static const glm::vec3 kTileSideColors[] = {
     {0.38f, 0.22f, 0.08f},  // DIRT
     {0.15f, 0.35f, 0.60f},  // WATER
     {0.38f, 0.38f, 0.38f},  // STONE
+    {0.34f, 0.22f, 0.11f},  // WOOD
+    {0.24f, 0.45f, 0.20f},  // LEAVES
 };
 
 glm::vec3 World::tileSideColor(TileType type) {
