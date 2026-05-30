@@ -112,7 +112,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createVertexBuffer();
     createIndexBuffer();
     createInstanceBuffer();
-    createPlayerInstanceBuffer();
+    createPlayerInstanceBuffer({0.0f, 0.0f, 1.0f});
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
@@ -155,6 +155,10 @@ VulkanContext::~VulkanContext() {
 }
 
 void VulkanContext::waitIdle() { vkDeviceWaitIdle(m_device); }
+
+void VulkanContext::rotateOrbit(float degrees) {
+    m_orbitAngle += degrees;
+}
 
 // ============================================================
 //  Instance
@@ -722,7 +726,7 @@ void VulkanContext::createSyncObjects() {
 // ============================================================
 //  drawFrame
 // ============================================================
-void VulkanContext::drawFrame() {
+void VulkanContext::drawFrame(const glm::vec3& playerPosition) {
     // Wait for the previous frame using this slot to finish
     vkWaitForFences(m_device, 1, &m_inFlight[m_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -738,13 +742,9 @@ void VulkanContext::drawFrame() {
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         throw std::runtime_error("Failed to acquire swapchain image");
 
-    double now = glfwGetTime();
-    float  dt  = (float)(now - m_lastTime);
-    m_lastTime = now;
-
     vkResetFences(m_device, 1, &m_inFlight[m_currentFrame]);
-    processInput(dt);
-    updateUniformBuffer(m_currentFrame);
+    updateUniformBuffer(m_currentFrame, playerPosition);
+    updatePlayerInstanceBuffer(playerPosition);
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 
@@ -1006,8 +1006,8 @@ void VulkanContext::createDescriptorSets() {
 // ============================================================
 //  Update uniform buffer (called every frame)
 // ============================================================
-void VulkanContext::updateUniformBuffer(uint32_t currentFrame) {
-    m_orbitTarget = {m_playerPos.x, m_playerPos.y, 0.0f};
+void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const glm::vec3& playerPosition) {
+    m_orbitTarget = {playerPosition.x, playerPosition.y, 0.0f};
 
     float rad   = glm::radians(m_orbitAngle);
     float pitch = glm::radians(m_orbitPitch);
@@ -1027,40 +1027,13 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame) {
     memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
 
-void VulkanContext::processInput(float dt) {
-    GLFWwindow* win      = m_window.handle();
-    float       rotSpeed = 90.0f * dt;
-    float       moveSpeed= 3.0f  * dt;
-
-    if (glfwGetKey(win, GLFW_KEY_Q)      == GLFW_PRESS) m_orbitAngle -= rotSpeed;
-    if (glfwGetKey(win, GLFW_KEY_E)      == GLFW_PRESS) m_orbitAngle += rotSpeed;
-    if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(win, GLFW_TRUE);
-
-    // 카메라 각도 기준 플레이어 이동
-    float rad = glm::radians(m_orbitAngle);
-    glm::vec2 forward = {-glm::cos(rad), -glm::sin(rad)};
-    glm::vec2 right   = {-glm::sin(rad),  glm::cos(rad)};
-
-    glm::vec2 move{0.0f};
-    if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS) move += forward;
-    if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) move -= forward;
-    if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS) move -= right;
-    if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) move += right;
-
-    if (glm::length(move) > 0.0f) {
-        move = glm::normalize(move) * moveSpeed;
-        m_playerPos.x += move.x;
-        m_playerPos.y += move.y;
-    }
-
-    // 플레이어 인스턴스 버퍼 업데이트
+void VulkanContext::updatePlayerInstanceBuffer(const glm::vec3& playerPosition) {
     static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
-    InstanceData inst{m_playerPos, kPlayerColor};
+    InstanceData inst{playerPosition, kPlayerColor};
     memcpy(m_playerInstMapped, &inst, sizeof(inst));
 }
 
-void VulkanContext::createPlayerInstanceBuffer() {
+void VulkanContext::createPlayerInstanceBuffer(const glm::vec3& playerPosition) {
     VkDeviceSize size = sizeof(InstanceData);
     createBuffer(size,
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -1068,9 +1041,7 @@ void VulkanContext::createPlayerInstanceBuffer() {
         m_playerInstBuffer, m_playerInstMemory);
     vkMapMemory(m_device, m_playerInstMemory, 0, size, 0, &m_playerInstMapped);
 
-    static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
-    InstanceData inst{m_playerPos, kPlayerColor};
-    memcpy(m_playerInstMapped, &inst, sizeof(inst));
+    updatePlayerInstanceBuffer(playerPosition);
 }
 
 void VulkanContext::createInstanceBuffer() {

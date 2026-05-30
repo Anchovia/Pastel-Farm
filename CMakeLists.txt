@@ -28,6 +28,7 @@ FetchContent_MakeAvailable(glm)
 
 add_executable(engine
     src/main.cpp
+    src/game/GameState.cpp
     src/platform/Window.cpp
     src/renderer/VulkanContext.cpp
     src/world/World.cpp

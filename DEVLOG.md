@@ -36,6 +36,15 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `updateUniformBuffer()`에서 `m_orbitTarget = playerPos`로 카메라가 플레이어를 따라감
 - 플레이어 색상: 주황색 `{1.0, 0.45, 0.1}`
 
+### Player/GameState 분리
+- `src/game/Player.h` 추가 — 플레이어 위치와 이동 속도 보관
+- `src/game/GameState.h` / `GameState.cpp` 추가 — 입력 스냅샷(`PlayerInput`) 기반 플레이어 이동 계산
+- `VulkanContext`에서 `m_playerPos`와 `processInput()` 제거
+- `main.cpp`가 GLFW 입력을 읽고 `GameState::update(dt, input, orbitAngle)` 호출
+- `VulkanContext::drawFrame(playerPosition)`으로 플레이어 위치만 전달
+- 렌더러 역할 축소: 플레이어 상태를 소유하지 않고, 전달받은 위치로 카메라 타겟/플레이어 인스턴스 버퍼만 갱신
+- 결과: 화면과 조작은 유지하면서 게임 로직과 렌더링 책임 분리
+
 ### 타일 그리드 시스템
 - `TileType` enum 추가 (GRASS, DIRT, WATER, STONE)
 - `Vertex`에서 color 제거 — 색상은 인스턴스에서 담당

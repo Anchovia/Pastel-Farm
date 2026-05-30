@@ -45,6 +45,7 @@
 - 인스턴싱 — 10×10 타일 그리드를 드로우콜 1번으로 렌더링
 - 타일 그리드 시스템 — TileType(GRASS/DIRT/WATER/STONE) + 인스턴스 색상
 - 플레이어 — WASD 이동 (카메라 방향 기준), 카메라가 플레이어를 따라감
+- GameState/Player 분리 — 플레이어 상태와 이동 계산을 렌더러 밖으로 이동
 
 ---
 
@@ -61,6 +62,10 @@ game project/
 │  └─ triangle.frag        # 프래그먼트 셰이더 (GLSL)
 └─ src/
    ├─ main.cpp             # 진입점: 창 생성 + 렌더 루프
+   ├─ game/
+   │  ├─ Player.h          # 플레이어 위치/이동 속도
+   │  ├─ GameState.h       # 게임 상태 및 입력 스냅샷 선언
+   │  └─ GameState.cpp     # 플레이어 이동 규칙 업데이트
    ├─ platform/
    │  ├─ Window.h          # GLFW 창 래퍼 (RAII, 리사이즈 콜백)
    │  └─ Window.cpp

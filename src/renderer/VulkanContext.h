@@ -14,8 +14,10 @@ public:
     VulkanContext(Window& window, World& world);
     ~VulkanContext();
 
-    void drawFrame();
+    void drawFrame(const glm::vec3& playerPosition);
     void waitIdle();
+    void rotateOrbit(float degrees);
+    float orbitAngle() const { return m_orbitAngle; }
 
 private:
     void createInstance();
@@ -35,13 +37,13 @@ private:
     void createVertexBuffer();
     void createIndexBuffer();
     void createInstanceBuffer();
-    void createPlayerInstanceBuffer();
+    void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
-    void updateUniformBuffer(uint32_t currentFrame);
+    void updateUniformBuffer(uint32_t currentFrame, const glm::vec3& playerPosition);
+    void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
     void createDepthResources();
-    void processInput(float dt);
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
@@ -100,7 +102,6 @@ private:
     VkBuffer                 m_playerInstBuffer     = VK_NULL_HANDLE;
     VkDeviceMemory           m_playerInstMemory     = VK_NULL_HANDLE;
     void*                    m_playerInstMapped     = nullptr;
-    glm::vec3                m_playerPos            = {0.0f, 0.0f, 1.0f};
 
     VkImage                      m_depthImage           = VK_NULL_HANDLE;
     VkDeviceMemory               m_depthImageMemory     = VK_NULL_HANDLE;
@@ -126,5 +127,4 @@ private:
     float     m_orbitAngle    = 45.0f;
     float     m_orbitDistance = 14.0f;
     float     m_orbitPitch    = 45.0f;
-    double    m_lastTime      = 0.0;
 };
