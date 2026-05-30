@@ -217,10 +217,10 @@ void World::growthTick(int currentDay) {
             if (chunk.tiles[z][ly][lx] != TileType::WHEAT) continue;
             TileState& s = chunk.states[z][ly][lx];
             if (s.growthStage >= 3) continue;
-            if (currentDay - (int)s.lastUpdatedDay >= GROWTH_DAYS) {
+
+            while (s.growthStage < 3 && currentDay - (int)s.lastUpdatedDay >= GROWTH_DAYS) {
                 s.growthStage++;
-                s.lastUpdatedDay = (uint32_t)currentDay;
-                changed = true;
+                s.lastUpdatedDay += GROWTH_DAYS;
             }
         }
         if (changed) chunk.dirty = true;

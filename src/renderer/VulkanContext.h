@@ -70,6 +70,8 @@ private:
     void cleanupSwapchain();
     void recreateSwapchain();
 
+    void deferDestroy(VkBuffer buf, VkDeviceMemory mem);
+
     VkShaderModule          createShaderModule(const std::vector<char>& code);
     std::vector<char>       readFile(const std::string& path);
     uint32_t                findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
@@ -173,4 +175,12 @@ private:
     std::vector<VkSemaphore> m_renderFinished;
     std::vector<VkFence>     m_inFlight;
     uint32_t                 m_currentFrame     = 0;
+
+    struct DeferredDelete {
+        VkBuffer       buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        uint64_t       frame  = 0;
+    };
+    std::vector<DeferredDelete> m_deletionQueue;
+    uint64_t                    m_frameCount = 0;
 };

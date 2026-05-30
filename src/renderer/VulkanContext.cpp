@@ -159,6 +159,13 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
 
 VulkanContext::~VulkanContext() {
     waitIdle();
+
+    for (auto& d : m_deletionQueue) {
+        vkDestroyBuffer(m_device, d.buffer, nullptr);
+        vkFreeMemory(m_device, d.memory, nullptr);
+    }
+    m_deletionQueue.clear();
+
     cleanupSwapchain();
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -218,6 +225,11 @@ VulkanContext::~VulkanContext() {
 }
 
 void VulkanContext::waitIdle() { vkDeviceWaitIdle(m_device); }
+
+void VulkanContext::deferDestroy(VkBuffer buf, VkDeviceMemory mem) {
+    if (buf != VK_NULL_HANDLE)
+        m_deletionQueue.push_back({buf, mem, m_frameCount});
+}
 
 // ============================================================
 //  Instance
@@ -1307,6 +1319,21 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
     m_hotbarPalette  = palette;
     m_inventoryOpen  = inventoryOpen;
 
+    // Advance frame counter and free buffers that are no longer in flight
+    m_frameCount++;
+    m_deletionQueue.erase(
+        std::remove_if(m_deletionQueue.begin(), m_deletionQueue.end(),
+            [&](const DeferredDelete& d) {
+                if (m_frameCount - d.frame > (uint64_t)MAX_FRAMES_IN_FLIGHT) {
+                    vkDestroyBuffer(m_device, d.buffer, nullptr);
+                    vkFreeMemory(m_device, d.memory, nullptr);
+                    return true;
+                }
+                return false;
+            }),
+        m_deletionQueue.end()
+    );
+
     // Sky color: 4 keyframes keyed on timeOfDay (0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk)
     static constexpr float kSkyKeys[4][3] = {
         {0.05f, 0.05f, 0.12f}, // midnight
@@ -1782,21 +1809,13 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
 
     auto& data = m_chunkBuffers[coord];
 
-    // Wait for GPU before destroying buffers that may still be in flight
-    if (data.vertexBuffer != VK_NULL_HANDLE || data.indexBuffer != VK_NULL_HANDLE)
-        vkDeviceWaitIdle(m_device);
-
-    // Release old buffers
-    if (data.vertexBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(m_device, data.vertexBuffer, nullptr);
-        vkFreeMemory(m_device, data.vertexMemory, nullptr);
-        data.vertexBuffer = VK_NULL_HANDLE;
-    }
-    if (data.indexBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(m_device, data.indexBuffer, nullptr);
-        vkFreeMemory(m_device, data.indexMemory, nullptr);
-        data.indexBuffer = VK_NULL_HANDLE;
-    }
+    // Defer destruction of old buffers — GPU may still be reading them
+    deferDestroy(data.vertexBuffer, data.vertexMemory);
+    data.vertexBuffer = VK_NULL_HANDLE;
+    data.vertexMemory = VK_NULL_HANDLE;
+    deferDestroy(data.indexBuffer, data.indexMemory);
+    data.indexBuffer = VK_NULL_HANDLE;
+    data.indexMemory = VK_NULL_HANDLE;
 
     data.indexCount = (uint32_t)indices.size();
     if (data.indexCount == 0) return;
@@ -1853,28 +1872,13 @@ void VulkanContext::buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk
 }
 
 void VulkanContext::rebuildDirtyChunks() {
-    // Free GPU buffers for chunks no longer in the world
-    bool hasUnloaded = false;
-    for (auto& [coord, data] : m_chunkBuffers)
-        if (m_world.chunks().find(coord) == m_world.chunks().end()) { hasUnloaded = true; break; }
-    if (hasUnloaded)
-        vkDeviceWaitIdle(m_device);
-
+    // Free GPU buffers for chunks no longer in the world (deferred)
     for (auto it = m_chunkBuffers.begin(); it != m_chunkBuffers.end(); ) {
         if (m_world.chunks().find(it->first) == m_world.chunks().end()) {
             auto& d = it->second;
-            if (d.vertexBuffer != VK_NULL_HANDLE) {
-                vkDestroyBuffer(m_device, d.vertexBuffer, nullptr);
-                vkFreeMemory(m_device, d.vertexMemory, nullptr);
-            }
-            if (d.indexBuffer != VK_NULL_HANDLE) {
-                vkDestroyBuffer(m_device, d.indexBuffer, nullptr);
-                vkFreeMemory(m_device, d.indexMemory, nullptr);
-            }
-            if (d.objInstBuffer != VK_NULL_HANDLE) {
-                vkDestroyBuffer(m_device, d.objInstBuffer, nullptr);
-                vkFreeMemory(m_device, d.objInstMemory, nullptr);
-            }
+            deferDestroy(d.vertexBuffer,  d.vertexMemory);
+            deferDestroy(d.indexBuffer,   d.indexMemory);
+            deferDestroy(d.objInstBuffer, d.objInstMemory);
             it = m_chunkBuffers.erase(it);
         } else {
             ++it;
