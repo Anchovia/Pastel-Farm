@@ -163,6 +163,17 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `GameState` / `VulkanContext` 전파: `glm::ivec2` → `glm::ivec3`, 레이캐스팅 `delta.z = 0`으로 타겟은 플레이어와 같은 Z 레이어로 고정.
 - `createInstanceBuffer`: Z 루프 추가, AIR 타일 스킵 — 비어있는 레이어는 자동으로 렌더링 제외.
 - 현재 동작 변화 없음 — Z=1~7은 전부 AIR. 이후 `setTile(x, y, z, type)` 호출만으로 블록 배치/파괴가 바로 연결됨.
+
+### 청크 시스템 (16×16)
+- 고정 배열 `m_grid[DEPTH][H][W]` → `unordered_map<ivec2, Chunk>` — 무한 확장 가능한 구조로 전환.
+- `Chunk.h` 신규 생성: `CHUNK_SIZE=16`, `CHUNK_DEPTH=8`, `Chunk` 구조체(`tiles`, `dirty` 플래그), `TileState`(농경지 성장 단계 등 미래 상태 예약), `IVec2Hash`.
+- 타일 좌표 = 월드 좌표 직접 매핑 (`tileCenter(x,y,z) = {x,y,z}`) — 기존 중앙 정렬 오프셋 제거, 플레이어 시작 위치 `{5,5,1}`(맵 중앙)으로 변경.
+- `World::getTile/setTile`: 청크 좌표(`chunkCoord`) + 로컬 좌표(`localCoord`)로 라우팅. 미로드 청크는 AIR 반환.
+- `setTile` 호출 시 해당 청크 `dirty=true` 자동 마킹.
+- **렌더러 청크 버퍼**: 단일 `m_instanceBuffer` → `unordered_map<ivec2, ChunkRenderData>` (청크당 버퍼 1개).
+- `rebuildDirtyChunks()`: 매 프레임 dirty 청크만 버퍼 재빌드 → 블록 변경 시 전체가 아닌 해당 청크만 GPU 업로드.
+- `recordCommandBuffer`: 청크 맵을 순회하며 청크당 draw call 1번 — 청크 단위 프러스텀 컬링 기반 마련.
+- `inBounds`: X/Y 무한 확장 대응으로 Z 범위만 검사.
 ---
 
 ## 게임 설계 메모

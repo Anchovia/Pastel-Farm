@@ -142,8 +142,8 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createVertexBuffer();
     createIndexBuffer();
     createSelectorBuffers();
-    createInstanceBuffer();
-    createPlayerInstanceBuffer({0.0f, 0.0f, 1.0f});
+    rebuildDirtyChunks();
+    createPlayerInstanceBuffer({5.0f, 5.0f, 1.0f});
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
@@ -169,8 +169,12 @@ VulkanContext::~VulkanContext() {
     vkFreeMemory(m_device, m_selectorIndexMemory, nullptr);
     vkDestroyBuffer(m_device, m_selectorVertexBuffer, nullptr);
     vkFreeMemory(m_device, m_selectorVertexMemory, nullptr);
-    vkDestroyBuffer(m_device, m_instanceBuffer, nullptr);
-    vkFreeMemory(m_device, m_instanceBufferMemory, nullptr);
+    for (auto& [coord, data] : m_chunkBuffers) {
+        if (data.buffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, data.buffer, nullptr);
+            vkFreeMemory(m_device, data.memory, nullptr);
+        }
+    }
     vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
     vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
@@ -718,11 +722,14 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
         m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
 
-    VkBuffer     buffers[] = {m_vertexBuffer, m_instanceBuffer};
-    VkDeviceSize offs[]    = {0, 0};
-    vkCmdBindVertexBuffers(cmd, 0, 2, buffers, offs);
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-    vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), m_instanceCount, 0, 0, 0);
+    for (auto& [coord, data] : m_chunkBuffers) {
+        if (data.buffer == VK_NULL_HANDLE || data.count == 0) continue;
+        VkBuffer     buffers[] = { m_vertexBuffer, data.buffer };
+        VkDeviceSize offs[]    = { 0, 0 };
+        vkCmdBindVertexBuffers(cmd, 0, 2, buffers, offs);
+        vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), data.count, 0, 0, 0);
+    }
 
     if (m_showSelector) {
         VkBuffer     sBufs[] = {m_selectorVertexBuffer, m_selectorInstBuffer};
@@ -786,6 +793,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
     updateUniformBuffer(m_currentFrame, camera);
     updatePlayerInstanceBuffer(playerPosition);
     updateSelectorInstanceBuffer(targetTile);
+    rebuildDirtyChunks();
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 
@@ -1124,31 +1132,48 @@ void VulkanContext::createSelectorBuffers() {
     vkMapMemory(m_device, m_selectorInstMemory, 0, instanceSize, 0, &m_selectorInstMapped);
 }
 
-void VulkanContext::createInstanceBuffer() {
-    const int W = m_world.WIDTH;
-    const int H = m_world.HEIGHT;
-    const int D = m_world.DEPTH;
-
+void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     std::vector<InstanceData> instances;
-    for (int z = 0; z < D; z++)
-        for (int x = 0; x < W; x++)
-            for (int y = 0; y < H; y++) {
-                TileType t = m_world.getTile(x, y, z);
+    const int baseX = coord.x * CHUNK_SIZE;
+    const int baseY = coord.y * CHUNK_SIZE;
+
+    for (int z = 0; z < CHUNK_DEPTH; z++)
+        for (int ly = 0; ly < CHUNK_SIZE; ly++)
+            for (int lx = 0; lx < CHUNK_SIZE; lx++) {
+                TileType t = chunk.tiles[z][ly][lx];
                 if (t == TileType::AIR) continue;
-                instances.push_back({m_world.tileCenter(x, y, z), World::tileColor(t)});
+                instances.push_back({m_world.tileCenter(baseX + lx, baseY + ly, z), World::tileColor(t)});
             }
-    m_instanceCount = (uint32_t)instances.size();
 
-    VkDeviceSize size = sizeof(InstanceData) * m_instanceCount;
-    createBuffer(size,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    auto& data = m_chunkBuffers[coord];
+
+    if (data.buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_device, data.buffer, nullptr);
+        vkFreeMemory(m_device, data.memory, nullptr);
+        data.buffer = VK_NULL_HANDLE;
+        data.memory = VK_NULL_HANDLE;
+    }
+
+    data.count = (uint32_t)instances.size();
+    if (data.count == 0) return;
+
+    VkDeviceSize size = sizeof(InstanceData) * data.count;
+    createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_instanceBuffer, m_instanceBufferMemory);
+        data.buffer, data.memory);
 
-    void* data;
-    vkMapMemory(m_device, m_instanceBufferMemory, 0, size, 0, &data);
-    memcpy(data, instances.data(), size);
-    vkUnmapMemory(m_device, m_instanceBufferMemory);
+    void* mapped;
+    vkMapMemory(m_device, data.memory, 0, size, 0, &mapped);
+    memcpy(mapped, instances.data(), size);
+    vkUnmapMemory(m_device, data.memory);
+}
+
+void VulkanContext::rebuildDirtyChunks() {
+    for (auto& [coord, chunk] : m_world.chunks()) {
+        if (!chunk.dirty) continue;
+        buildChunkBuffer(coord, chunk);
+        chunk.dirty = false;
+    }
 }
 
 void VulkanContext::createIndexBuffer() {

@@ -53,6 +53,7 @@
 - 입력 시스템 분리 (InputManager) — 메인 루프에서 GLFW 입력 로직을 분리하여 확장성 및 가독성 향상
 - copyBuffer 동기화 개선 — `vkQueueWaitIdle`(큐 전체 블로킹) → `VkFence`(해당 전송만 대기)로 교체, 청크 런타임 로드 대비
 - World 3D 그리드 전환 — `m_grid[H][W]` → `m_grid[DEPTH][H][W]` (DEPTH=8), `TileType::AIR` 추가, 블록 배치/파괴 기반 마련
+- 청크 시스템 (16×16) — 고정 배열을 `unordered_map<ivec2, Chunk>`로 전환, dirty 플래그 기반 청크별 GPU 버퍼 재빌드, 무한 월드 확장 기반 마련
 ---
 
 ## 프로젝트 구조
@@ -82,9 +83,10 @@ game project/
    │  ├─ Types.h           # Vertex, InstanceData, TileType 정의
    │  ├─ VulkanContext.h   # Vulkan 렌더러 선언
    │  └─ VulkanContext.cpp # Vulkan 렌더러 구현
-   └─ world/1
-      ├─ World.h           # 타일 그리드 및 월드 좌표 질의 선언
-      └─ World.cpp         # 타일 데이터, 색상, 보행 가능 여부 정의
+   └─ world/
+      ├─ Chunk.h           # Chunk 구조체, TileState, IVec2Hash, 청크 상수
+      ├─ World.h           # 청크 맵 기반 월드 인터페이스 선언
+      └─ World.cpp         # 청크 라우팅, 타일 색상, 좌표 변환 구현
 ```
 
 > `build/` 폴더는 CMake 생성물 + 자동으로 받은 GLFW/GLM 소스가 들어있어 git에서 제외됩니다.
@@ -102,13 +104,13 @@ game project/
 - 기본은 평지 한 층, 블록을 쌓아 단차 표현 가능 (계단/사다리로 이동)
 
 ### 월드 구조
-- **타일 기반 3D 그리드** — `World::m_grid[DEPTH][HEIGHT][WIDTH]` (`10×10×8`)
+- **청크 기반 3D 그리드** — `unordered_map<ivec2, Chunk>`, 청크 1개 = `16×16×8`
 - `TileType`: `AIR(0) / GRASS / DIRT / WATER / STONE` — AIR는 렌더링 제외, 블록 없음을 의미
+- `TileState`: 성장 단계(`growthStage`), 마지막 업데이트 날짜(`lastUpdatedDay`) 예약 — 농경지 Time-based catch-up 방식 대비
 - 모든 블록은 **1×1×1 단위 큐브**로 통일 (메시 하나, 색상/텍스처만 다름)
-- 타일은 그리드 좌표(정수)로 관리, 캐릭터는 연속 좌표(float)로 자유 이동
-- Z=0 레이어: 기본 지면 (GRASS/DIRT/WATER/STONE), Z=1 이상: 블록 설치 영역
-- 현재 기본 규칙: 맵 밖 이동 불가, AIR·WATER 타일 이동 불가
-- 청크 시스템으로 가까운 영역만 로드 (예정)
+- 타일 좌표 = 월드 좌표 직접 매핑, 캐릭터는 연속 좌표(float)로 자유 이동
+- Z=0 레이어: 기본 지면, Z=1 이상: 블록 설치 영역
+- 미로드 청크는 AIR 반환 — 로드된 청크만 렌더링, 이동 판정에도 반영
 
 ### 렌더링 전략
 - **인스턴싱** — 같은 타일 메시를 위치/색상만 바꿔 한 번에 대량 렌더링 (드로우콜 최소화)
@@ -116,9 +118,10 @@ game project/
 - **프러스텀 컬링** — 카메라 시야 밖 타일 제외
 
 ### 최적화 우선순위
-1. 인스턴싱으로 드로우콜 감소
-2. 청크 단위 프러스텀 컬링
-3. 시야 밖 청크 언로드
+1. ~~인스턴싱으로 드로우콜 감소~~ ✅
+2. ~~청크 기반 구조 전환~~ ✅
+3. 청크 단위 Frustum Culling
+4. 시야 밖 청크 언로드
 
 ---
 

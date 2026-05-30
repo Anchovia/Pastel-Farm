@@ -5,6 +5,8 @@
 #include <vector>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include "world/Chunk.h"
 
 class Window;
 class World;
@@ -37,7 +39,8 @@ private:
     void createVertexBuffer();
     void createIndexBuffer();
     void createSelectorBuffers();
-    void createInstanceBuffer();
+    void buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk);
+    void rebuildDirtyChunks();
     void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
     void createUniformBuffers();
     void createDescriptorPool();
@@ -98,9 +101,12 @@ private:
     VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
     VkBuffer                 m_indexBuffer         = VK_NULL_HANDLE;
     VkDeviceMemory           m_indexBufferMemory   = VK_NULL_HANDLE;
-    VkBuffer                 m_instanceBuffer       = VK_NULL_HANDLE;
-    VkDeviceMemory           m_instanceBufferMemory = VK_NULL_HANDLE;
-    uint32_t                 m_instanceCount        = 0;
+    struct ChunkRenderData {
+        VkBuffer       buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        uint32_t       count  = 0;
+    };
+    std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     VkBuffer                 m_playerInstBuffer     = VK_NULL_HANDLE;
     VkDeviceMemory           m_playerInstMemory     = VK_NULL_HANDLE;
     void*                    m_playerInstMapped     = nullptr;

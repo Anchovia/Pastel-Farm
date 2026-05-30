@@ -1,7 +1,5 @@
 #include "World.h"
-
 #include <cmath>
-#include <cstring>
 
 static const glm::vec3 kTileColors[] = {
     {0.0f,  0.0f,  0.0f },  // AIR   (렌더링 안 됨)
@@ -12,10 +10,8 @@ static const glm::vec3 kTileColors[] = {
 };
 
 World::World() {
-    memset(m_grid, 0, sizeof(m_grid)); // 전체 AIR로 초기화
-
     using T = TileType;
-    TileType ground[HEIGHT][WIDTH] = {
+    const TileType ground[10][10] = {
         { T::WATER, T::WATER, T::WATER, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
         { T::WATER, T::WATER, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
         { T::WATER, T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
@@ -27,34 +23,73 @@ World::World() {
         { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
         { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
     };
-    memcpy(m_grid[0], ground, sizeof(ground)); // Z=0 레이어에 지면 배치
+
+    Chunk& chunk = getOrCreateChunk(0, 0);
+    for (int y = 0; y < 10; y++)
+        for (int x = 0; x < 10; x++)
+            chunk.tiles[0][y][x] = ground[y][x];
+}
+
+glm::ivec2 World::chunkCoord(int x, int y) {
+    return {
+        (int)std::floor((float)x / CHUNK_SIZE),
+        (int)std::floor((float)y / CHUNK_SIZE)
+    };
+}
+
+glm::ivec2 World::localCoord(int x, int y) {
+    return {
+        ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
+        ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
+    };
+}
+
+Chunk& World::getOrCreateChunk(int cx, int cy) {
+    return m_chunks[{cx, cy}];
+}
+
+const Chunk* World::getChunk(int cx, int cy) const {
+    auto it = m_chunks.find({cx, cy});
+    return it != m_chunks.end() ? &it->second : nullptr;
+}
+
+TileType World::getTile(int x, int y, int z) const {
+    if (z < 0 || z >= CHUNK_DEPTH) return TileType::AIR;
+    auto cc = chunkCoord(x, y);
+    const Chunk* chunk = getChunk(cc.x, cc.y);
+    if (!chunk) return TileType::AIR;
+    auto lc = localCoord(x, y);
+    return chunk->tiles[z][lc.y][lc.x];
+}
+
+void World::setTile(int x, int y, int z, TileType t) {
+    if (z < 0 || z >= CHUNK_DEPTH) return;
+    auto cc = chunkCoord(x, y);
+    Chunk& chunk = getOrCreateChunk(cc.x, cc.y);
+    auto lc = localCoord(x, y);
+    chunk.tiles[z][lc.y][lc.x] = t;
+    chunk.dirty = true;
 }
 
 bool World::inBounds(int x, int y, int z) const {
-    return x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT && z >= 0 && z < DEPTH;
+    return z >= 0 && z < CHUNK_DEPTH;
 }
 
 bool World::isWalkable(int x, int y, int z) const {
-    if (!inBounds(x, y, z)) return false;
     TileType t = getTile(x, y, z);
     return t != TileType::AIR && t != TileType::WATER;
 }
 
 glm::ivec3 World::worldToTile(const glm::vec3& position) const {
-    const float offX = (WIDTH - 1) * 0.5f;
-    const float offY = (HEIGHT - 1) * 0.5f;
-    // position.z = 타일 Z + 1 (플레이어는 타일 위 1유닛에 서 있음)
     return {
-        static_cast<int>(std::floor(position.x + offX + 0.5f)),
-        static_cast<int>(std::floor(position.y + offY + 0.5f)),
+        static_cast<int>(std::floor(position.x + 0.5f)),
+        static_cast<int>(std::floor(position.y + 0.5f)),
         static_cast<int>(std::round(position.z)) - 1
     };
 }
 
 glm::vec3 World::tileCenter(int x, int y, int z) const {
-    const float offX = (WIDTH - 1) * 0.5f;
-    const float offY = (HEIGHT - 1) * 0.5f;
-    return {x - offX, y - offY, static_cast<float>(z)};
+    return { static_cast<float>(x), static_cast<float>(y), static_cast<float>(z) };
 }
 
 glm::vec3 World::tileColor(TileType type) {

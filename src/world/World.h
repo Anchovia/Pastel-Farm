@@ -1,25 +1,31 @@
 #pragma once
-#include "renderer/Types.h"
+#include "world/Chunk.h"
 #include <glm/glm.hpp>
+#include <unordered_map>
 
 class World {
 public:
-    static constexpr int WIDTH  = 10;
-    static constexpr int HEIGHT = 10;
-    static constexpr int DEPTH  = 8;
-
     World();
 
-    TileType  getTile(int x, int y, int z) const       { return m_grid[z][y][x]; }
-    void      setTile(int x, int y, int z, TileType t) { m_grid[z][y][x] = t; }
+    TileType getTile(int x, int y, int z) const;
+    void     setTile(int x, int y, int z, TileType t);
 
-    bool inBounds(int x, int y, int z) const;
-    bool isWalkable(int x, int y, int z) const;
+    bool       inBounds(int x, int y, int z) const;
+    bool       isWalkable(int x, int y, int z) const;
     glm::ivec3 worldToTile(const glm::vec3& position) const;
-    glm::vec3 tileCenter(int x, int y, int z) const;
+    glm::vec3  tileCenter(int x, int y, int z) const;
 
     static glm::vec3 tileColor(TileType type);
 
+    const std::unordered_map<glm::ivec2, Chunk, IVec2Hash>& chunks() const { return m_chunks; }
+          std::unordered_map<glm::ivec2, Chunk, IVec2Hash>& chunks()       { return m_chunks; }
+
 private:
-    TileType m_grid[DEPTH][HEIGHT][WIDTH];
+    Chunk&       getOrCreateChunk(int cx, int cy);
+    const Chunk* getChunk(int cx, int cy) const;
+
+    static glm::ivec2 chunkCoord(int x, int y);
+    static glm::ivec2 localCoord(int x, int y);
+
+    std::unordered_map<glm::ivec2, Chunk, IVec2Hash> m_chunks;
 };
