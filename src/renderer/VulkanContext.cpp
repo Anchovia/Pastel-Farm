@@ -137,12 +137,14 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createDescriptorSetLayout();
     createGraphicsPipeline();
     createChunkPipeline();
+    createUIPipeline();
     createDepthResources();
     createFramebuffers();
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
     createSelectorBuffers();
+    createUIBuffer();
     rebuildDirtyChunks();
     createPlayerInstanceBuffer({15.0f, 15.0f, 1.0f});
     createUniformBuffers();
@@ -184,6 +186,10 @@ VulkanContext::~VulkanContext() {
     vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
     vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
+    vkDestroyBuffer(m_device, m_uiBuffer, nullptr);
+    vkFreeMemory(m_device, m_uiMemory, nullptr);
+    vkDestroyPipeline(m_device, m_uiPipeline, nullptr);
+    vkDestroyPipelineLayout(m_device, m_uiPipelineLayout, nullptr);
     vkDestroyPipeline(m_device, m_chunkPipeline, nullptr);
     vkDestroyPipeline(m_device, m_pipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
@@ -762,6 +768,182 @@ void VulkanContext::createChunkPipeline() {
     vkDestroyShaderModule(m_device, fragMod, nullptr);
 }
 
+void VulkanContext::createUIPipeline() {
+    auto vertCode = readFile("shaders/ui.vert.spv");
+    auto fragCode = readFile("shaders/ui.frag.spv");
+    VkShaderModule vertMod = createShaderModule(vertCode);
+    VkShaderModule fragMod = createShaderModule(fragCode);
+
+    VkPipelineShaderStageCreateInfo stages[2] = {};
+    stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vertMod;
+    stages[0].pName  = "main";
+    stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fragMod;
+    stages[1].pName  = "main";
+
+    VkVertexInputBindingDescription binding{};
+    binding.binding   = 0;
+    binding.stride    = sizeof(UIVertex);
+    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription attrs[2]{};
+    attrs[0] = { 0, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(UIVertex, pos)   };
+    attrs[1] = { 1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(UIVertex, color) };
+
+    VkPipelineVertexInputStateCreateInfo vertexInput{};
+    vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInput.vertexBindingDescriptionCount   = 1;
+    vertexInput.pVertexBindingDescriptions      = &binding;
+    vertexInput.vertexAttributeDescriptionCount = 2;
+    vertexInput.pVertexAttributeDescriptions    = attrs;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport{ 0, 0,
+        (float)m_swapchainExtent.width, (float)m_swapchainExtent.height, 0.0f, 1.0f };
+    VkRect2D scissor{ {0, 0}, m_swapchainExtent };
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports    = &viewport;
+    viewportState.scissorCount  = 1;
+    viewportState.pScissors     = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo raster{};
+    raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode    = VK_CULL_MODE_NONE;
+    raster.frontFace   = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth   = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo msaa{};
+    msaa.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    msaa.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    // Alpha blending for semi-transparent panels
+    VkPipelineColorBlendAttachmentState blendAttach{};
+    blendAttach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                 VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    blendAttach.blendEnable         = VK_TRUE;
+    blendAttach.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    blendAttach.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blendAttach.colorBlendOp        = VK_BLEND_OP_ADD;
+    blendAttach.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blendAttach.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blendAttach.alphaBlendOp        = VK_BLEND_OP_ADD;
+
+    VkPipelineColorBlendStateCreateInfo blend{};
+    blend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blend.attachmentCount = 1;
+    blend.pAttachments    = &blendAttach;
+
+    // UI draws on top of everything — no depth test/write
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable  = VK_FALSE;
+    depthStencil.depthWriteEnable = VK_FALSE;
+    depthStencil.depthCompareOp   = VK_COMPARE_OP_ALWAYS;
+
+    // No descriptor sets — UI vertices are already in NDC
+    VkPipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    if (vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &m_uiPipelineLayout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create UI pipeline layout");
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount          = 2;
+    pipelineInfo.pStages             = stages;
+    pipelineInfo.pVertexInputState   = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState      = &viewportState;
+    pipelineInfo.pRasterizationState = &raster;
+    pipelineInfo.pMultisampleState   = &msaa;
+    pipelineInfo.pColorBlendState    = &blend;
+    pipelineInfo.pDepthStencilState  = &depthStencil;
+    pipelineInfo.layout              = m_uiPipelineLayout;
+    pipelineInfo.renderPass          = m_renderPass;
+    pipelineInfo.subpass             = 0;
+
+    if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_uiPipeline) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create UI pipeline");
+
+    vkDestroyShaderModule(m_device, vertMod, nullptr);
+    vkDestroyShaderModule(m_device, fragMod, nullptr);
+}
+
+// UI vertex buffer: persistently mapped, rebuilt each frame.
+// Capacity covers panel + slots + highlight with margin.
+void VulkanContext::createUIBuffer() {
+    VkDeviceSize size = sizeof(UIVertex) * 256;
+    createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_uiBuffer, m_uiMemory);
+    vkMapMemory(m_device, m_uiMemory, 0, size, 0, &m_uiMapped);
+}
+
+void VulkanContext::updateHotbar() {
+    const float W = (float)m_swapchainExtent.width;
+    const float H = (float)m_swapchainExtent.height;
+
+    std::vector<UIVertex> verts;
+
+    auto pushQuad = [&](float x, float y, float w, float h, glm::vec4 color) {
+        auto toNDC = [&](float px, float py) {
+            return glm::vec2(px / W * 2.0f - 1.0f, py / H * 2.0f - 1.0f);
+        };
+        glm::vec2 p0 = toNDC(x,     y);
+        glm::vec2 p1 = toNDC(x + w, y);
+        glm::vec2 p2 = toNDC(x + w, y + h);
+        glm::vec2 p3 = toNDC(x,     y + h);
+        verts.push_back({p0, color});
+        verts.push_back({p1, color});
+        verts.push_back({p2, color});
+        verts.push_back({p0, color});
+        verts.push_back({p2, color});
+        verts.push_back({p3, color});
+    };
+
+    const float slot = 56.0f, gap = 6.0f, pad = 6.0f;
+    const float barW = HOTBAR_SLOTS * slot + (HOTBAR_SLOTS - 1) * gap;
+    const float startX = (W - barW) * 0.5f;
+    const float startY = H - slot - 20.0f;
+
+    // Panel background
+    pushQuad(startX - pad, startY - pad, barW + 2 * pad, slot + 2 * pad, {0.10f, 0.10f, 0.12f, 0.7f});
+
+    // Selected highlight (drawn behind the selected slot so a frame peeks out)
+    float selX = startX + m_hotbarSelected * (slot + gap);
+    pushQuad(selX - 3.0f, startY - 3.0f, slot + 6.0f, slot + 6.0f, {1.0f, 0.85f, 0.2f, 1.0f});
+
+    // Slot fills + block color icon
+    for (int i = 0; i < HOTBAR_SLOTS; i++) {
+        float x = startX + i * (slot + gap);
+        glm::vec4 bg = (i == m_hotbarSelected)
+            ? glm::vec4(0.35f, 0.35f, 0.40f, 1.0f)
+            : glm::vec4(0.20f, 0.20f, 0.24f, 0.9f);
+        pushQuad(x, startY, slot, slot, bg);
+
+        // Inner icon showing the block's color (empty slots stay blank)
+        TileType t = m_hotbarPalette[i];
+        if (t != TileType::AIR) {
+            glm::vec3 col = World::tileColor(t);
+            float inset = 10.0f;
+            pushQuad(x + inset, startY + inset, slot - 2 * inset, slot - 2 * inset,
+                     glm::vec4(col, 1.0f));
+        }
+    }
+
+    m_uiVertexCount = (uint32_t)verts.size();
+    memcpy(m_uiMapped, verts.data(), sizeof(UIVertex) * verts.size());
+}
+
 // ============================================================
 //  Framebuffers
 // ============================================================
@@ -861,6 +1043,16 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
+
+    // UI overlay (screen-space, on top of everything)
+    if (m_uiVertexCount > 0) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiPipeline);
+        VkBuffer     uiBufs[] = { m_uiBuffer };
+        VkDeviceSize uiOffs[] = { 0 };
+        vkCmdBindVertexBuffers(cmd, 0, 1, uiBufs, uiOffs);
+        vkCmdDraw(cmd, m_uiVertexCount, 1, 0, 0);
+    }
+
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
 }
@@ -889,7 +1081,11 @@ void VulkanContext::createSyncObjects() {
 // ============================================================
 //  drawFrame
 // ============================================================
-void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile) {
+void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
+                              int hotbarSelected, const std::array<TileType, HOTBAR_SLOTS>& palette) {
+    m_hotbarSelected = hotbarSelected;
+    m_hotbarPalette  = palette;
+
     // Wait for the previous frame using this slot to finish
     vkWaitForFences(m_device, 1, &m_inFlight[m_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -909,6 +1105,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
     updateUniformBuffer(m_currentFrame, camera);
     updatePlayerInstanceBuffer(playerPosition);
     updateSelectorInstanceBuffer(targetTile);
+    updateHotbar();
     rebuildDirtyChunks();
     m_frustum = Frustum::extractFrom(camera.viewProj());
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
@@ -1278,6 +1475,41 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     std::vector<ChunkVertex> vertices;
     std::vector<uint32_t>    indices;
 
+    // Padded neighborhood copy (chunk + 1-tile border) so face-cull and AO
+    // sampling use array indexing instead of per-vertex hashmap lookups.
+    // Interior comes from chunk.tiles directly; only the border ring hits getTile.
+    static TileType N[CHUNK_DEPTH + 2][CHUNK_SIZE + 2][CHUNK_SIZE + 2];
+    for (int lz = -1; lz <= CHUNK_DEPTH; lz++)
+    for (int ly = -1; ly <= CHUNK_SIZE; ly++)
+    for (int lx = -1; lx <= CHUNK_SIZE; lx++) {
+        bool inside = lx >= 0 && lx < CHUNK_SIZE && ly >= 0 && ly < CHUNK_SIZE && lz >= 0 && lz < CHUNK_DEPTH;
+        N[lz + 1][ly + 1][lx + 1] = inside
+            ? chunk.tiles[lz][ly][lx]
+            : m_world.getTile(baseX + lx, baseY + ly, lz);
+    }
+    auto Nat = [&](int lx, int ly, int lz) -> TileType {
+        return N[lz + 1][ly + 1][lx + 1];
+    };
+
+    // Per-vertex ambient occlusion (0fps voxel AO), sampling the padded buffer.
+    auto vertexAO = [&Nat](int tlx, int tly, int tz, const glm::vec3& n, const glm::vec3& lp) -> float {
+        glm::ivec3 ni((int)n.x, (int)n.y, (int)n.z);
+        int axes[2], na = 0;
+        for (int a = 0; a < 3; a++) if (ni[a] == 0) axes[na++] = a;
+        glm::ivec3 d0(0), d1(0);
+        d0[axes[0]] = (lp[axes[0]] > 0.0f) ? 1 : -1;
+        d1[axes[1]] = (lp[axes[1]] > 0.0f) ? 1 : -1;
+        glm::ivec3 b(tlx + ni.x, tly + ni.y, tz + ni.z);
+        auto sol = [&](glm::ivec3 p) {
+            TileType t = Nat(p.x, p.y, p.z);
+            return (t != TileType::AIR && t != TileType::WATER) ? 1 : 0;
+        };
+        int s0 = sol(b + d0), s1 = sol(b + d1), c = sol(b + d0 + d1);
+        int ao = (s0 && s1) ? 0 : (3 - (s0 + s1 + c));
+        static const float levels[4] = { 0.5f, 0.7f, 0.85f, 1.0f };
+        return levels[ao];
+    };
+
     for (int z  = 0; z  < CHUNK_DEPTH; z++)
     for (int ly = 0; ly < CHUNK_SIZE;  ly++)
     for (int lx = 0; lx < CHUNK_SIZE;  lx++) {
@@ -1292,18 +1524,18 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
 
         for (const auto& face : kFaces) {
             // Skip if neighbor tile is opaque
-            TileType neighbor = m_world.getTile(
-                wx + face.neighborOff.x,
-                wy + face.neighborOff.y,
-                z  + face.neighborOff.z
-            );
+            TileType neighbor = Nat(lx + face.neighborOff.x,
+                                    ly + face.neighborOff.y,
+                                    z  + face.neighborOff.z);
             if (neighbor != TileType::AIR) continue;
 
             const glm::vec3 color = face.isTop ? topColor : sideColor;
             const uint32_t  base  = (uint32_t)vertices.size();
 
-            for (int i = 0; i < 4; i++)
-                vertices.push_back({ center + face.verts[i], face.normal, color });
+            for (int i = 0; i < 4; i++) {
+                float ao = vertexAO(lx, ly, z, face.normal, face.verts[i]);
+                vertices.push_back({ center + face.verts[i], face.normal, color * ao });
+            }
 
             indices.insert(indices.end(), {
                 base+0, base+1, base+2,

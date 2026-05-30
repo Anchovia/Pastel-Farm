@@ -57,6 +57,8 @@ set(SHADERS
     ${SHADER_SRC_DIR}/triangle.frag
     ${SHADER_SRC_DIR}/chunk.vert
     ${SHADER_SRC_DIR}/chunk.frag
+    ${SHADER_SRC_DIR}/ui.vert
+    ${SHADER_SRC_DIR}/ui.frag
 )
 
 set(SPIRV_OUTPUTS)
@@ -83,4 +85,6 @@ add_custom_command(TARGET engine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/triangle.frag.spv ${SHADER_OUT_DIR}/triangle.frag.spv
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/chunk.vert.spv    ${SHADER_OUT_DIR}/chunk.vert.spv
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/chunk.frag.spv    ${SHADER_OUT_DIR}/chunk.frag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/ui.vert.spv       ${SHADER_OUT_DIR}/ui.vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/ui.frag.spv       ${SHADER_OUT_DIR}/ui.frag.spv
 )

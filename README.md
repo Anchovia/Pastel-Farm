@@ -62,6 +62,9 @@
 - 청크 로드/언로드 + 절차적 지형 — FBM noise 기반 `TerrainGen`, load radius=3/unload radius=4, 플레이어 이동 시 자동 생성/해제. 무한 월드 실현
 - 블록 설치/파괴 — 좌클릭=파괴(AIR), 우클릭=설치(STONE). 타겟 Z 자동 탐색(topmost non-AIR), dirty 청크 즉시 GPU 재빌드
 - 지형 다양화 — 물(저지대 호수), 바이옴(GRASS/DIRT), 나무(WOOD 트렁크 + LEAVES 캐노피). 복셀 나무는 추후 로우폴리 모델 레이어로 교체 예정
+- 핫바 UI — 스크린 좌표 전용 파이프라인(depth off, alpha blend), 9칸 슬롯 + 선택 강조, 각 슬롯에 블록 색상 아이콘
+- 블록 타입 선택 — 숫자키 1~9 / 스크롤 휠로 슬롯 선택, 우클릭이 선택된 타입 설치 (GRASS/DIRT/STONE/WOOD/LEAVES/WATER)
+- Ambient Occlusion — 꼭짓점별 복셀 AO(0fps 방식), 모서리·구석 음영으로 입체감. 청크 패딩 버퍼 캐싱으로 빌드 비용 최소화
 ---
 
 ## 프로젝트 구조
@@ -126,6 +129,7 @@ game project/
 - **청크 메시 생성** — 청크별로 보이는 면만 골라 버텍스+인덱스 버퍼 직접 생성 (Hidden Face Culling), 인스턴싱보다 GPU 부하 대폭 감소
 - **플랫 셰이딩** — 면마다 단색 + 디렉셔널 라이트로 명암
 - **top/side 색상 분기** — 윗면과 옆면 색상 분리 (GRASS: 윗면 초록 / 옆면 흙 갈색 등), 나중에 텍스처 아틀라스로 교체 가능
+- **Ambient Occlusion** — 꼭짓점별 복셀 AO로 모서리·구석 음영, 청크 빌드 시 베이크 (추가 렌더패스 없음)
 - **프러스텀 컬링** — 카메라 시야 밖 청크 draw call 차단
 
 ### 최적화 우선순위

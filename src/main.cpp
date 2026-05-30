@@ -16,7 +16,7 @@ int main() {
         World         world;
         GameState     gameState;
         VulkanContext ctx(window, world);
-        InputManager  inputManager(window.handle());
+        InputManager  inputManager(window);
         Camera camera(45.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
 
         // Initial chunk load around spawn
@@ -64,7 +64,8 @@ int main() {
                 lastPlayerChunk = playerChunk;
             }
 
-            ctx.drawFrame(camera, gameState.player().position(), gameState.targetTile());
+            ctx.drawFrame(camera, gameState.player().position(), gameState.targetTile(),
+                          gameState.selectedSlot(), gameState.palette());
         }
         ctx.waitIdle();
     } catch (const std::exception& e) {

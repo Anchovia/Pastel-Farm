@@ -18,7 +18,23 @@ bool canOccupy(const World& world, const glm::vec3& position) {
 }
 }
 
+GameState::GameState() {
+    m_palette = {
+        TileType::GRASS, TileType::DIRT, TileType::STONE,
+        TileType::WOOD,  TileType::LEAVES, TileType::WATER,
+        TileType::AIR,   TileType::AIR,   TileType::AIR,
+    };
+}
+
 void GameState::update(float dt, const PlayerInput& input, const Camera& camera, World& world) {
+    // Hotbar selection
+    if (input.selectSlot >= 0 && input.selectSlot < HOTBAR_SLOTS)
+        m_selectedSlot = input.selectSlot;
+    if (input.scrollDelta != 0) {
+        m_selectedSlot = (m_selectedSlot + input.scrollDelta) % HOTBAR_SLOTS;
+        if (m_selectedSlot < 0) m_selectedSlot += HOTBAR_SLOTS;
+    }
+
     const glm::vec3& camPos = camera.position();
     const glm::vec3& playerPos = m_player.position();
 
@@ -89,11 +105,12 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                         world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
 
                     if (input.rightClick) {
+                        TileType block = m_palette[m_selectedSlot];
                         int px = finalTargetTile.x;
                         int py = finalTargetTile.y;
                         int pz = finalTargetTile.z + 1;
-                        if (world.getTile(px, py, pz) == TileType::AIR)
-                            world.setTile(px, py, pz, TileType::STONE);
+                        if (block != TileType::AIR && world.getTile(px, py, pz) == TileType::AIR)
+                            world.setTile(px, py, pz, block);
                     }
                 }
                 else {

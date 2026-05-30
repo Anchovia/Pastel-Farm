@@ -13,6 +13,8 @@ enum class TileType : uint8_t {
     LEAVES,
 };
 
+static constexpr int HOTBAR_SLOTS = 9;
+
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 normal;
@@ -24,9 +26,15 @@ struct InstanceData {
     glm::vec3 sideColor;
 };
 
-// 청크 메시 전용 정점 — 색상이 버텍스에 구워짐 (인스턴싱 없음)
+// Chunk mesh vertex — color baked per-vertex (no instancing)
 struct ChunkVertex {
     glm::vec3 pos;
     glm::vec3 normal;
-    glm::vec3 color;  // 윗면이면 topColor, 옆/아랫면이면 sideColor
+    glm::vec3 color;  // top face uses topColor, side/bottom use sideColor
+};
+
+// UI vertex — screen-space NDC position + RGBA color
+struct UIVertex {
+    glm::vec2 pos;
+    glm::vec4 color;
 };

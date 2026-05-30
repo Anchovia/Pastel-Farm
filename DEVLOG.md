@@ -244,6 +244,29 @@ Vulkan 공부 겸 엔진 개발 기록.
 - Trees (`placeTrees`): on flat GRASS in forest biome (b > 0.58), sparse hash threshold (> 0.90). Trunk WOOD at Z=1/Z=2, 3x3 LEAVES canopy at Z=3, single LEAVES top at Z=4.
 - Trunk kept ≥2 tiles from chunk edge so the canopy fits inside the chunk — avoids cross-chunk writes (chunks generate independently).
 - NOTE: voxel trees are a placeholder. Organic props (trees/crops/rocks) will move to a separate low-poly model layer; terrain stays voxel.
+
+### Hotbar UI (custom quad rendering)
+- Dedicated UI pipeline (`m_uiPipeline`) — separate from 3D: depth test/write off (always on top), alpha blending on, cull none, no descriptor sets (vertices already in NDC).
+- `UIVertex { vec2 pos; vec4 color }`, `ui.vert`/`ui.frag` (passthrough + Lambert-free flat color).
+- `m_uiPipelineLayout` is empty (no descriptors) — UI is fully screen-space.
+- `m_uiBuffer`: persistently mapped, rebuilt each frame in `updateHotbar`. Capacity 256 verts (panel + slots + highlight ~66).
+- `updateHotbar`: pixel→NDC conversion using current swapchain extent → slots stay correct size regardless of aspect. Centered bottom: panel bg, yellow highlight behind selected slot, 9 slot fills.
+- Drawn last in `recordCommandBuffer`, before `vkCmdEndRenderPass`.
+
+### Hotbar Block Selection
+- `Window`: scroll callback + `consumeScrollY()` (accumulate yoffset, read-and-reset).
+- `InputManager` refactored from `GLFWwindow*` to `Window&` so it can read scroll. Polls number keys 1..9 (`GLFW_KEY_1 + i`) and scroll direction.
+- `PlayerInput`: `selectSlot` (-1 or 0..8) and `scrollDelta` (±1) added.
+- `GameState`: owns `m_selectedSlot` + `m_palette[9]` (GRASS/DIRT/STONE/WOOD/LEAVES/WATER, rest AIR). Number key sets slot, scroll wraps modulo. Right-click places `palette[selected]` instead of hardcoded STONE (AIR slots = no-op).
+- `HOTBAR_SLOTS = 9` moved to `Types.h` as shared constant.
+- `drawFrame` takes `(hotbarSelected, palette)`; `updateHotbar` draws each slot's block color as an inner icon via `World::tileColor`.
+
+### Ambient Occlusion (per-vertex voxel AO)
+- Standard 0fps voxel AO: each face vertex checks its 3 corner neighbors (2 edge-adjacent + 1 diagonal) in the air layer adjacent to the face; more occluders → darker.
+- AO level 0..3 maps to brightness `{0.5, 0.7, 0.85, 1.0}`, multiplied into the vertex color at build time — no new vertex attribute, no extra render pass.
+- Shader change: `fragColor` switched from `flat` to smooth interpolation so per-vertex AO blends across the face; `fragNormal` stays `flat` (constant per face, used for Lambert). Vertices aren't shared across faces, so no cross-face color bleed.
+- Generic per-face computation: tangent axes derived from the face normal (the two axes where normal is 0), corner direction from the vertex's local position sign.
+- **Caching (perf):** AO sampling would otherwise call `World::getTile` (hashmap lookup) ~hundreds of thousands of times per chunk → startup hitch. Fixed by building a padded `(CHUNK_DEPTH+2)×(CHUNK_SIZE+2)²` local copy once per chunk: interior copied straight from `chunk.tiles`, only the 1-tile border ring hits `getTile` (~3.4k vs ~hundreds of thousands). Face-cull and AO then index the local array. Confined to `buildChunkBuffer`; `World` untouched.
 ---
 
 ## 게임 설계 메모

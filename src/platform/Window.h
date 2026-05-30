@@ -18,10 +18,15 @@ public:
     bool wasResized() const { return m_resized; }
     void resetResized()     { m_resized = false; }
 
+    // Returns accumulated scroll since last call, then resets to zero
+    double consumeScrollY() { double s = m_scrollY; m_scrollY = 0.0; return s; }
+
 private:
     static void resizeCallback(GLFWwindow* window, int w, int h);
+    static void scrollCallback(GLFWwindow* window, double xoff, double yoff);
 
     GLFWwindow* m_window = nullptr;
-    int  m_width, m_height;
-    bool m_resized = false;
+    int    m_width, m_height;
+    bool   m_resized = false;
+    double m_scrollY = 0.0;
 };

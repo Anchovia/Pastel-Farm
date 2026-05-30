@@ -10,6 +10,7 @@ Window::Window(int width, int height, const std::string& title)
     if (!m_window) throw std::runtime_error("Failed to create window");
     glfwSetWindowUserPointer(m_window, this);
     glfwSetFramebufferSizeCallback(m_window, resizeCallback);
+    glfwSetScrollCallback(m_window, scrollCallback);
 }
 
 Window::~Window() {
@@ -25,4 +26,9 @@ void Window::resizeCallback(GLFWwindow* window, int w, int h) {
     self->m_width   = w;
     self->m_height  = h;
     self->m_resized = true;
+}
+
+void Window::scrollCallback(GLFWwindow* window, double xoff, double yoff) {
+    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+    self->m_scrollY += yoff;
 }

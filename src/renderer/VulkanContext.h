@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <array>
 #include "world/Chunk.h"
 #include "renderer/Frustum.h"
 
@@ -18,7 +19,8 @@ public:
     VulkanContext(Window& window, World& world);
     ~VulkanContext();
 
-    void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile);
+    void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
+                   int hotbarSelected, const std::array<TileType, HOTBAR_SLOTS>& palette);
     void waitIdle();
 
 private:
@@ -43,6 +45,9 @@ private:
     void createChunkPipeline();
     void buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk);
     void rebuildDirtyChunks();
+    void createUIPipeline();
+    void createUIBuffer();
+    void updateHotbar();
     void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
     void createUniformBuffers();
     void createDescriptorPool();
@@ -99,6 +104,8 @@ private:
     VkPipelineLayout         m_pipelineLayout    = VK_NULL_HANDLE;
     VkPipeline               m_pipeline          = VK_NULL_HANDLE;  // Player / selector (instancing)
     VkPipeline               m_chunkPipeline     = VK_NULL_HANDLE;  // Chunk mesh
+    VkPipeline               m_uiPipeline        = VK_NULL_HANDLE;  // 2D UI overlay
+    VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
 
     VkBuffer                 m_vertexBuffer        = VK_NULL_HANDLE;
     VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
@@ -113,6 +120,14 @@ private:
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;
+
+    // UI / hotbar
+    VkBuffer                 m_uiBuffer        = VK_NULL_HANDLE;
+    VkDeviceMemory           m_uiMemory        = VK_NULL_HANDLE;
+    void*                    m_uiMapped        = nullptr;
+    uint32_t                 m_uiVertexCount   = 0;
+    int                      m_hotbarSelected  = 0;
+    std::array<TileType, HOTBAR_SLOTS> m_hotbarPalette{};
     VkBuffer                 m_playerInstBuffer     = VK_NULL_HANDLE;
     VkDeviceMemory           m_playerInstMemory     = VK_NULL_HANDLE;
     void*                    m_playerInstMapped     = nullptr;
