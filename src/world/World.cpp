@@ -2,7 +2,7 @@
 #include <cmath>
 
 static const glm::vec3 kTileColors[] = {
-    {0.0f,  0.0f,  0.0f },  // AIR   (렌더링 안 됨)
+    {0.0f,  0.0f,  0.0f },  // AIR 
     {0.45f, 0.75f, 0.30f},  // GRASS
     {0.55f, 0.35f, 0.15f},  // DIRT
     {0.20f, 0.45f, 0.70f},  // WATER
@@ -15,7 +15,7 @@ World::World() {
     constexpr TileType W = TileType::WATER;
     constexpr TileType S = TileType::STONE;
 
-    // 32×32 초기 지형: 좌상단 물, 두 곳 흙 패치, 두 곳 돌 패치, 나머지 잔디
+    // 32×32 terrain: top-left water, 2 dirt patches, 2 stone patches, rest grass
     const TileType ground[CHUNK_SIZE][CHUNK_SIZE] = {
         { W,W,W,W,W,W,W,W,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
         { W,W,W,W,W,W,W,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
@@ -56,10 +56,10 @@ World::World() {
         for (int x = 0; x < CHUNK_SIZE; x++)
             chunk.tiles[0][y][x] = ground[y][x];
 
-    // 높이 지형 — {y, x시작, x끝} 범위로 타일 추가
+    // Height terrain — add tiles by {y, xStart, xEnd} ranges
     struct Row { int y, x0, x1; };
 
-    // Z=1 언덕 (불규칙한 타원형, 맵 상단)
+    // Z=1 hill (irregular oval, upper map)
     const Row z1[] = {
         {2, 15,27}, {3, 14,28}, {4, 13,29}, {5, 13,29},
         {6, 12,30}, {7, 12,30}, {8, 12,30}, {9, 12,29},
@@ -69,7 +69,7 @@ World::World() {
         for (int x = r.x0; x <= r.x1; x++)
             chunk.tiles[1][r.y][x] = TileType::GRASS;
 
-    // Z=2 정상 (Z=1 안쪽의 더 작은 면적)
+    // Z=2 peak (smaller area inside Z=1)
     const Row z2[] = {
         {4, 17,24}, {5, 16,25}, {6, 16,26}, {7, 15,26},
         {8, 15,26}, {9, 16,25}, {10,17,24},
@@ -147,10 +147,10 @@ glm::vec3 World::tileColor(TileType type) {
 
 static const glm::vec3 kTileSideColors[] = {
     {0.0f,  0.0f,  0.0f },  // AIR
-    {0.45f, 0.28f, 0.12f},  // GRASS → 흙 갈색
-    {0.38f, 0.22f, 0.08f},  // DIRT  → 짙은 갈색
-    {0.15f, 0.35f, 0.60f},  // WATER → 짙은 파랑
-    {0.38f, 0.38f, 0.38f},  // STONE → 짙은 회색
+    {0.45f, 0.28f, 0.12f},  // GRASS
+    {0.38f, 0.22f, 0.08f},  // DIRT
+    {0.15f, 0.35f, 0.60f},  // WATER
+    {0.38f, 0.38f, 0.38f},  // STONE
 };
 
 glm::vec3 World::tileSideColor(TileType type) {

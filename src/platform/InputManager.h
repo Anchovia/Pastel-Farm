@@ -1,12 +1,12 @@
 #pragma once
-#include "game/GameState.h" // PlayerInput 구조체 사용을 위해 포함
+#include "game/GameState.h" // For PlayerInput struct
 #include <GLFW/glfw3.h>
 
 class InputManager {
 public:
     InputManager(GLFWwindow* window);
 
-    // 매 프레임 호출하여 현재 입력 상태를 스냅샷으로 반환
+    // Called each frame to return current input snapshot
     PlayerInput pollInput();
 
 private:

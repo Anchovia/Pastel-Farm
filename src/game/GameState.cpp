@@ -13,7 +13,8 @@
 namespace {
 bool canOccupy(const World& world, const glm::vec3& position) {
     const glm::ivec3 tile = world.worldToTile(position);
-    return world.isWalkable(tile.x, tile.y, tile.z);
+    return world.isWalkable(tile.x, tile.y, tile.z)
+        && world.getTile(tile.x, tile.y, tile.z + 1) == TileType::AIR;
 }
 }
 
@@ -62,14 +63,13 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
             if (t > 0.0f) {
                 glm::vec3 hitPoint = camPos + rayDir * t;
 
-                // ���콺�� ����Ű�� Ÿ�ϰ� �÷��̾� Ÿ�� ���ϱ�
                 glm::ivec3 pickedTile = world.worldToTile(hitPoint);
                 glm::ivec3 playerTile = world.worldToTile(m_player.position());
 
                 glm::ivec3 delta = pickedTile - playerTile;
                 delta.x = std::clamp(delta.x, -1, 1);
                 delta.y = std::clamp(delta.y, -1, 1);
-                delta.z = 0; // 타겟은 항상 플레이어와 같은 Z 레이어
+                delta.z = 0;
 
                 glm::ivec3 finalTargetTile = playerTile + delta;
 
@@ -77,7 +77,7 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                     m_targetTile = finalTargetTile;
 
                     if (input.leftClick) {
-                        // ���� �̰��� ��ȣ�ۿ�(�� �ı�, ���� ��ġ ��) ���� �߰� ����
+                        // ??
                     }
                 }
                 else {

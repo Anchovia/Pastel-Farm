@@ -97,8 +97,8 @@ private:
 
     VkRenderPass             m_renderPass        = VK_NULL_HANDLE;
     VkPipelineLayout         m_pipelineLayout    = VK_NULL_HANDLE;
-    VkPipeline               m_pipeline          = VK_NULL_HANDLE;  // 플레이어/셀렉터용 (인스턴싱)
-    VkPipeline               m_chunkPipeline     = VK_NULL_HANDLE;  // 청크 메시용
+    VkPipeline               m_pipeline          = VK_NULL_HANDLE;  // Player / selector (instancing)
+    VkPipeline               m_chunkPipeline     = VK_NULL_HANDLE;  // Chunk mesh
 
     VkBuffer                 m_vertexBuffer        = VK_NULL_HANDLE;
     VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;

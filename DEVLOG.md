@@ -214,6 +214,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 행별 x 범위 테이블(`Row { y, x0, x1 }`)로 불규칙한 타원형 언덕 정의 — Z=1 13개 행, Z=2 7개 행.
 - Z=1 언덕: 맵 상단 중앙부, Z=2 정상: Z=1 안쪽 더 작은 면적. Z=2 아래엔 반드시 Z=1이 있어 부유 타일 없음.
 - 결과: 절벽 옆면 갈색(sideColor), 정상 초록(topColor), Hidden Face Culling으로 내부 면 자동 제거.
+
+### 3D-Aware Collision
+- `canOccupy` in `GameState.cpp`: added body-height check — destination tile at `z+1` must be AIR in addition to `isWalkable(x, y, z)`.
+- Previously only the ground tile (Z=0) was checked; player could walk through elevated blocks at Z=1/Z=2.
+- Step-up logic (auto-climb 1 block) and slope movement deferred to later gameplay pass.
 ---
 
 ## 게임 설계 메모

@@ -15,7 +15,7 @@ public:
         updateProjection();
     }
 
-    // 매 프레임 타겟(플레이어) 위치와 회전각을 받아 카메라 갱신
+    // Update camera from target position and rotation each frame
     void update(const glm::vec3& target, float orbitAngleDegrees) {
         float rad = glm::radians(orbitAngleDegrees);
         float pitch = glm::radians(m_orbitPitch);
@@ -37,7 +37,7 @@ public:
 private:
     void updateProjection() {
         m_proj = glm::perspective(glm::radians(m_fov), m_aspect, m_near, m_far);
-        m_proj[1][1] *= -1; // Vulkan Y축 반전
+        m_proj[1][1] *= -1;
     }
 
     glm::mat4 m_view{ 1.0f };

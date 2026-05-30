@@ -22,7 +22,7 @@ struct UniformBufferObject {
     glm::mat4 proj;
 };
 
-// 플랫 셰이딩용 큐브 (면당 4정점, 총 24개 — 법선 공유 불가, 색상은 인스턴스에서)
+// Flat-shaded cube (24 verts, 4 per face — no shared normals, color from instance)
 #define FACE(ax,ay,az, bx,by,bz, cx,cy,cz, dx,dy,dz, nx,ny,nz) \
     {{ax,ay,az},{nx,ny,nz}}, \
     {{bx,by,bz},{nx,ny,nz}}, \
@@ -40,12 +40,12 @@ static const std::vector<Vertex> kVertices = {
 #undef FACE
 
 static const std::vector<uint16_t> kIndices = {
-     0, 1, 2,   0, 2, 3,   // 윗면
-     4, 5, 6,   4, 6, 7,   // 아랫면
-     8, 9,10,   8,10,11,   // 앞면
-    12,13,14,  12,14,15,   // 뒷면
-    16,17,18,  16,18,19,   // 오른면
-    20,21,22,  20,22,23,   // 왼면
+     0, 1, 2,   0, 2, 3,   // Top
+     4, 5, 6,   4, 6, 7,   // Bottom
+     8, 9,10,   8,10,11,   // Front
+    12,13,14,  12,14,15,   // Back
+    16,17,18,  16,18,19,   // Right
+    20,21,22,  20,22,23,   // Left
 };
 
 static const std::vector<Vertex> kSelectorVertices = {
@@ -558,7 +558,7 @@ void VulkanContext::createGraphicsPipeline() {
     stages[1].module = fragMod;
     stages[1].pName  = "main";
 
-    // Vertex 구조체의 메모리 레이아웃을 파이프라인에 등록
+    // Register Vertex layout with pipeline
     VkVertexInputBindingDescription bindingDescs[2]{};
     bindingDescs[0].binding   = 0;
     bindingDescs[0].stride    = sizeof(Vertex);
@@ -827,7 +827,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
         m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
 
-    // ── 청크 메시 (Hidden Face Culling, 전용 파이프라인) ──
+    // Chunk mesh (hidden face culling, dedicated pipeline)
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_chunkPipeline);
     for (auto& [coord, data] : m_chunkBuffers) {
         if (data.vertexBuffer == VK_NULL_HANDLE || data.indexCount == 0) continue;
@@ -843,7 +843,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
     }
 
-    // ── 플레이어 / 셀렉터 (인스턴싱 파이프라인) ──
+    // Player / selector (instanced pipeline)
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
@@ -855,7 +855,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdDrawIndexed(cmd, (uint32_t)kSelectorIndices.size(), 1, 0, 0, 0);
     }
 
-    // 플레이어
+    // Player
     VkBuffer     pBufs[] = {m_vertexBuffer, m_playerInstBuffer};
     VkDeviceSize pOffs[] = {0, 0};
     vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
@@ -1250,7 +1250,7 @@ void VulkanContext::createSelectorBuffers() {
 }
 
 void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
-    // 6개 면의 로컬 정점 오프셋, 법선, 이웃 오프셋, 윗면 여부
+    // 6 face local vertex offsets, normals, neighbor offsets, top-face flag
     struct FaceDef {
         glm::vec3  verts[4];
         glm::vec3  normal;
@@ -1291,7 +1291,7 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
         const glm::vec3 center    = { (float)wx, (float)wy, (float)z };
 
         for (const auto& face : kFaces) {
-            // 이웃 타일이 불투명하면 이 면은 보이지 않음 — 스킵
+            // Skip if neighbor tile is opaque
             TileType neighbor = m_world.getTile(
                 wx + face.neighborOff.x,
                 wy + face.neighborOff.y,
@@ -1314,7 +1314,7 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
 
     auto& data = m_chunkBuffers[coord];
 
-    // 기존 버퍼 해제
+    // Release old buffers
     if (data.vertexBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(m_device, data.vertexBuffer, nullptr);
         vkFreeMemory(m_device, data.vertexMemory, nullptr);
@@ -1329,7 +1329,7 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     data.indexCount = (uint32_t)indices.size();
     if (data.indexCount == 0) return;
 
-    // 버텍스 버퍼
+    // Vertex buffer
     VkDeviceSize vSize = sizeof(ChunkVertex) * vertices.size();
     createBuffer(vSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1339,7 +1339,7 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     memcpy(vMapped, vertices.data(), vSize);
     vkUnmapMemory(m_device, data.vertexMemory);
 
-    // 인덱스 버퍼
+    // Index buffer
     VkDeviceSize iSize = sizeof(uint32_t) * indices.size();
     createBuffer(iSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
