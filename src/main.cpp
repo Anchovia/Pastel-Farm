@@ -19,13 +19,25 @@ int main() {
         InputManager  inputManager(window);
         Camera camera(45.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
 
-        // Initial chunk load around spawn
+        // Auto-load save file if it exists
+        {
+            glm::vec3 savedPos;
+            float     savedTime;
+            if (world.load("save.dat", savedPos, savedTime)) {
+                gameState.setPlayerPosition(savedPos);
+                gameState.setTime(savedTime);
+            }
+        }
+
+        // Initial chunk load around spawn (or restored position)
         glm::ivec2 spawnChunk = World::chunkCoord(
             (int)gameState.player().position().x,
             (int)gameState.player().position().y
         );
         world.loadChunksAround(spawnChunk.x, spawnChunk.y, LOAD_RADIUS);
         glm::ivec2 lastPlayerChunk = spawnChunk;
+
+        bool prevCtrlS = false;
 
         float  orbitAngle = 45.0f;
         double lastTime   = glfwGetTime();
@@ -44,6 +56,13 @@ int main() {
             const float rotSpeed = 90.0f * dt;
             if (glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS) orbitAngle -= rotSpeed;
             if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) orbitAngle += rotSpeed;
+
+            // Ctrl+S save (edge-detect)
+            bool ctrlS = glfwGetKey(win, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
+                      && glfwGetKey(win, GLFW_KEY_S)            == GLFW_PRESS;
+            if (ctrlS && !prevCtrlS)
+                world.save("save.dat", gameState.player().position(), gameState.time());
+            prevCtrlS = ctrlS;
 
             PlayerInput input = inputManager.pollInput();
 

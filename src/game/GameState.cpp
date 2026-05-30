@@ -185,6 +185,17 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
     }
 }
 
+void GameState::setPlayerPosition(const glm::vec3& pos) {
+    m_player.setPosition(pos);
+}
+
+void GameState::setTime(float t) {
+    m_time      = t;
+    m_day       = static_cast<int>(m_time / DAY_DURATION);
+    m_prevDay   = m_day; // suppress immediate growthTick on load
+    m_timeOfDay = std::fmod(m_time, DAY_DURATION) / DAY_DURATION;
+}
+
 void GameState::updateTargetTile(World& world) {
     glm::vec3 targetPosition = m_player.position();
     targetPosition.x += m_player.facingDirection().x;

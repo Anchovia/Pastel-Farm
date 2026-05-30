@@ -42,6 +42,10 @@ public:
 
     int   day()       const { return m_day; }
     float timeOfDay() const { return m_timeOfDay; } // 0.0=midnight, 0.5=noon, 1.0=midnight
+    float time()      const { return m_time; }
+
+    void setPlayerPosition(const glm::vec3& pos);
+    void setTime(float t);
 
 private:
     void updateTargetTile(World& world);

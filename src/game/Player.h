@@ -12,6 +12,8 @@ public:
         m_position.y += delta.y;
     }
 
+    void setPosition(const glm::vec3& pos) { m_position = pos; }
+
     void setFacingDirection(const glm::vec2& direction) {
         m_facingDirection = direction;
     }

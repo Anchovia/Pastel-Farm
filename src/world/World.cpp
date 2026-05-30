@@ -1,7 +1,9 @@
 #include "World.h"
 #include "TerrainGen.h"
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
+#include <fstream>
 
 static const glm::vec3 kTileColors[] = {
     {0.0f,  0.0f,  0.0f },  // AIR
@@ -42,18 +44,30 @@ void World::loadChunksAround(int cx, int cy, int radius) {
     for (int dy = -radius; dy <= radius; dy++)
     for (int dx = -radius; dx <= radius; dx++) {
         glm::ivec2 coord = { cx + dx, cy + dy };
-        if (m_chunks.find(coord) == m_chunks.end())
+        if (m_chunks.find(coord) != m_chunks.end()) continue;
+
+        auto it = m_modifiedUnloaded.find(coord);
+        if (it != m_modifiedUnloaded.end()) {
+            m_chunks[coord] = std::move(it->second);
+            m_modifiedUnloaded.erase(it);
+        } else {
             generateChunk(coord.x, coord.y);
+        }
     }
 }
 
 void World::unloadChunksOutside(int cx, int cy, int radius) {
     for (auto it = m_chunks.begin(); it != m_chunks.end(); ) {
         if (std::abs(it->first.x - cx) > radius ||
-            std::abs(it->first.y - cy) > radius)
+            std::abs(it->first.y - cy) > radius) {
+            if (it->second.modified) {
+                it->second.dirty = true;
+                m_modifiedUnloaded[it->first] = std::move(it->second);
+            }
             it = m_chunks.erase(it);
-        else
+        } else {
             ++it;
+        }
     }
 }
 
@@ -81,7 +95,8 @@ void World::setTile(int x, int y, int z, TileType t) {
     Chunk& chunk = getOrCreateChunk(cc.x, cc.y);
     auto lc = localCoord(x, y);
     chunk.tiles[z][lc.y][lc.x] = t;
-    chunk.dirty = true;
+    chunk.dirty    = true;
+    chunk.modified = true;
 }
 
 TileState World::getTileState(int x, int y, int z) const {
@@ -99,7 +114,97 @@ void World::setTileState(int x, int y, int z, const TileState& s) {
     Chunk& chunk = getOrCreateChunk(cc.x, cc.y);
     auto lc = localCoord(x, y);
     chunk.states[z][lc.y][lc.x] = s;
+    chunk.modified = true;
 }
+
+// ---- Save / Load ----
+
+static constexpr char    kMagic[5]   = "PFRM";
+static constexpr uint8_t kSaveVer    = 1;
+
+void World::save(const std::string& path, const glm::vec3& playerPos, float gameTime) const {
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return;
+
+    f.write(kMagic, 5);
+    f.write(reinterpret_cast<const char*>(&kSaveVer), 1);
+    f.write(reinterpret_cast<const char*>(&playerPos.x), 4);
+    f.write(reinterpret_cast<const char*>(&playerPos.y), 4);
+    f.write(reinterpret_cast<const char*>(&playerPos.z), 4);
+    f.write(reinterpret_cast<const char*>(&gameTime), 4);
+
+    int32_t count = 0;
+    for (const auto& [coord, chunk] : m_chunks)
+        if (chunk.modified) count++;
+    count += (int32_t)m_modifiedUnloaded.size();
+    f.write(reinterpret_cast<const char*>(&count), 4);
+
+    auto writeChunk = [&](const glm::ivec2& coord, const Chunk& chunk) {
+        f.write(reinterpret_cast<const char*>(&coord.x), 4);
+        f.write(reinterpret_cast<const char*>(&coord.y), 4);
+        f.write(reinterpret_cast<const char*>(chunk.tiles), sizeof(chunk.tiles));
+        for (int z = 0; z < CHUNK_DEPTH; z++)
+        for (int y = 0; y < CHUNK_SIZE;  y++)
+        for (int x = 0; x < CHUNK_SIZE;  x++)
+            f.write(reinterpret_cast<const char*>(&chunk.states[z][y][x].growthStage), 1);
+        for (int z = 0; z < CHUNK_DEPTH; z++)
+        for (int y = 0; y < CHUNK_SIZE;  y++)
+        for (int x = 0; x < CHUNK_SIZE;  x++)
+            f.write(reinterpret_cast<const char*>(&chunk.states[z][y][x].lastUpdatedDay), 4);
+    };
+
+    for (const auto& [coord, chunk] : m_chunks)
+        if (chunk.modified) writeChunk(coord, chunk);
+    for (const auto& [coord, chunk] : m_modifiedUnloaded)
+        writeChunk(coord, chunk);
+}
+
+bool World::load(const std::string& path, glm::vec3& outPlayerPos, float& outGameTime) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+
+    char magic[5];
+    f.read(magic, 5);
+    if (std::memcmp(magic, kMagic, 5) != 0) return false;
+
+    uint8_t ver;
+    f.read(reinterpret_cast<char*>(&ver), 1);
+    if (ver != kSaveVer) return false;
+
+    f.read(reinterpret_cast<char*>(&outPlayerPos.x), 4);
+    f.read(reinterpret_cast<char*>(&outPlayerPos.y), 4);
+    f.read(reinterpret_cast<char*>(&outPlayerPos.z), 4);
+    f.read(reinterpret_cast<char*>(&outGameTime), 4);
+
+    int32_t count;
+    f.read(reinterpret_cast<char*>(&count), 4);
+
+    for (int i = 0; i < count; i++) {
+        int32_t cx, cy;
+        f.read(reinterpret_cast<char*>(&cx), 4);
+        f.read(reinterpret_cast<char*>(&cy), 4);
+
+        Chunk chunk;
+        f.read(reinterpret_cast<char*>(chunk.tiles), sizeof(chunk.tiles));
+        for (int z = 0; z < CHUNK_DEPTH; z++)
+        for (int y = 0; y < CHUNK_SIZE;  y++)
+        for (int x = 0; x < CHUNK_SIZE;  x++)
+            f.read(reinterpret_cast<char*>(&chunk.states[z][y][x].growthStage), 1);
+        for (int z = 0; z < CHUNK_DEPTH; z++)
+        for (int y = 0; y < CHUNK_SIZE;  y++)
+        for (int x = 0; x < CHUNK_SIZE;  x++)
+            f.read(reinterpret_cast<char*>(&chunk.states[z][y][x].lastUpdatedDay), 4);
+
+        if (!f) return false;
+
+        chunk.modified = true;
+        chunk.dirty    = true;
+        m_modifiedUnloaded[{cx, cy}] = std::move(chunk);
+    }
+    return true;
+}
+
+// ---- Growth ----
 
 static constexpr int GROWTH_DAYS = 2;
 

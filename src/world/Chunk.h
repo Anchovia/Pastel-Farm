@@ -28,7 +28,8 @@ struct Chunk {
     TileType  tiles [CHUNK_DEPTH][CHUNK_SIZE][CHUNK_SIZE] = {};
     TileState states[CHUNK_DEPTH][CHUNK_SIZE][CHUNK_SIZE] = {};
     std::vector<Object> objects;
-    bool      dirty = true;
+    bool dirty    = true;
+    bool modified = false; // true if player has changed any tile (used for save/load)
 };
 
 struct IVec2Hash {

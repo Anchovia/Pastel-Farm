@@ -1,6 +1,7 @@
 #pragma once
 #include "world/Chunk.h"
 #include <glm/glm.hpp>
+#include <string>
 #include <unordered_map>
 
 class World {
@@ -26,12 +27,16 @@ public:
     void loadChunksAround(int cx, int cy, int radius);
     void unloadChunksOutside(int cx, int cy, int radius);
 
+    void save(const std::string& path, const glm::vec3& playerPos, float gameTime) const;
+    bool load(const std::string& path, glm::vec3& outPlayerPos, float& outGameTime);
+
     static glm::ivec2 chunkCoord(int x, int y);
 
     const std::unordered_map<glm::ivec2, Chunk, IVec2Hash>& chunks() const { return m_chunks; }
           std::unordered_map<glm::ivec2, Chunk, IVec2Hash>& chunks()       { return m_chunks; }
 
 private:
+    std::unordered_map<glm::ivec2, Chunk, IVec2Hash> m_modifiedUnloaded;
     void         generateChunk(int cx, int cy);
     Chunk&       getOrCreateChunk(int cx, int cy);
     const Chunk* getChunk(int cx, int cy) const;
