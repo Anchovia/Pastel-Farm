@@ -1047,15 +1047,13 @@ void VulkanContext::createPlayerInstanceBuffer(const glm::vec3& playerPosition) 
 void VulkanContext::createInstanceBuffer() {
     const int   W      = m_world.WIDTH;
     const int   H      = m_world.HEIGHT;
-    const float offX   = (W - 1) * 0.5f;
-    const float offY   = (H - 1) * 0.5f;
 
     std::vector<InstanceData> instances;
     instances.reserve(W * H);
     for (int x = 0; x < W; x++)
         for (int y = 0; y < H; y++) {
             glm::vec3 color = World::tileColor(m_world.getTile(x, y));
-            instances.push_back({{x - offX, y - offY, 0.0f}, color});
+            instances.push_back({m_world.tileCenter(x, y), color});
         }
     m_instanceCount = (uint32_t)instances.size();
 

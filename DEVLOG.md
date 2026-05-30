@@ -45,6 +45,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 렌더러 역할 축소: 플레이어 상태를 소유하지 않고, 전달받은 위치로 카메라 타겟/플레이어 인스턴스 버퍼만 갱신
 - 결과: 화면과 조작은 유지하면서 게임 로직과 렌더링 책임 분리
 
+### 기본 이동 충돌
+- `World::inBounds(x, y)` 추가 — 월드 범위 밖 좌표 차단
+- `World::isWalkable(x, y)` 추가 — 현재는 `WATER` 타일을 이동 불가로 처리
+- `World::worldToTile(position)` 추가 — 플레이어의 연속 좌표(float)를 타일 좌표(int)로 변환
+- `World::tileCenter(x, y)` 추가 — 타일 렌더링 위치와 게임 로직 좌표 기준을 `World`에서 통일
+- `GameState::update()`가 이동 후보 위치를 계산한 뒤 `World`에 보행 가능 여부를 질의
+- X/Y축을 나눠서 이동 검사 — 한 축이 막혀도 다른 축 이동은 가능한 구조
+- `VulkanContext::createInstanceBuffer()`가 직접 오프셋을 계산하지 않고 `World::tileCenter()` 사용
+- 결과: 플레이어가 맵 밖으로 나가지 않고, 물 타일 위로 이동하지 않음
+
 ### 타일 그리드 시스템
 - `TileType` enum 추가 (GRASS, DIRT, WATER, STONE)
 - `Vertex`에서 color 제거 — 색상은 인스턴스에서 담당

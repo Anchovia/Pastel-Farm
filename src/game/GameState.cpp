@@ -1,9 +1,17 @@
 #include "game/GameState.h"
+#include "world/World.h"
 
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
 
-void GameState::update(float dt, const PlayerInput& input, float cameraAngleDegrees) {
+namespace {
+bool canOccupy(const World& world, const glm::vec3& position) {
+    const glm::ivec2 tile = world.worldToTile(position);
+    return world.isWalkable(tile.x, tile.y);
+}
+}
+
+void GameState::update(float dt, const PlayerInput& input, float cameraAngleDegrees, const World& world) {
     const float rad = glm::radians(cameraAngleDegrees);
     const glm::vec2 forward{-glm::cos(rad), -glm::sin(rad)};
     const glm::vec2 right{-glm::sin(rad), glm::cos(rad)};
@@ -15,6 +23,18 @@ void GameState::update(float dt, const PlayerInput& input, float cameraAngleDegr
     if (input.moveRight)    move += right;
 
     if (glm::length(move) > 0.0f) {
-        m_player.moveBy(glm::normalize(move) * m_player.moveSpeed() * dt);
+        const glm::vec2 delta = glm::normalize(move) * m_player.moveSpeed() * dt;
+
+        glm::vec3 next = m_player.position();
+        next.x += delta.x;
+        if (canOccupy(world, next)) {
+            m_player.moveBy({delta.x, 0.0f});
+        }
+
+        next = m_player.position();
+        next.y += delta.y;
+        if (canOccupy(world, next)) {
+            m_player.moveBy({0.0f, delta.y});
+        }
     }
 }

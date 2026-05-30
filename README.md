@@ -46,6 +46,7 @@
 - 타일 그리드 시스템 — TileType(GRASS/DIRT/WATER/STONE) + 인스턴스 색상
 - 플레이어 — WASD 이동 (카메라 방향 기준), 카메라가 플레이어를 따라감
 - GameState/Player 분리 — 플레이어 상태와 이동 계산을 렌더러 밖으로 이동
+- 기본 이동 충돌 — 맵 밖 이동 차단, 물 타일 이동 불가
 
 ---
 
@@ -65,7 +66,7 @@ game project/
    ├─ game/
    │  ├─ Player.h          # 플레이어 위치/이동 속도
    │  ├─ GameState.h       # 게임 상태 및 입력 스냅샷 선언
-   │  └─ GameState.cpp     # 플레이어 이동 규칙 업데이트
+   │  └─ GameState.cpp     # 플레이어 이동/충돌 규칙 업데이트
    ├─ platform/
    │  ├─ Window.h          # GLFW 창 래퍼 (RAII, 리사이즈 콜백)
    │  └─ Window.cpp
@@ -74,8 +75,8 @@ game project/
    │  ├─ VulkanContext.h   # Vulkan 렌더러 선언
    │  └─ VulkanContext.cpp # Vulkan 렌더러 구현
    └─ world/
-      ├─ World.h           # 타일 그리드 선언 (WIDTH×HEIGHT)
-      └─ World.cpp         # 타일 데이터 및 색상 정의
+      ├─ World.h           # 타일 그리드 및 월드 좌표 질의 선언
+      └─ World.cpp         # 타일 데이터, 색상, 보행 가능 여부 정의
 ```
 
 > `build/` 폴더는 CMake 생성물 + 자동으로 받은 GLFW/GLM 소스가 들어있어 git에서 제외됩니다.
@@ -96,6 +97,7 @@ game project/
 - **타일 기반 3D 그리드** — `World[x][y][z] = TileType`
 - 모든 블록은 **1×1×1 단위 큐브**로 통일 (메시 하나, 색상/텍스처만 다름)
 - 타일은 그리드 좌표(정수)로 관리, 캐릭터는 타일 위에서 연속 좌표(float)로 자유 이동
+- 현재 기본 규칙: 맵 밖은 이동 불가, 물 타일(WATER)은 이동 불가
 - 청크 시스템으로 가까운 영역만 로드
 
 ### 렌더링 전략

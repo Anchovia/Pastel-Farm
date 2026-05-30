@@ -33,7 +33,7 @@ int main() {
             input.moveBackward = glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS;
             input.moveLeft     = glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS;
             input.moveRight    = glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS;
-            gameState.update(dt, input, ctx.orbitAngle());
+            gameState.update(dt, input, ctx.orbitAngle(), world);
 
             ctx.drawFrame(gameState.player().position());
         }
