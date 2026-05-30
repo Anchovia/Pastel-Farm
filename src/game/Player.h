@@ -17,7 +17,7 @@ public:
     }
 
 private:
-    glm::vec3 m_position{5.0f, 5.0f, 1.0f};
+    glm::vec3 m_position{15.0f, 15.0f, 1.0f};
     glm::vec2 m_facingDirection{0.0f, -1.0f};
     float     m_moveSpeed = 3.0f;
 };

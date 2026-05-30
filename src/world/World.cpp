@@ -10,23 +10,50 @@ static const glm::vec3 kTileColors[] = {
 };
 
 World::World() {
-    using T = TileType;
-    const TileType ground[10][10] = {
-        { T::WATER, T::WATER, T::WATER, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::WATER, T::WATER, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::WATER, T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::STONE, T::STONE, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::STONE, T::STONE, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::DIRT,  T::DIRT,  T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
-        { T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS, T::GRASS },
+    constexpr TileType G = TileType::GRASS;
+    constexpr TileType D = TileType::DIRT;
+    constexpr TileType W = TileType::WATER;
+    constexpr TileType S = TileType::STONE;
+
+    // 32×32 초기 지형: 좌상단 물, 두 곳 흙 패치, 두 곳 돌 패치, 나머지 잔디
+    const TileType ground[CHUNK_SIZE][CHUNK_SIZE] = {
+        { W,W,W,W,W,W,W,W,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { W,W,W,W,W,W,W,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { W,W,W,W,W,W,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { W,W,W,W,W,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { W,W,W,W,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { W,W,W,G,G,G,D,D,D,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { W,W,G,G,G,D,D,D,D,D, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { W,G,G,G,D,D,D,D,D,D, D,G,G,G,G,G,G,G,S,S, S,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,D,D,D,D,D,D, D,D,G,G,G,G,G,G,S,S, S,S,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,D,D,D,D,D, D,G,G,G,G,G,G,G,G,S, S,S,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,D,D,D,D, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,D,D,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,D,D,D,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, D,D,D,D,D,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, D,D,D,D,D,D,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,D,D,D,D,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,D,D,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,S,S,S,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,S,S,S,S,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,S,S,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
+        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
     };
 
     Chunk& chunk = getOrCreateChunk(0, 0);
-    for (int y = 0; y < 10; y++)
-        for (int x = 0; x < 10; x++)
+    for (int y = 0; y < CHUNK_SIZE; y++)
+        for (int x = 0; x < CHUNK_SIZE; x++)
             chunk.tiles[0][y][x] = ground[y][x];
 }
 

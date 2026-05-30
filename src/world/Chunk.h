@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <functional>
 
-static constexpr int CHUNK_SIZE  = 16;
+static constexpr int CHUNK_SIZE  = 32;
 static constexpr int CHUNK_DEPTH = 8;
 
 struct TileState {

@@ -49,6 +49,6 @@ private:
     float m_near;
     float m_far;
 
-    float m_orbitDistance = 14.0f;
+    float m_orbitDistance = 20.0f;
     float m_orbitPitch = 45.0f;
 };

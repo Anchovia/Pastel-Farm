@@ -143,7 +143,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createIndexBuffer();
     createSelectorBuffers();
     rebuildDirtyChunks();
-    createPlayerInstanceBuffer({5.0f, 5.0f, 1.0f});
+    createPlayerInstanceBuffer({15.0f, 15.0f, 1.0f});
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();

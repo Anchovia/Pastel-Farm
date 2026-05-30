@@ -53,7 +53,7 @@
 - 입력 시스템 분리 (InputManager) — 메인 루프에서 GLFW 입력 로직을 분리하여 확장성 및 가독성 향상
 - copyBuffer 동기화 개선 — `vkQueueWaitIdle`(큐 전체 블로킹) → `VkFence`(해당 전송만 대기)로 교체, 청크 런타임 로드 대비
 - World 3D 그리드 전환 — `m_grid[H][W]` → `m_grid[DEPTH][H][W]` (DEPTH=8), `TileType::AIR` 추가, 블록 배치/파괴 기반 마련
-- 청크 시스템 (16×16) — 고정 배열을 `unordered_map<ivec2, Chunk>`로 전환, dirty 플래그 기반 청크별 GPU 버퍼 재빌드, 무한 월드 확장 기반 마련
+- 청크 시스템 (32×32) — 고정 배열을 `unordered_map<ivec2, Chunk>`로 전환, dirty 플래그 기반 청크별 GPU 버퍼 재빌드, 무한 월드 확장 기반 마련
 - Frustum Culling — Gribb & Hartmann 방법으로 viewProj에서 6평면 추출, 청크 AABB 테스트로 시야 밖 draw call 완전 차단
 ---
 
@@ -106,7 +106,7 @@ game project/
 - 기본은 평지 한 층, 블록을 쌓아 단차 표현 가능 (계단/사다리로 이동)
 
 ### 월드 구조
-- **청크 기반 3D 그리드** — `unordered_map<ivec2, Chunk>`, 청크 1개 = `16×16×8`
+- **청크 기반 3D 그리드** — `unordered_map<ivec2, Chunk>`, 청크 1개 = `32×32×8`
 - `TileType`: `AIR(0) / GRASS / DIRT / WATER / STONE` — AIR는 렌더링 제외, 블록 없음을 의미
 - `TileState`: 성장 단계(`growthStage`), 마지막 업데이트 날짜(`lastUpdatedDay`) 예약 — 농경지 Time-based catch-up 방식 대비
 - 모든 블록은 **1×1×1 단위 큐브**로 통일 (메시 하나, 색상/텍스처만 다름)
