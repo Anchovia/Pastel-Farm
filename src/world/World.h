@@ -16,6 +16,7 @@ public:
     glm::vec3  tileCenter(int x, int y, int z) const;
 
     static glm::vec3 tileColor(TileType type);
+    static glm::vec3 tileSideColor(TileType type);
 
     const std::unordered_map<glm::ivec2, Chunk, IVec2Hash>& chunks() const { return m_chunks; }
           std::unordered_map<glm::ivec2, Chunk, IVec2Hash>& chunks()       { return m_chunks; }

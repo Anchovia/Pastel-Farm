@@ -188,6 +188,15 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 마인크래프트 청크(16×16) 대비 4배 크기 — 농사 게임 특성상 플레이어가 넓은 농장 안에서 활동하므로 청크당 타일 수가 많을수록 청크 경계를 덜 넘어 dirty 재빌드 빈도 감소.
 - 초기 맵 10×10 → 32×32 전체로 확대. 좌상단 물 코너, 두 곳 흙 패치(잠재적 농지), 두 곳 돌 패치(채굴 영역), 나머지 잔디.
 - 플레이어 시작 위치 `{5,5,1}` → `{15,15,1}` (32×32 맵 중앙).
+
+### 윗면/옆면 색상 분기 (top/side color)
+- `InstanceData`에 `sideColor` 추가 — 기존 `color` → `topColor + sideColor` 두 채널.
+- `World::tileSideColor(TileType)` 추가 — GRASS는 흙 갈색, DIRT는 짙은 갈색, STONE은 짙은 회색, WATER는 짙은 파랑.
+- Vulkan pipeline vertex input: attribute 4개 → 5개 (`instanceSideColor` location=4 추가).
+- `buildChunkBuffer`: `tileColor` + `tileSideColor` 함께 인스턴스 버퍼에 기록.
+- vertex shader: `instanceTopColor / instanceSideColor` 두 색상 fragment로 전달.
+- fragment shader: `step(0.9, fragNormal.z)`로 윗면 판별 → `mix(sideColor, topColor, isTop)`으로 색상 선택.
+- 텍스처 전환 시 `topColor/sideColor` → `topTexId/sideTexId`로 교체만 하면 되는 구조 — 호환성 확보.
 ---
 
 ## 게임 설계 메모

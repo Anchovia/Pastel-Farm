@@ -122,3 +122,15 @@ glm::vec3 World::tileCenter(int x, int y, int z) const {
 glm::vec3 World::tileColor(TileType type) {
     return kTileColors[(int)type];
 }
+
+static const glm::vec3 kTileSideColors[] = {
+    {0.0f,  0.0f,  0.0f },  // AIR
+    {0.45f, 0.28f, 0.12f},  // GRASS → 흙 갈색
+    {0.38f, 0.22f, 0.08f},  // DIRT  → 짙은 갈색
+    {0.15f, 0.35f, 0.60f},  // WATER → 짙은 파랑
+    {0.38f, 0.38f, 0.38f},  // STONE → 짙은 회색
+};
+
+glm::vec3 World::tileSideColor(TileType type) {
+    return kTileSideColors[(int)type];
+}

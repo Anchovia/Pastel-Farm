@@ -561,7 +561,7 @@ void VulkanContext::createGraphicsPipeline() {
     bindingDescs[1].stride    = sizeof(InstanceData);
     bindingDescs[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-    VkVertexInputAttributeDescription attributeDescs[4]{};
+    VkVertexInputAttributeDescription attributeDescs[5]{};
     attributeDescs[0].binding  = 0;
     attributeDescs[0].location = 0;
     attributeDescs[0].format   = VK_FORMAT_R32G32B32_SFLOAT;
@@ -577,13 +577,17 @@ void VulkanContext::createGraphicsPipeline() {
     attributeDescs[3].binding  = 1;
     attributeDescs[3].location = 3;
     attributeDescs[3].format   = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescs[3].offset   = offsetof(InstanceData, color);
+    attributeDescs[3].offset   = offsetof(InstanceData, topColor);
+    attributeDescs[4].binding  = 1;
+    attributeDescs[4].location = 4;
+    attributeDescs[4].format   = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescs[4].offset   = offsetof(InstanceData, sideColor);
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInput.vertexBindingDescriptionCount   = 2;
     vertexInput.pVertexBindingDescriptions      = bindingDescs;
-    vertexInput.vertexAttributeDescriptionCount = 4;
+    vertexInput.vertexAttributeDescriptionCount = 5;
     vertexInput.pVertexAttributeDescriptions    = attributeDescs;
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -1072,7 +1076,7 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& cam
 
 void VulkanContext::updatePlayerInstanceBuffer(const glm::vec3& playerPosition) {
     static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
-    InstanceData inst{playerPosition, kPlayerColor};
+    InstanceData inst{playerPosition, kPlayerColor, kPlayerColor};
     memcpy(m_playerInstMapped, &inst, sizeof(inst));
 }
 
@@ -1093,7 +1097,7 @@ void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec3>
 
     static const glm::vec3 kSelectorColor = {1.0f, 0.9f, 0.1f};
     const glm::ivec3 tile = *targetTile;
-    InstanceData inst{m_world.tileCenter(tile.x, tile.y, tile.z), kSelectorColor};
+    InstanceData inst{m_world.tileCenter(tile.x, tile.y, tile.z), kSelectorColor, kSelectorColor};
     memcpy(m_selectorInstMapped, &inst, sizeof(inst));
 }
 
@@ -1148,7 +1152,7 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
             for (int lx = 0; lx < CHUNK_SIZE; lx++) {
                 TileType t = chunk.tiles[z][ly][lx];
                 if (t == TileType::AIR) continue;
-                instances.push_back({m_world.tileCenter(baseX + lx, baseY + ly, z), World::tileColor(t)});
+                instances.push_back({m_world.tileCenter(baseX + lx, baseY + ly, z), World::tileColor(t), World::tileSideColor(t)});
             }
 
     auto& data = m_chunkBuffers[coord];
