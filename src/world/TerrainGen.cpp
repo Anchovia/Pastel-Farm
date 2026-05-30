@@ -76,9 +76,8 @@ void TerrainGen::generate(int cx, int cy, Chunk& chunk) {
 }
 
 void TerrainGen::placeTrees(int cx, int cy, Chunk& chunk) {
-    // Keep trunk 2 tiles from chunk edge so the 3x3 canopy fits inside this chunk
-    for (int ly = 2; ly < CHUNK_SIZE - 2; ly++) {
-        for (int lx = 2; lx < CHUNK_SIZE - 2; lx++) {
+    for (int ly = 0; ly < CHUNK_SIZE; ly++) {
+        for (int lx = 0; lx < CHUNK_SIZE; lx++) {
             // Only on flat grass with open sky above
             if (chunk.tiles[0][ly][lx] != TileType::GRASS) continue;
             if (chunk.tiles[1][ly][lx] != TileType::AIR)    continue;
@@ -91,15 +90,13 @@ void TerrainGen::placeTrees(int cx, int cy, Chunk& chunk) {
 
             if (hash(wx + 7000, wy + 7000) < 0.90f) continue; // sparse
 
-            // Trunk
-            chunk.tiles[1][ly][lx] = TileType::WOOD;
-            chunk.tiles[2][ly][lx] = TileType::WOOD;
-            // Canopy 3x3
-            for (int dy = -1; dy <= 1; dy++)
-                for (int dx = -1; dx <= 1; dx++)
-                    chunk.tiles[3][ly + dy][lx + dx] = TileType::LEAVES;
-            // Top
-            chunk.tiles[4][ly][lx] = TileType::LEAVES;
+            // Tree object sits on top of the Z=0 block (top face at Z=0.5)
+            Object tree;
+            tree.pos   = { (float)wx, (float)wy, 0.5f };
+            tree.scale = 0.8f + hash(wx + 11000, wy + 11000) * 0.5f;  // 0.8 .. 1.3
+            tree.rot   = hash(wx + 13000, wy + 13000) * 6.2831853f;   // 0 .. 2pi
+            tree.type  = ObjectType::TREE;
+            chunk.objects.push_back(tree);
         }
     }
 }

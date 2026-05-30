@@ -267,6 +267,15 @@ Vulkan 공부 겸 엔진 개발 기록.
 - Shader change: `fragColor` switched from `flat` to smooth interpolation so per-vertex AO blends across the face; `fragNormal` stays `flat` (constant per face, used for Lambert). Vertices aren't shared across faces, so no cross-face color bleed.
 - Generic per-face computation: tangent axes derived from the face normal (the two axes where normal is 0), corner direction from the vertex's local position sign.
 - **Caching (perf):** AO sampling would otherwise call `World::getTile` (hashmap lookup) ~hundreds of thousands of times per chunk → startup hitch. Fixed by building a padded `(CHUNK_DEPTH+2)×(CHUNK_SIZE+2)²` local copy once per chunk: interior copied straight from `chunk.tiles`, only the 1-tile border ring hits `getTile` (~3.4k vs ~hundreds of thousands). Face-cull and AO then index the local array. Confined to `buildChunkBuffer`; `World` untouched.
+
+### Object Layer (low-poly tree models)
+- Trees moved off the voxel grid into a separate **object/prop layer** — terrain stays voxel, organic props become low-poly models. Reused later for crops/rocks/items.
+- `Chunk` gains `std::vector<Object> objects` (`Object { pos, scale, rot, type }`); `TerrainGen::placeTrees` now pushes tree objects instead of writing WOOD/LEAVES voxels. WOOD/LEAVES tile types kept as player-placeable building blocks.
+- Tree mesh (`createTreeMesh`): box trunk + 3 stacked cones (pine), flat-shaded, built once into a shared vertex buffer. Reuses `ChunkVertex` (pos/normal/color).
+- Instanced rendering: `ObjectInstance { pos, scale, rot }`, per-chunk instance buffer in `ChunkRenderData`. `object.vert` applies per-instance Z-rotation + scale; fragment shader reused from `chunk.frag`. Scale/rotation varied per tree via hash (less repetition).
+- Dedicated `m_objectPipeline` reuses `m_pipelineLayout` (same UBO descriptor). `cullMode = NONE` — procedural cone/box winding isn't guaranteed outward-facing, so draw both sides (overdraw negligible for small meshes).
+- Drawn per chunk after chunk meshes, reusing the existing frustum-cull AABB test.
+- NOTE: trees no longer block movement (objects have no collision). Deferred to Phase 3 (tool system / object interaction).
 ---
 
 ## 게임 설계 메모

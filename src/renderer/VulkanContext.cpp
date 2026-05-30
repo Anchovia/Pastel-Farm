@@ -11,6 +11,7 @@
 #include <fstream>
 #include <cstring>
 #include <chrono>
+#include <cmath>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -138,6 +139,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createGraphicsPipeline();
     createChunkPipeline();
     createUIPipeline();
+    createObjectPipeline();
     createDepthResources();
     createFramebuffers();
     createCommandPool();
@@ -145,6 +147,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createIndexBuffer();
     createSelectorBuffers();
     createUIBuffer();
+    createTreeMesh();
     rebuildDirtyChunks();
     createPlayerInstanceBuffer({15.0f, 15.0f, 1.0f});
     createUniformBuffers();
@@ -181,7 +184,13 @@ VulkanContext::~VulkanContext() {
             vkDestroyBuffer(m_device, data.indexBuffer, nullptr);
             vkFreeMemory(m_device, data.indexMemory, nullptr);
         }
+        if (data.objInstBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, data.objInstBuffer, nullptr);
+            vkFreeMemory(m_device, data.objInstMemory, nullptr);
+        }
     }
+    vkDestroyBuffer(m_device, m_treeVertexBuffer, nullptr);
+    vkFreeMemory(m_device, m_treeVertexMemory, nullptr);
     vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
     vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
@@ -190,6 +199,7 @@ VulkanContext::~VulkanContext() {
     vkFreeMemory(m_device, m_uiMemory, nullptr);
     vkDestroyPipeline(m_device, m_uiPipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_uiPipelineLayout, nullptr);
+    vkDestroyPipeline(m_device, m_objectPipeline, nullptr);
     vkDestroyPipeline(m_device, m_chunkPipeline, nullptr);
     vkDestroyPipeline(m_device, m_pipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
@@ -944,6 +954,167 @@ void VulkanContext::updateHotbar() {
     memcpy(m_uiMapped, verts.data(), sizeof(UIVertex) * verts.size());
 }
 
+void VulkanContext::createObjectPipeline() {
+    auto vertCode = readFile("shaders/object.vert.spv");
+    auto fragCode = readFile("shaders/chunk.frag.spv");  // reuse chunk fragment shader
+    VkShaderModule vertMod = createShaderModule(vertCode);
+    VkShaderModule fragMod = createShaderModule(fragCode);
+
+    VkPipelineShaderStageCreateInfo stages[2] = {};
+    stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vertMod;
+    stages[0].pName  = "main";
+    stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fragMod;
+    stages[1].pName  = "main";
+
+    VkVertexInputBindingDescription bindings[2]{};
+    bindings[0].binding   = 0;
+    bindings[0].stride    = sizeof(ChunkVertex);
+    bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    bindings[1].binding   = 1;
+    bindings[1].stride    = sizeof(ObjectInstance);
+    bindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+
+    VkVertexInputAttributeDescription attrs[6]{};
+    attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, pos)    };
+    attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, normal) };
+    attrs[2] = { 2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, color)  };
+    attrs[3] = { 3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectInstance, pos)   };
+    attrs[4] = { 4, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, scale) };
+    attrs[5] = { 5, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, rot)   };
+
+    VkPipelineVertexInputStateCreateInfo vertexInput{};
+    vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInput.vertexBindingDescriptionCount   = 2;
+    vertexInput.pVertexBindingDescriptions      = bindings;
+    vertexInput.vertexAttributeDescriptionCount = 6;
+    vertexInput.pVertexAttributeDescriptions    = attrs;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport{ 0, 0,
+        (float)m_swapchainExtent.width, (float)m_swapchainExtent.height, 0.0f, 1.0f };
+    VkRect2D scissor{ {0, 0}, m_swapchainExtent };
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports    = &viewport;
+    viewportState.scissorCount  = 1;
+    viewportState.pScissors     = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo raster{};
+    raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode    = VK_CULL_MODE_NONE;  // procedural mesh — avoid winding issues
+    raster.frontFace   = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth   = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo msaaObj{};
+    msaaObj.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    msaaObj.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAttach{};
+    blendAttach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                 VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo blend{};
+    blend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blend.attachmentCount = 1;
+    blend.pAttachments    = &blendAttach;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable  = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp   = VK_COMPARE_OP_LESS;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount          = 2;
+    pipelineInfo.pStages             = stages;
+    pipelineInfo.pVertexInputState   = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState      = &viewportState;
+    pipelineInfo.pRasterizationState = &raster;
+    pipelineInfo.pMultisampleState   = &msaaObj;
+    pipelineInfo.pColorBlendState    = &blend;
+    pipelineInfo.pDepthStencilState  = &depthStencil;
+    pipelineInfo.layout              = m_pipelineLayout;  // reuse UBO descriptor layout
+    pipelineInfo.renderPass          = m_renderPass;
+    pipelineInfo.subpass             = 0;
+
+    if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_objectPipeline) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create object pipeline");
+
+    vkDestroyShaderModule(m_device, vertMod, nullptr);
+    vkDestroyShaderModule(m_device, fragMod, nullptr);
+}
+
+// Build a shared low-poly pine tree: box trunk + 3 stacked cones, flat shaded.
+void VulkanContext::createTreeMesh() {
+    std::vector<ChunkVertex> verts;
+
+    const glm::vec3 trunkColor = {0.40f, 0.26f, 0.13f};
+    const glm::vec3 leafColor  = {0.28f, 0.52f, 0.24f};
+
+    // Trunk: 4 side faces of a thin box (Z up), base at 0, top at 0.55
+    const float tw = 0.09f, t0 = 0.0f, t1 = 0.55f;
+    const glm::vec3 trunkCorners[4] = {
+        {-tw, -tw, 0}, { tw, -tw, 0}, { tw, tw, 0}, {-tw, tw, 0}
+    };
+    for (int i = 0; i < 4; i++) {
+        glm::vec3 a = trunkCorners[i];
+        glm::vec3 b = trunkCorners[(i + 1) % 4];
+        glm::vec3 n = glm::normalize(glm::vec3((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f, 0.0f));
+        glm::vec3 a0 = {a.x, a.y, t0}, b0 = {b.x, b.y, t0};
+        glm::vec3 a1 = {a.x, a.y, t1}, b1 = {b.x, b.y, t1};
+        verts.push_back({a0, n, trunkColor});
+        verts.push_back({b0, n, trunkColor});
+        verts.push_back({b1, n, trunkColor});
+        verts.push_back({a0, n, trunkColor});
+        verts.push_back({b1, n, trunkColor});
+        verts.push_back({a1, n, trunkColor});
+    }
+
+    // Canopy: 3 stacked cones
+    struct Cone { float baseZ, radius, topZ; };
+    const Cone cones[3] = {
+        {0.35f, 0.45f, 0.95f},
+        {0.70f, 0.34f, 1.25f},
+        {1.00f, 0.22f, 1.55f},
+    };
+    const int seg = 8;
+    for (const auto& cone : cones) {
+        for (int i = 0; i < seg; i++) {
+            float a0 = (float)i       / seg * 6.2831853f;
+            float a1 = (float)(i + 1) / seg * 6.2831853f;
+            glm::vec3 b0 = {cone.radius * cosf(a0), cone.radius * sinf(a0), cone.baseZ};
+            glm::vec3 b1 = {cone.radius * cosf(a1), cone.radius * sinf(a1), cone.baseZ};
+            glm::vec3 apex = {0.0f, 0.0f, cone.topZ};
+            glm::vec3 n = glm::normalize(glm::cross(b1 - b0, apex - b0));
+            verts.push_back({b0,   n, leafColor});
+            verts.push_back({b1,   n, leafColor});
+            verts.push_back({apex, n, leafColor});
+        }
+    }
+
+    m_treeVertexCount = (uint32_t)verts.size();
+    VkDeviceSize size = sizeof(ChunkVertex) * verts.size();
+    createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_treeVertexBuffer, m_treeVertexMemory);
+    void* mapped;
+    vkMapMemory(m_device, m_treeVertexMemory, 0, size, 0, &mapped);
+    memcpy(mapped, verts.data(), size);
+    vkUnmapMemory(m_device, m_treeVertexMemory);
+}
+
 // ============================================================
 //  Framebuffers
 // ============================================================
@@ -1023,6 +1194,23 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdBindVertexBuffers(cmd, 0, 1, vBuf, offs);
         vkCmdBindIndexBuffer(cmd, data.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
+    }
+
+    // Objects (trees) — shared mesh instanced per chunk
+    if (m_treeVertexCount > 0) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_objectPipeline);
+        for (auto& [coord, data] : m_chunkBuffers) {
+            if (data.objInstBuffer == VK_NULL_HANDLE || data.objInstCount == 0) continue;
+
+            glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+            glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+            if (!m_frustum.containsAABB(chunkMin, chunkMax)) continue;
+
+            VkBuffer     bufs[] = { m_treeVertexBuffer, data.objInstBuffer };
+            VkDeviceSize offs[] = { 0, 0 };
+            vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+            vkCmdDraw(cmd, m_treeVertexCount, data.objInstCount, 0, 0);
+        }
     }
 
     // Player / selector (instanced pipeline)
@@ -1584,6 +1772,36 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     vkMapMemory(m_device, data.indexMemory, 0, iSize, 0, &iMapped);
     memcpy(iMapped, indices.data(), iSize);
     vkUnmapMemory(m_device, data.indexMemory);
+
+    buildChunkObjectBuffer(coord, chunk);
+}
+
+// Build the per-chunk tree instance buffer from chunk.objects
+void VulkanContext::buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk) {
+    auto& data = m_chunkBuffers[coord];
+
+    if (data.objInstBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_device, data.objInstBuffer, nullptr);
+        vkFreeMemory(m_device, data.objInstMemory, nullptr);
+        data.objInstBuffer = VK_NULL_HANDLE;
+    }
+
+    data.objInstCount = (uint32_t)chunk.objects.size();
+    if (data.objInstCount == 0) return;
+
+    std::vector<ObjectInstance> insts;
+    insts.reserve(chunk.objects.size());
+    for (const auto& o : chunk.objects)
+        insts.push_back({ o.pos, o.scale, o.rot });
+
+    VkDeviceSize oSize = sizeof(ObjectInstance) * insts.size();
+    createBuffer(oSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        data.objInstBuffer, data.objInstMemory);
+    void* oMapped;
+    vkMapMemory(m_device, data.objInstMemory, 0, oSize, 0, &oMapped);
+    memcpy(oMapped, insts.data(), oSize);
+    vkUnmapMemory(m_device, data.objInstMemory);
 }
 
 void VulkanContext::rebuildDirtyChunks() {
@@ -1604,6 +1822,10 @@ void VulkanContext::rebuildDirtyChunks() {
             if (d.indexBuffer != VK_NULL_HANDLE) {
                 vkDestroyBuffer(m_device, d.indexBuffer, nullptr);
                 vkFreeMemory(m_device, d.indexMemory, nullptr);
+            }
+            if (d.objInstBuffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(m_device, d.objInstBuffer, nullptr);
+                vkFreeMemory(m_device, d.objInstMemory, nullptr);
             }
             it = m_chunkBuffers.erase(it);
         } else {

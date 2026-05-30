@@ -44,10 +44,13 @@ private:
     void createSelectorBuffers();
     void createChunkPipeline();
     void buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk);
+    void buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk);
     void rebuildDirtyChunks();
     void createUIPipeline();
     void createUIBuffer();
     void updateHotbar();
+    void createObjectPipeline();
+    void createTreeMesh();
     void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
     void createUniformBuffers();
     void createDescriptorPool();
@@ -106,6 +109,7 @@ private:
     VkPipeline               m_chunkPipeline     = VK_NULL_HANDLE;  // Chunk mesh
     VkPipeline               m_uiPipeline        = VK_NULL_HANDLE;  // 2D UI overlay
     VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
+    VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props (trees)
 
     VkBuffer                 m_vertexBuffer        = VK_NULL_HANDLE;
     VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
@@ -117,9 +121,17 @@ private:
         VkBuffer       indexBuffer  = VK_NULL_HANDLE;
         VkDeviceMemory indexMemory  = VK_NULL_HANDLE;
         uint32_t       indexCount   = 0;
+        VkBuffer       objInstBuffer = VK_NULL_HANDLE;  // per-chunk tree instances
+        VkDeviceMemory objInstMemory = VK_NULL_HANDLE;
+        uint32_t       objInstCount  = 0;
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;
+
+    // Shared low-poly tree mesh (instanced per Object)
+    VkBuffer                 m_treeVertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory           m_treeVertexMemory = VK_NULL_HANDLE;
+    uint32_t                 m_treeVertexCount  = 0;
 
     // UI / hotbar
     VkBuffer                 m_uiBuffer        = VK_NULL_HANDLE;

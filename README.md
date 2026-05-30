@@ -61,10 +61,11 @@
 - 3D 충돌 — `canOccupy`에서 발 아래(Z) walkable + 몸통 높이(Z+1) AIR 이중 체크. 높이 차이 있는 블록 측면 통과 방지
 - 청크 로드/언로드 + 절차적 지형 — FBM noise 기반 `TerrainGen`, load radius=3/unload radius=4, 플레이어 이동 시 자동 생성/해제. 무한 월드 실현
 - 블록 설치/파괴 — 좌클릭=파괴(AIR), 우클릭=설치(STONE). 타겟 Z 자동 탐색(topmost non-AIR), dirty 청크 즉시 GPU 재빌드
-- 지형 다양화 — 물(저지대 호수), 바이옴(GRASS/DIRT), 나무(WOOD 트렁크 + LEAVES 캐노피). 복셀 나무는 추후 로우폴리 모델 레이어로 교체 예정
+- 지형 다양화 — 물(저지대 호수), 바이옴(GRASS/DIRT)
 - 핫바 UI — 스크린 좌표 전용 파이프라인(depth off, alpha blend), 9칸 슬롯 + 선택 강조, 각 슬롯에 블록 색상 아이콘
 - 블록 타입 선택 — 숫자키 1~9 / 스크롤 휠로 슬롯 선택, 우클릭이 선택된 타입 설치 (GRASS/DIRT/STONE/WOOD/LEAVES/WATER)
 - Ambient Occlusion — 꼭짓점별 복셀 AO(0fps 방식), 모서리·구석 음영으로 입체감. 청크 패딩 버퍼 캐싱으로 빌드 비용 최소화
+- 오브젝트 레이어 — 나무를 복셀에서 분리한 로우폴리 모델(박스 트렁크 + 3단 콘)로, 인스턴싱 + 청크별 버퍼 + 크기/회전 변형. 작물·바위 등에 재사용 예정
 ---
 
 ## 프로젝트 구조
@@ -76,8 +77,10 @@ game project/
 ├─ DEVLOG.md               # Vulkan 개념 정리 및 구현 기록
 ├─ .gitignore
 ├─ shaders/
-│  ├─ triangle.vert        # 정점 셰이더 (GLSL)
-│  └─ triangle.frag        # 프래그먼트 셰이더 (GLSL)
+│  ├─ triangle.vert/.frag  # 플레이어·셀렉터 (인스턴싱)
+│  ├─ chunk.vert/.frag     # 청크 메시 (top/side 색상 + AO)
+│  ├─ object.vert          # 오브젝트 인스턴싱 (나무, frag는 chunk.frag 재사용)
+│  └─ ui.vert/.frag        # 2D UI 오버레이 (핫바)
 └─ src/
    ├─ main.cpp             # 진입점: 창 생성 + 렌더 루프
    ├─ game/
@@ -91,14 +94,16 @@ game project/
    │  ├─ Window.h          # GLFW 창 래퍼 (RAII, 리사이즈 콜백) 선언
    │  └─ Window.cpp
    ├─ renderer/
-   │  ├─ Types.h           # Vertex, InstanceData, TileType 정의
+   │  ├─ Types.h           # Vertex/ChunkVertex/UIVertex, InstanceData/ObjectInstance, TileType
    │  ├─ Frustum.h         # Frustum 구조체 (6평면 추출 + AABB 테스트)
    │  ├─ VulkanContext.h   # Vulkan 렌더러 선언
    │  └─ VulkanContext.cpp # Vulkan 렌더러 구현
    └─ world/
-      ├─ Chunk.h           # Chunk 구조체, TileState, IVec2Hash, 청크 상수
+      ├─ Chunk.h           # Chunk 구조체, TileState, Object, IVec2Hash, 청크 상수
       ├─ World.h           # 청크 맵 기반 월드 인터페이스 선언
-      └─ World.cpp         # 청크 라우팅, 타일 색상, 좌표 변환 구현
+      ├─ World.cpp         # 청크 라우팅, 로드/언로드, 타일 색상
+      ├─ TerrainGen.h      # 절차적 지형 생성 선언
+      └─ TerrainGen.cpp    # FBM noise 지형 + 나무 오브젝트 배치
 ```
 
 > `build/` 폴더는 CMake 생성물 + 자동으로 받은 GLFW/GLM 소스가 들어있어 git에서 제외됩니다.
@@ -124,9 +129,11 @@ game project/
 - Z=0: 항상 고체 지면(GRASS/DIRT), Z=1: 언덕(height > 0.45), Z=2: 돌 정상(height > 0.65)
 - 절차적 생성: FBM noise 2채널(높이/바이옴), `TerrainGen::generate(cx, cy, chunk)` — 청크 좌표만 넘기면 결정론적 생성
 - 미로드 청크는 AIR 반환 — 플레이어 주변 반경 3청크 로드, 4청크 밖 자동 언로드
+- 오브젝트 레이어 — 나무 등 유기적 프롭은 복셀이 아닌 별도 모델로 타일 위에 배치 (`Chunk::objects`), 복셀 지형과 분리
 
 ### 렌더링 전략
 - **청크 메시 생성** — 청크별로 보이는 면만 골라 버텍스+인덱스 버퍼 직접 생성 (Hidden Face Culling), 인스턴싱보다 GPU 부하 대폭 감소
+- **오브젝트 인스턴싱** — 나무 등 프롭은 공유 메시 1개를 인스턴스 데이터(위치/스케일/회전)로 대량 렌더링
 - **플랫 셰이딩** — 면마다 단색 + 디렉셔널 라이트로 명암
 - **top/side 색상 분기** — 윗면과 옆면 색상 분리 (GRASS: 윗면 초록 / 옆면 흙 갈색 등), 나중에 텍스처 아틀라스로 교체 가능
 - **Ambient Occlusion** — 꼭짓점별 복셀 AO로 모서리·구석 음영, 청크 빌드 시 베이크 (추가 렌더패스 없음)

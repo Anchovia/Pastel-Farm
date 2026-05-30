@@ -38,3 +38,10 @@ struct UIVertex {
     glm::vec2 pos;
     glm::vec4 color;
 };
+
+// Object instance — per-tree transform (mesh reuses ChunkVertex)
+struct ObjectInstance {
+    glm::vec3 pos;
+    float     scale;
+    float     rot;   // radians around Z
+};

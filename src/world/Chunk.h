@@ -2,6 +2,7 @@
 #include "renderer/Types.h"
 #include <glm/glm.hpp>
 #include <functional>
+#include <vector>
 
 static constexpr int CHUNK_SIZE  = 32;
 static constexpr int CHUNK_DEPTH = 8;
@@ -11,9 +12,22 @@ struct TileState {
     uint32_t lastUpdatedDay = 0;
 };
 
+enum class ObjectType : uint8_t {
+    TREE = 0,
+};
+
+// World prop placed on top of the tile grid (rendered as a low-poly model, not a voxel)
+struct Object {
+    glm::vec3  pos;    // world position of the base
+    float      scale;
+    float      rot;    // radians around Z
+    ObjectType type;
+};
+
 struct Chunk {
     TileType  tiles [CHUNK_DEPTH][CHUNK_SIZE][CHUNK_SIZE] = {};
     TileState states[CHUNK_DEPTH][CHUNK_SIZE][CHUNK_SIZE] = {};
+    std::vector<Object> objects;
     bool      dirty = true;
 };
 
