@@ -766,7 +766,7 @@ void VulkanContext::createSyncObjects() {
 // ============================================================
 //  drawFrame
 // ============================================================
-void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec2>& targetTile) {
+void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile) {
     // Wait for the previous frame using this slot to finish
     vkWaitForFences(m_device, 1, &m_inFlight[m_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -1073,13 +1073,13 @@ void VulkanContext::createPlayerInstanceBuffer(const glm::vec3& playerPosition) 
     updatePlayerInstanceBuffer(playerPosition);
 }
 
-void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec2>& targetTile) {
+void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile) {
     m_showSelector = targetTile.has_value();
     if (!m_showSelector) return;
 
     static const glm::vec3 kSelectorColor = {1.0f, 0.9f, 0.1f};
-    const glm::ivec2 tile = *targetTile;
-    InstanceData inst{m_world.tileCenter(tile.x, tile.y), kSelectorColor};
+    const glm::ivec3 tile = *targetTile;
+    InstanceData inst{m_world.tileCenter(tile.x, tile.y, tile.z), kSelectorColor};
     memcpy(m_selectorInstMapped, &inst, sizeof(inst));
 }
 
@@ -1125,16 +1125,18 @@ void VulkanContext::createSelectorBuffers() {
 }
 
 void VulkanContext::createInstanceBuffer() {
-    const int   W      = m_world.WIDTH;
-    const int   H      = m_world.HEIGHT;
+    const int W = m_world.WIDTH;
+    const int H = m_world.HEIGHT;
+    const int D = m_world.DEPTH;
 
     std::vector<InstanceData> instances;
-    instances.reserve(W * H);
-    for (int x = 0; x < W; x++)
-        for (int y = 0; y < H; y++) {
-            glm::vec3 color = World::tileColor(m_world.getTile(x, y));
-            instances.push_back({m_world.tileCenter(x, y), color});
-        }
+    for (int z = 0; z < D; z++)
+        for (int x = 0; x < W; x++)
+            for (int y = 0; y < H; y++) {
+                TileType t = m_world.getTile(x, y, z);
+                if (t == TileType::AIR) continue;
+                instances.push_back({m_world.tileCenter(x, y, z), World::tileColor(t)});
+            }
     m_instanceCount = (uint32_t)instances.size();
 
     VkDeviceSize size = sizeof(InstanceData) * m_instanceCount;

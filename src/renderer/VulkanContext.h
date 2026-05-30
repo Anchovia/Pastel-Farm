@@ -15,7 +15,7 @@ public:
     VulkanContext(Window& window, World& world);
     ~VulkanContext();
 
-    void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec2>& targetTile);
+    void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile);
     void waitIdle();
 
 private:
@@ -44,7 +44,7 @@ private:
     void createDescriptorSets();
     void updateUniformBuffer(uint32_t currentFrame, const Camera& camera);
     void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
-    void updateSelectorInstanceBuffer(const std::optional<glm::ivec2>& targetTile);
+    void updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile);
     void createDepthResources();
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,

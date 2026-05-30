@@ -6,19 +6,20 @@ class World {
 public:
     static constexpr int WIDTH  = 10;
     static constexpr int HEIGHT = 10;
+    static constexpr int DEPTH  = 8;
 
     World();
 
-    TileType  getTile(int x, int y) const       { return m_grid[y][x]; }
-    void      setTile(int x, int y, TileType t) { m_grid[y][x] = t; }
+    TileType  getTile(int x, int y, int z) const       { return m_grid[z][y][x]; }
+    void      setTile(int x, int y, int z, TileType t) { m_grid[z][y][x] = t; }
 
-    bool inBounds(int x, int y) const;
-    bool isWalkable(int x, int y) const;
-    glm::ivec2 worldToTile(const glm::vec3& position) const;
-    glm::vec3 tileCenter(int x, int y) const;
+    bool inBounds(int x, int y, int z) const;
+    bool isWalkable(int x, int y, int z) const;
+    glm::ivec3 worldToTile(const glm::vec3& position) const;
+    glm::vec3 tileCenter(int x, int y, int z) const;
 
     static glm::vec3 tileColor(TileType type);
 
 private:
-    TileType m_grid[HEIGHT][WIDTH];
+    TileType m_grid[DEPTH][HEIGHT][WIDTH];
 };

@@ -152,6 +152,17 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `vkQueueWaitIdle`은 큐에 제출된 **모든 작업**이 끝날 때까지 블로킹 — 렌더링 중 호출 시 GPU 완전 정지.
 - `VkFence`를 `vkQueueSubmit`에 넘기고 `vkWaitForFences`로 **이 전송 하나**만 대기 → 다른 큐 작업 불간섭.
 - 현재는 초기화 전용 호출이므로 동작 차이 없음. 청크 런타임 로드/언로드 시 이 구조가 필수.
+
+### World 3D 그리드 전환
+- `TileType::AIR = 0` 추가 — 0으로 메모리 초기화 시 전체 AIR가 되어 3D 배열 초기화에 편리.
+- `m_grid[HEIGHT][WIDTH]` → `m_grid[DEPTH][HEIGHT][WIDTH]` (`DEPTH = 8`).
+- 생성자: `memset`으로 전체 AIR 초기화 후, Z=0 레이어에만 기존 맵 데이터를 `memcpy`로 배치.
+- `getTile / setTile / inBounds / isWalkable / tileCenter` 전부 Z 파라미터 추가.
+- `worldToTile` 반환 타입 `glm::ivec2` → `glm::ivec3`. Z 계산: `round(position.z) - 1` — 플레이어가 타일 위 1유닛 높이에 서는 구조를 반영.
+- `isWalkable`: AIR와 WATER 둘 다 이동 불가로 처리.
+- `GameState` / `VulkanContext` 전파: `glm::ivec2` → `glm::ivec3`, 레이캐스팅 `delta.z = 0`으로 타겟은 플레이어와 같은 Z 레이어로 고정.
+- `createInstanceBuffer`: Z 루프 추가, AIR 타일 스킵 — 비어있는 레이어는 자동으로 렌더링 제외.
+- 현재 동작 변화 없음 — Z=1~7은 전부 AIR. 이후 `setTile(x, y, z, type)` 호출만으로 블록 배치/파괴가 바로 연결됨.
 ---
 
 ## 게임 설계 메모

@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 
 enum class TileType : uint8_t {
+    AIR = 0,
     GRASS,
     DIRT,
     WATER,

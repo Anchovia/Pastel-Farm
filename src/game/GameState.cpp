@@ -12,8 +12,8 @@
 
 namespace {
 bool canOccupy(const World& world, const glm::vec3& position) {
-    const glm::ivec2 tile = world.worldToTile(position);
-    return world.isWalkable(tile.x, tile.y);
+    const glm::ivec3 tile = world.worldToTile(position);
+    return world.isWalkable(tile.x, tile.y, tile.z);
 }
 }
 
@@ -62,23 +62,22 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
             if (t > 0.0f) {
                 glm::vec3 hitPoint = camPos + rayDir * t;
 
-                // ¸¶¿ì½º°¡ °¡¸®Å°´Â Å¸ÀÏ°ú ÇÃ·¹ÀÌ¾î Å¸ÀÏ ±¸ÇÏ±â
-                glm::ivec2 pickedTile = world.worldToTile(hitPoint);
-                glm::ivec2 playerTile = world.worldToTile(m_player.position());
+                // ï¿½ï¿½ï¿½ì½ºï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Å°ï¿½ï¿½ Å¸ï¿½Ï°ï¿½ ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½Ï±ï¿½
+                glm::ivec3 pickedTile = world.worldToTile(hitPoint);
+                glm::ivec3 playerTile = world.worldToTile(m_player.position());
 
-                // »ç°Å¸® Á¦ÇÑ °è»ê (¹İ°æ 1Ä­À¸·Î Clamp)
-                glm::ivec2 delta = pickedTile - playerTile;
+                glm::ivec3 delta = pickedTile - playerTile;
                 delta.x = std::clamp(delta.x, -1, 1);
                 delta.y = std::clamp(delta.y, -1, 1);
+                delta.z = 0; // íƒ€ê²Ÿì€ í•­ìƒ í”Œë ˆì´ì–´ì™€ ê°™ì€ Z ë ˆì´ì–´
 
-                glm::ivec2 finalTargetTile = playerTile + delta;
+                glm::ivec3 finalTargetTile = playerTile + delta;
 
-                // ¿ùµå ¹üÀ§ ¾ÈÀÌ¸é ¼¿·ºÅÍ À§Ä¡ °»½Å
-                if (world.inBounds(finalTargetTile.x, finalTargetTile.y)) {
+                if (world.inBounds(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z)) {
                     m_targetTile = finalTargetTile;
 
                     if (input.leftClick) {
-                        // ÃßÈÄ ÀÌ°÷¿¡ »óÈ£ÀÛ¿ë(¶¥ ÆÄ±â, ºí·Ï ¼³Ä¡ µî) ·ÎÁ÷ Ãß°¡ ¿¹Á¤
+                        // ï¿½ï¿½ï¿½ï¿½ ï¿½Ì°ï¿½ï¿½ï¿½ ï¿½ï¿½È£ï¿½Û¿ï¿½(ï¿½ï¿½ ï¿½Ä±ï¿½, ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½) ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½ ï¿½ï¿½ï¿½ï¿½
                     }
                 }
                 else {
@@ -94,8 +93,8 @@ void GameState::updateTargetTile(const World& world) {
     targetPosition.x += m_player.facingDirection().x;
     targetPosition.y += m_player.facingDirection().y;
 
-    const glm::ivec2 tile = world.worldToTile(targetPosition);
-    if (world.inBounds(tile.x, tile.y)) {
+    const glm::ivec3 tile = world.worldToTile(targetPosition);
+    if (world.inBounds(tile.x, tile.y, tile.z)) {
         m_targetTile = tile;
     } else {
         m_targetTile.reset();
