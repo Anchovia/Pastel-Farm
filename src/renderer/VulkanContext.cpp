@@ -889,9 +889,9 @@ void VulkanContext::createUIPipeline() {
 }
 
 // UI vertex buffer: persistently mapped, rebuilt each frame.
-// Capacity covers panel + slots + highlight with margin.
+// Capacity: hotbar (~66 verts) + inventory overlay (screen dim + panel + 8 slots * 2 quads = ~120 verts) + margin.
 void VulkanContext::createUIBuffer() {
-    VkDeviceSize size = sizeof(UIVertex) * 256;
+    VkDeviceSize size = sizeof(UIVertex) * 512;
     createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         m_uiBuffer, m_uiMemory);
@@ -903,6 +903,7 @@ void VulkanContext::updateHotbar() {
     const float H = (float)m_swapchainExtent.height;
 
     std::vector<UIVertex> verts;
+    verts.reserve(256);
 
     auto pushQuad = [&](float x, float y, float w, float h, glm::vec4 color) {
         auto toNDC = [&](float px, float py) {
@@ -920,19 +921,17 @@ void VulkanContext::updateHotbar() {
         verts.push_back({p3, color});
     };
 
+    // --- Hotbar ---
     const float slot = 56.0f, gap = 6.0f, pad = 6.0f;
     const float barW = HOTBAR_SLOTS * slot + (HOTBAR_SLOTS - 1) * gap;
     const float startX = (W - barW) * 0.5f;
     const float startY = H - slot - 20.0f;
 
-    // Panel background
     pushQuad(startX - pad, startY - pad, barW + 2 * pad, slot + 2 * pad, {0.10f, 0.10f, 0.12f, 0.7f});
 
-    // Selected highlight (drawn behind the selected slot so a frame peeks out)
     float selX = startX + m_hotbarSelected * (slot + gap);
     pushQuad(selX - 3.0f, startY - 3.0f, slot + 6.0f, slot + 6.0f, {1.0f, 0.85f, 0.2f, 1.0f});
 
-    // Slot fills + block color icon
     for (int i = 0; i < HOTBAR_SLOTS; i++) {
         float x = startX + i * (slot + gap);
         glm::vec4 bg = (i == m_hotbarSelected)
@@ -940,13 +939,46 @@ void VulkanContext::updateHotbar() {
             : glm::vec4(0.20f, 0.20f, 0.24f, 0.9f);
         pushQuad(x, startY, slot, slot, bg);
 
-        // Inner icon showing the block's color (empty slots stay blank)
-        TileType t = m_hotbarPalette[i];
-        if (t != TileType::AIR) {
-            glm::vec3 col = World::tileColor(t);
+        ItemType t = m_hotbarPalette[i];
+        if (t != ItemType::NONE) {
+            glm::vec3 col = itemColor(t);
             float inset = 10.0f;
             pushQuad(x + inset, startY + inset, slot - 2 * inset, slot - 2 * inset,
                      glm::vec4(col, 1.0f));
+        }
+    }
+
+    // --- Inventory overlay ---
+    if (m_inventoryOpen) {
+        const float gridW = INV_COLS * INV_SLOT_SIZE + (INV_COLS - 1) * INV_GAP;
+        const float gridH = INV_ROWS * INV_SLOT_SIZE + (INV_ROWS - 1) * INV_GAP;
+        const float ox = (W - gridW) * 0.5f - INV_PAD;
+        const float oy = (H - gridH) * 0.5f - INV_PAD;
+        const float panelW = gridW + 2 * INV_PAD;
+        const float panelH = gridH + 2 * INV_PAD;
+
+        // Dimmed background over entire screen
+        pushQuad(0.0f, 0.0f, W, H, {0.0f, 0.0f, 0.0f, 0.45f});
+
+        // Panel background
+        pushQuad(ox, oy, panelW, panelH, {0.12f, 0.12f, 0.15f, 0.92f});
+
+        for (int r = 0; r < INV_ROWS; ++r) {
+            for (int c = 0; c < INV_COLS; ++c) {
+                int idx = r * INV_COLS + c;
+                ItemType item = static_cast<ItemType>(idx + 1); // skip NONE(0)
+                if (item >= ItemType::COUNT) continue;
+
+                float sx = ox + INV_PAD + c * (INV_SLOT_SIZE + INV_GAP);
+                float sy = oy + INV_PAD + r * (INV_SLOT_SIZE + INV_GAP);
+
+                pushQuad(sx, sy, INV_SLOT_SIZE, INV_SLOT_SIZE, {0.22f, 0.22f, 0.27f, 1.0f});
+
+                glm::vec3 col = itemColor(item);
+                float inset = 12.0f;
+                pushQuad(sx + inset, sy + inset, INV_SLOT_SIZE - 2 * inset, INV_SLOT_SIZE - 2 * inset,
+                         glm::vec4(col, 1.0f));
+            }
         }
     }
 
@@ -1270,9 +1302,10 @@ void VulkanContext::createSyncObjects() {
 //  drawFrame
 // ============================================================
 void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                              int hotbarSelected, const std::array<TileType, HOTBAR_SLOTS>& palette, float timeOfDay) {
+                              int hotbarSelected, const std::array<ItemType, HOTBAR_SLOTS>& palette, float timeOfDay, bool inventoryOpen) {
     m_hotbarSelected = hotbarSelected;
     m_hotbarPalette  = palette;
+    m_inventoryOpen  = inventoryOpen;
 
     // Sky color: 4 keyframes keyed on timeOfDay (0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk)
     static constexpr float kSkyKeys[4][3] = {

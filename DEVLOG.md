@@ -283,6 +283,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `day()` and `timeOfDay()` accessors exposed for the farming system (crop growth checks against `m_day`).
 - Sky clear color in `VulkanContext` now lerps across 4 keyframes keyed on `timeOfDay × 4`: midnight (dark navy), dawn (pink/orange), noon (sky blue), dusk (orange/red). Stored in `m_skyColor[4]`, set in `drawFrame()`, read in `recordCommandBuffer()`.
 - No dynamic lighting change yet — terrain brightness stays constant. Ambient light tie-in deferred to Phase 6 (rendering polish).
+
+### Item/Tool System + Inventory UI
+- `ItemType` enum added to `Types.h`: `NONE`, `BLOCK_GRASS/DIRT/STONE/WOOD/LEAVES/WATER`, `TOOL_HOE`, `TOOL_AXE`, `COUNT`. Inline helpers: `isBlock()`, `isTool()`, `itemToTile()`, `itemColor()`.
+- Inventory layout constants (`INV_COLS=4`, `INV_ROWS=2`, `INV_SLOT_SIZE`, `INV_GAP`, `INV_PAD`) in `Types.h` — shared between `GameState` (click detection) and `VulkanContext` (rendering) so the math stays in sync.
+- `GameState`: hotbar palette changed from `TileType[9]` to `ItemType[9]`. Default slots: 6 block types + HOE + AXE + NONE. Right-click with a tool selected does nothing (actual tool actions added in Phase 3-6). World interaction (click/raycast) suppressed while inventory is open.
+- `I` key toggles inventory; edge-detected with `m_prevToggleInv` to avoid repeated fires on hold.
+- Inventory click: mouse position checked against each slot rect using the shared layout constants. Matching slot's `ItemType` written to `m_palette[m_selectedSlot]`.
+- `VulkanContext`: `updateHotbar()` now reads `ItemType` and calls `itemColor()` directly — no more `World::tileColor` in the UI path. Inventory open → full-screen dim quad + panel background + 4×2 item grid rendered on top of hotbar. UI vertex buffer expanded from 256 to 512.
 ---
 
 ## 게임 설계 메모

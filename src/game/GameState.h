@@ -17,8 +17,9 @@ struct PlayerInput {
     bool moveRight = false;
     double mouseX = 0.0;
     double mouseY = 0.0;
-    bool leftClick  = false;
-    bool rightClick = false;
+    bool leftClick       = false;
+    bool rightClick      = false;
+    bool toggleInventory = false;
     int  selectSlot  = -1;  // 0..HOTBAR_SLOTS-1 if a number key was pressed, else -1
     int  scrollDelta = 0;   // slots to move from scroll wheel
     int windowWidth = 1280;
@@ -35,7 +36,9 @@ public:
     const std::optional<glm::ivec3>& targetTile() const { return m_targetTile; }
 
     int selectedSlot() const { return m_selectedSlot; }
-    const std::array<TileType, HOTBAR_SLOTS>& palette() const { return m_palette; }
+    const std::array<ItemType, HOTBAR_SLOTS>& palette() const { return m_palette; }
+
+    bool inventoryOpen() const { return m_inventoryOpen; }
 
     int   day()       const { return m_day; }
     float timeOfDay() const { return m_timeOfDay; } // 0.0=midnight, 0.5=noon, 1.0=midnight
@@ -47,9 +50,12 @@ private:
     std::optional<glm::ivec3> m_targetTile;
 
     int m_selectedSlot = 0;
-    std::array<TileType, HOTBAR_SLOTS> m_palette;
+    std::array<ItemType, HOTBAR_SLOTS> m_palette;
 
-    float m_time    = 0.0f;
-    int   m_day     = 0;
+    bool m_inventoryOpen   = false;
+    bool m_prevToggleInv   = false; // edge-detect for I key
+
+    float m_time      = 0.0f;
+    int   m_day       = 0;
     float m_timeOfDay = 0.0f;
 };

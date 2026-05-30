@@ -30,6 +30,8 @@ PlayerInput InputManager::pollInput() {
     input.leftClick  = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT)  == GLFW_PRESS;
     input.rightClick = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
+    input.toggleInventory = glfwGetKey(win, GLFW_KEY_I) == GLFW_PRESS;
+
     // Window size
     glfwGetFramebufferSize(win, &input.windowWidth, &input.windowHeight);
 

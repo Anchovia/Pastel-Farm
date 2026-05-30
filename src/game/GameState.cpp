@@ -20,9 +20,9 @@ bool canOccupy(const World& world, const glm::vec3& position) {
 
 GameState::GameState() {
     m_palette = {
-        TileType::GRASS, TileType::DIRT, TileType::STONE,
-        TileType::WOOD,  TileType::LEAVES, TileType::WATER,
-        TileType::AIR,   TileType::AIR,   TileType::AIR,
+        ItemType::BLOCK_GRASS,  ItemType::BLOCK_DIRT,  ItemType::BLOCK_STONE,
+        ItemType::BLOCK_WOOD,   ItemType::BLOCK_LEAVES, ItemType::BLOCK_WATER,
+        ItemType::TOOL_HOE,     ItemType::TOOL_AXE,    ItemType::NONE,
     };
 }
 
@@ -31,6 +31,11 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
     m_time += dt;
     m_day = static_cast<int>(m_time / DAY_DURATION);
     m_timeOfDay = std::fmod(m_time, DAY_DURATION) / DAY_DURATION;
+
+    // Inventory toggle (I key — edge-detect to avoid repeated triggers)
+    if (input.toggleInventory && !m_prevToggleInv)
+        m_inventoryOpen = !m_inventoryOpen;
+    m_prevToggleInv = input.toggleInventory;
 
     // Hotbar selection
     if (input.selectSlot >= 0 && input.selectSlot < HOTBAR_SLOTS)
@@ -71,55 +76,89 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
     }
 
     if (input.windowWidth > 0 && input.windowHeight > 0) {
-        float ndcX = (2.0f * (float)input.mouseX) / input.windowWidth - 1.0f;
-        float ndcY = (2.0f * (float)input.mouseY) / input.windowHeight - 1.0f;
+        // Inventory click: assign hovered item to selected hotbar slot
+        if (m_inventoryOpen && input.leftClick) {
+            const float W  = (float)input.windowWidth;
+            const float H  = (float)input.windowHeight;
+            const float gridW = INV_COLS * INV_SLOT_SIZE + (INV_COLS - 1) * INV_GAP;
+            const float gridH = INV_ROWS * INV_SLOT_SIZE + (INV_ROWS - 1) * INV_GAP;
+            const float ox = (W - gridW) * 0.5f - INV_PAD;
+            const float oy = (H - gridH) * 0.5f - INV_PAD;
+            const float mx = (float)input.mouseX;
+            const float my = (float)input.mouseY;
 
-        glm::mat4 invViewProj = glm::inverse(camera.viewProj());
+            for (int r = 0; r < INV_ROWS; ++r) {
+                for (int c = 0; c < INV_COLS; ++c) {
+                    int idx = r * INV_COLS + c;
+                    ItemType item = static_cast<ItemType>(idx + 1); // skip NONE(0)
+                    if (item >= ItemType::COUNT) continue;
 
-        glm::vec4 target = invViewProj * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
-        glm::vec3 rayDir = glm::normalize(glm::vec3(target / target.w) - camPos);
-
-        if (std::abs(rayDir.z) > 1e-5f) {
-            float t = -camPos.z / rayDir.z;
-            if (t > 0.0f) {
-                glm::vec3 hitPoint = camPos + rayDir * t;
-
-                glm::ivec3 pickedTile = world.worldToTile(hitPoint);
-
-                // Find topmost non-AIR tile at this XY
-                for (int z = CHUNK_DEPTH - 1; z >= 0; z--) {
-                    if (world.getTile(pickedTile.x, pickedTile.y, z) != TileType::AIR) {
-                        pickedTile.z = z;
-                        break;
+                    float sx = ox + INV_PAD + c * (INV_SLOT_SIZE + INV_GAP);
+                    float sy = oy + INV_PAD + r * (INV_SLOT_SIZE + INV_GAP);
+                    if (mx >= sx && mx <= sx + INV_SLOT_SIZE &&
+                        my >= sy && my <= sy + INV_SLOT_SIZE) {
+                        m_palette[m_selectedSlot] = item;
                     }
                 }
+            }
+        }
 
-                glm::ivec3 playerTile = world.worldToTile(m_player.position());
+        // World interaction — suppressed while inventory is open
+        if (!m_inventoryOpen) {
+            float ndcX = (2.0f * (float)input.mouseX) / input.windowWidth - 1.0f;
+            float ndcY = (2.0f * (float)input.mouseY) / input.windowHeight - 1.0f;
 
-                glm::ivec3 delta = pickedTile - playerTile;
-                delta.x = std::clamp(delta.x, -1, 1);
-                delta.y = std::clamp(delta.y, -1, 1);
-                delta.z = std::clamp(delta.z, -1, 1);
+            glm::mat4 invViewProj = glm::inverse(camera.viewProj());
 
-                glm::ivec3 finalTargetTile = playerTile + delta;
+            glm::vec4 target = invViewProj * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+            glm::vec3 rayDir = glm::normalize(glm::vec3(target / target.w) - camPos);
 
-                if (world.inBounds(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z)) {
-                    m_targetTile = finalTargetTile;
+            if (std::abs(rayDir.z) > 1e-5f) {
+                float t = -camPos.z / rayDir.z;
+                if (t > 0.0f) {
+                    glm::vec3 hitPoint = camPos + rayDir * t;
 
-                    if (input.leftClick)
-                        world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
+                    glm::ivec3 pickedTile = world.worldToTile(hitPoint);
 
-                    if (input.rightClick) {
-                        TileType block = m_palette[m_selectedSlot];
-                        int px = finalTargetTile.x;
-                        int py = finalTargetTile.y;
-                        int pz = finalTargetTile.z + 1;
-                        if (block != TileType::AIR && world.getTile(px, py, pz) == TileType::AIR)
-                            world.setTile(px, py, pz, block);
+                    // Find topmost non-AIR tile at this XY
+                    for (int z = CHUNK_DEPTH - 1; z >= 0; z--) {
+                        if (world.getTile(pickedTile.x, pickedTile.y, z) != TileType::AIR) {
+                            pickedTile.z = z;
+                            break;
+                        }
                     }
-                }
-                else {
-                    m_targetTile = std::nullopt;
+
+                    glm::ivec3 playerTile = world.worldToTile(m_player.position());
+
+                    glm::ivec3 delta = pickedTile - playerTile;
+                    delta.x = std::clamp(delta.x, -1, 1);
+                    delta.y = std::clamp(delta.y, -1, 1);
+                    delta.z = std::clamp(delta.z, -1, 1);
+
+                    glm::ivec3 finalTargetTile = playerTile + delta;
+
+                    if (world.inBounds(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z)) {
+                        m_targetTile = finalTargetTile;
+
+                        if (input.leftClick)
+                            world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
+
+                        if (input.rightClick) {
+                            ItemType item = m_palette[m_selectedSlot];
+                            if (isBlock(item)) {
+                                TileType block = itemToTile(item);
+                                int px = finalTargetTile.x;
+                                int py = finalTargetTile.y;
+                                int pz = finalTargetTile.z + 1;
+                                if (world.getTile(px, py, pz) == TileType::AIR)
+                                    world.setTile(px, py, pz, block);
+                            }
+                            // Tool actions handled in later phase (hoe -> farmland, etc.)
+                        }
+                    }
+                    else {
+                        m_targetTile = std::nullopt;
+                    }
                 }
             }
         }
