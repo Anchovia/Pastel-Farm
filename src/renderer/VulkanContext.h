@@ -34,6 +34,7 @@ private:
     void createVertexBuffer();
     void createIndexBuffer();
     void createInstanceBuffer();
+    void createPlayerInstanceBuffer();
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
@@ -91,9 +92,13 @@ private:
     VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
     VkBuffer                 m_indexBuffer         = VK_NULL_HANDLE;
     VkDeviceMemory           m_indexBufferMemory   = VK_NULL_HANDLE;
-    VkBuffer                 m_instanceBuffer      = VK_NULL_HANDLE;
-    VkDeviceMemory           m_instanceBufferMemory= VK_NULL_HANDLE;
-    uint32_t                 m_instanceCount       = 0;
+    VkBuffer                 m_instanceBuffer       = VK_NULL_HANDLE;
+    VkDeviceMemory           m_instanceBufferMemory = VK_NULL_HANDLE;
+    uint32_t                 m_instanceCount        = 0;
+    VkBuffer                 m_playerInstBuffer     = VK_NULL_HANDLE;
+    VkDeviceMemory           m_playerInstMemory     = VK_NULL_HANDLE;
+    void*                    m_playerInstMapped     = nullptr;
+    glm::vec3                m_playerPos            = {0.0f, 0.0f, 1.0f};
 
     VkImage                      m_depthImage           = VK_NULL_HANDLE;
     VkDeviceMemory               m_depthImageMemory     = VK_NULL_HANDLE;

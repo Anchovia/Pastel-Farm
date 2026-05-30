@@ -111,6 +111,7 @@ VulkanContext::VulkanContext(Window& window) : m_window(window) {
     createVertexBuffer();
     createIndexBuffer();
     createInstanceBuffer();
+    createPlayerInstanceBuffer();
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
@@ -128,6 +129,8 @@ VulkanContext::~VulkanContext() {
     }
     vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
+    vkDestroyBuffer(m_device, m_playerInstBuffer, nullptr);
+    vkFreeMemory(m_device, m_playerInstMemory, nullptr);
     vkDestroyBuffer(m_device, m_instanceBuffer, nullptr);
     vkFreeMemory(m_device, m_instanceBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
@@ -684,6 +687,12 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBindVertexBuffers(cmd, 0, 2, buffers, offs);
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), m_instanceCount, 0, 0, 0);
+
+    // 플레이어
+    VkBuffer     pBufs[] = {m_vertexBuffer, m_playerInstBuffer};
+    VkDeviceSize pOffs[] = {0, 0};
+    vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
+    vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
 }
@@ -997,6 +1006,8 @@ void VulkanContext::createDescriptorSets() {
 //  Update uniform buffer (called every frame)
 // ============================================================
 void VulkanContext::updateUniformBuffer(uint32_t currentFrame) {
+    m_orbitTarget = {m_playerPos.x, m_playerPos.y, 0.0f};
+
     float rad   = glm::radians(m_orbitAngle);
     float pitch = glm::radians(m_orbitPitch);
     glm::vec3 camPos = m_orbitTarget + glm::vec3{
@@ -1016,13 +1027,49 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame) {
 }
 
 void VulkanContext::processInput(float dt) {
-    GLFWwindow* win       = m_window.handle();
-    float       rotSpeed  = 90.0f * dt;
+    GLFWwindow* win      = m_window.handle();
+    float       rotSpeed = 90.0f * dt;
+    float       moveSpeed= 3.0f  * dt;
 
     if (glfwGetKey(win, GLFW_KEY_Q)      == GLFW_PRESS) m_orbitAngle -= rotSpeed;
     if (glfwGetKey(win, GLFW_KEY_E)      == GLFW_PRESS) m_orbitAngle += rotSpeed;
     if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(win, GLFW_TRUE);
+
+    // 카메라 각도 기준 플레이어 이동
+    float rad = glm::radians(m_orbitAngle);
+    glm::vec2 forward = {-glm::cos(rad), -glm::sin(rad)};
+    glm::vec2 right   = {-glm::sin(rad),  glm::cos(rad)};
+
+    glm::vec2 move{0.0f};
+    if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS) move += forward;
+    if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) move -= forward;
+    if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS) move -= right;
+    if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) move += right;
+
+    if (glm::length(move) > 0.0f) {
+        move = glm::normalize(move) * moveSpeed;
+        m_playerPos.x += move.x;
+        m_playerPos.y += move.y;
+    }
+
+    // 플레이어 인스턴스 버퍼 업데이트
+    static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
+    InstanceData inst{m_playerPos, kPlayerColor};
+    memcpy(m_playerInstMapped, &inst, sizeof(inst));
+}
+
+void VulkanContext::createPlayerInstanceBuffer() {
+    VkDeviceSize size = sizeof(InstanceData);
+    createBuffer(size,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_playerInstBuffer, m_playerInstMemory);
+    vkMapMemory(m_device, m_playerInstMemory, 0, size, 0, &m_playerInstMapped);
+
+    static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
+    InstanceData inst{m_playerPos, kPlayerColor};
+    memcpy(m_playerInstMapped, &inst, sizeof(inst));
 }
 
 void VulkanContext::createInstanceBuffer() {

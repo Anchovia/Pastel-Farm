@@ -19,6 +19,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 파이프라인에 Vertex Input 바인딩 정보 등록
 - `vkCmdBindVertexBuffers` + `vkCmdDraw`로 그라데이션 삼각형 출력
 
+### 플레이어 이동
+- 플레이어 전용 인스턴스 버퍼 1개 (persistently mapped) 별도 생성
+- `processInput()`에서 WASD로 플레이어 이동, 매 프레임 버퍼 업데이트
+- 카메라 각도(orbitAngle) 기준으로 forward/right 방향 계산
+  - `forward = (-cos θ, -sin θ)` — 카메라 반대 방향(화면 안쪽)
+  - `right = (-sin θ, cos θ)` — 화면 기준 오른쪽
+- 플레이어 드로우콜을 타일 드로우콜과 별도로 호출 (같은 파이프라인, 다른 인스턴스 버퍼)
+- `updateUniformBuffer()`에서 `m_orbitTarget = playerPos`로 카메라가 플레이어를 따라감
+- 플레이어 색상: 주황색 `{1.0, 0.45, 0.1}`
+
 ### 타일 그리드 시스템
 - `TileType` enum 추가 (GRASS, DIRT, WATER, STONE)
 - `Vertex`에서 color 제거 — 색상은 인스턴스에서 담당
