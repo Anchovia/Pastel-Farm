@@ -33,9 +33,15 @@ int main() {
             input.moveBackward = glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS;
             input.moveLeft     = glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS;
             input.moveRight    = glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS;
+
+            // 마우스 및 창 크기 정보 수집
+            glfwGetCursorPos(win, &input.mouseX, &input.mouseY);
+            input.leftClick = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+            glfwGetFramebufferSize(win, &input.windowWidth, &input.windowHeight);
+
             gameState.update(dt, input, ctx.orbitAngle(), world);
 
-            ctx.drawFrame(gameState.player().position());
+            ctx.drawFrame(gameState.player().position(), gameState.targetTile());
         }
         ctx.waitIdle();
     } catch (const std::exception& e) {

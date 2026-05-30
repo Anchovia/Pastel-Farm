@@ -117,6 +117,18 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `vkCmdDraw` → `vkCmdBindIndexBuffer` + `vkCmdDrawIndexed`
 - 결과: 그라데이션 사각형 출력
 
+### 마우스 피킹 (Raycasting) 및 사거리 제한
+- 화면의 2D 마우스 좌표를 3D 월드 공간으로 변환하는 레이캐스팅(Raycasting) 구현
+- 역산환(Unprojection) 과정:
+  1. 마우스 픽셀 좌표를 NDC(-1.0 ~ 1.0) 공간으로 변환
+  2. 투영(Proj)과 뷰(View) 행렬의 역행렬(`inverse(proj * view)`)을 계산
+  3. NDC 좌표에 역행렬을 곱해 월드 공간의 Ray 방향 벡터(Direction) 도출
+- 수학적 교차 판정: - 타일이 모두 $Z=0$ 평면에 있다는 점을 이용, 루프 없이 O(1) 수학 공식($t = -O_z / D_z$)으로 광선과 바닥이 만나는 정확한 3D 좌표를 단번에 계산
+- 사거리 제한 (Clamp):
+  - 마우스가 아무리 멀리 있어도 플레이어 주변 타일만 선택되도록 처리
+  - `std::clamp`를 이용해 타겟 타일과 플레이어 타일 간의 거리(delta)를 X, Y 각각 -1 ~ 1 사이로 강제 고정
+- 기존의 키보드 방향 기반 타겟팅(`updateTargetTile`) 로직을 완전 제거하고 마우스 조작으로 일원화
+
 ---
 
 ## 게임 설계 메모

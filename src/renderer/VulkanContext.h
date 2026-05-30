@@ -14,7 +14,7 @@ public:
     VulkanContext(Window& window, World& world);
     ~VulkanContext();
 
-    void drawFrame(const glm::vec3& playerPosition);
+    void drawFrame(const glm::vec3& playerPosition, const std::optional<glm::ivec2>& targetTile);
     void waitIdle();
     void rotateOrbit(float degrees);
     float orbitAngle() const { return m_orbitAngle; }
@@ -36,6 +36,7 @@ private:
     void createDescriptorSetLayout();
     void createVertexBuffer();
     void createIndexBuffer();
+    void createSelectorBuffers();
     void createInstanceBuffer();
     void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
     void createUniformBuffers();
@@ -43,6 +44,7 @@ private:
     void createDescriptorSets();
     void updateUniformBuffer(uint32_t currentFrame, const glm::vec3& playerPosition);
     void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
+    void updateSelectorInstanceBuffer(const std::optional<glm::ivec2>& targetTile);
     void createDepthResources();
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
@@ -102,6 +104,14 @@ private:
     VkBuffer                 m_playerInstBuffer     = VK_NULL_HANDLE;
     VkDeviceMemory           m_playerInstMemory     = VK_NULL_HANDLE;
     void*                    m_playerInstMapped     = nullptr;
+    VkBuffer                 m_selectorVertexBuffer  = VK_NULL_HANDLE;
+    VkDeviceMemory           m_selectorVertexMemory  = VK_NULL_HANDLE;
+    VkBuffer                 m_selectorIndexBuffer   = VK_NULL_HANDLE;
+    VkDeviceMemory           m_selectorIndexMemory   = VK_NULL_HANDLE;
+    VkBuffer                 m_selectorInstBuffer    = VK_NULL_HANDLE;
+    VkDeviceMemory           m_selectorInstMemory    = VK_NULL_HANDLE;
+    void*                    m_selectorInstMapped    = nullptr;
+    bool                     m_showSelector          = false;
 
     VkImage                      m_depthImage           = VK_NULL_HANDLE;
     VkDeviceMemory               m_depthImageMemory     = VK_NULL_HANDLE;

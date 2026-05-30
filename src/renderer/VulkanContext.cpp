@@ -47,6 +47,35 @@ static const std::vector<uint16_t> kIndices = {
     20,21,22,  20,22,23,   // 왼면
 };
 
+static const std::vector<Vertex> kSelectorVertices = {
+    {{-0.48f,  0.40f, 0.54f}, {0, 0, 1}},
+    {{ 0.48f,  0.40f, 0.54f}, {0, 0, 1}},
+    {{ 0.48f,  0.48f, 0.54f}, {0, 0, 1}},
+    {{-0.48f,  0.48f, 0.54f}, {0, 0, 1}},
+
+    {{ 0.40f, -0.48f, 0.54f}, {0, 0, 1}},
+    {{ 0.48f, -0.48f, 0.54f}, {0, 0, 1}},
+    {{ 0.48f,  0.48f, 0.54f}, {0, 0, 1}},
+    {{ 0.40f,  0.48f, 0.54f}, {0, 0, 1}},
+
+    {{-0.48f, -0.48f, 0.54f}, {0, 0, 1}},
+    {{ 0.48f, -0.48f, 0.54f}, {0, 0, 1}},
+    {{ 0.48f, -0.40f, 0.54f}, {0, 0, 1}},
+    {{-0.48f, -0.40f, 0.54f}, {0, 0, 1}},
+
+    {{-0.48f, -0.48f, 0.54f}, {0, 0, 1}},
+    {{-0.40f, -0.48f, 0.54f}, {0, 0, 1}},
+    {{-0.40f,  0.48f, 0.54f}, {0, 0, 1}},
+    {{-0.48f,  0.48f, 0.54f}, {0, 0, 1}},
+};
+
+static const std::vector<uint16_t> kSelectorIndices = {
+     0,  1,  2,   0,  2,  3,
+     4,  5,  6,   4,  6,  7,
+     8,  9, 10,   8, 10, 11,
+    12, 13, 14,  12, 14, 15,
+};
+
 // ============================================================
 //  Constants
 // ============================================================
@@ -111,6 +140,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
+    createSelectorBuffers();
     createInstanceBuffer();
     createPlayerInstanceBuffer({0.0f, 0.0f, 1.0f});
     createUniformBuffers();
@@ -132,6 +162,12 @@ VulkanContext::~VulkanContext() {
     vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
     vkDestroyBuffer(m_device, m_playerInstBuffer, nullptr);
     vkFreeMemory(m_device, m_playerInstMemory, nullptr);
+    vkDestroyBuffer(m_device, m_selectorInstBuffer, nullptr);
+    vkFreeMemory(m_device, m_selectorInstMemory, nullptr);
+    vkDestroyBuffer(m_device, m_selectorIndexBuffer, nullptr);
+    vkFreeMemory(m_device, m_selectorIndexMemory, nullptr);
+    vkDestroyBuffer(m_device, m_selectorVertexBuffer, nullptr);
+    vkFreeMemory(m_device, m_selectorVertexMemory, nullptr);
     vkDestroyBuffer(m_device, m_instanceBuffer, nullptr);
     vkFreeMemory(m_device, m_instanceBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
@@ -682,8 +718,6 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
 
-    VkBuffer     vertexBuffers[] = {m_vertexBuffer};
-    VkDeviceSize offsets[]       = {0};
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
         m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
 
@@ -693,10 +727,19 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), m_instanceCount, 0, 0, 0);
 
+    if (m_showSelector) {
+        VkBuffer     sBufs[] = {m_selectorVertexBuffer, m_selectorInstBuffer};
+        VkDeviceSize sOffs[] = {0, 0};
+        vkCmdBindVertexBuffers(cmd, 0, 2, sBufs, sOffs);
+        vkCmdBindIndexBuffer(cmd, m_selectorIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdDrawIndexed(cmd, (uint32_t)kSelectorIndices.size(), 1, 0, 0, 0);
+    }
+
     // 플레이어
     VkBuffer     pBufs[] = {m_vertexBuffer, m_playerInstBuffer};
     VkDeviceSize pOffs[] = {0, 0};
     vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
+    vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
@@ -726,7 +769,7 @@ void VulkanContext::createSyncObjects() {
 // ============================================================
 //  drawFrame
 // ============================================================
-void VulkanContext::drawFrame(const glm::vec3& playerPosition) {
+void VulkanContext::drawFrame(const glm::vec3& playerPosition, const std::optional<glm::ivec2>& targetTile) {
     // Wait for the previous frame using this slot to finish
     vkWaitForFences(m_device, 1, &m_inFlight[m_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -745,6 +788,7 @@ void VulkanContext::drawFrame(const glm::vec3& playerPosition) {
     vkResetFences(m_device, 1, &m_inFlight[m_currentFrame]);
     updateUniformBuffer(m_currentFrame, playerPosition);
     updatePlayerInstanceBuffer(playerPosition);
+    updateSelectorInstanceBuffer(targetTile);
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 
@@ -1042,6 +1086,46 @@ void VulkanContext::createPlayerInstanceBuffer(const glm::vec3& playerPosition) 
     vkMapMemory(m_device, m_playerInstMemory, 0, size, 0, &m_playerInstMapped);
 
     updatePlayerInstanceBuffer(playerPosition);
+}
+
+void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec2>& targetTile) {
+    m_showSelector = targetTile.has_value();
+    if (!m_showSelector) return;
+
+    static const glm::vec3 kSelectorColor = {1.0f, 0.9f, 0.1f};
+    const glm::ivec2 tile = *targetTile;
+    InstanceData inst{m_world.tileCenter(tile.x, tile.y), kSelectorColor};
+    memcpy(m_selectorInstMapped, &inst, sizeof(inst));
+}
+
+void VulkanContext::createSelectorBuffers() {
+    VkDeviceSize vertexSize = sizeof(kSelectorVertices[0]) * kSelectorVertices.size();
+    createBuffer(vertexSize,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_selectorVertexBuffer, m_selectorVertexMemory);
+
+    void* data;
+    vkMapMemory(m_device, m_selectorVertexMemory, 0, vertexSize, 0, &data);
+    memcpy(data, kSelectorVertices.data(), vertexSize);
+    vkUnmapMemory(m_device, m_selectorVertexMemory);
+
+    VkDeviceSize indexSize = sizeof(kSelectorIndices[0]) * kSelectorIndices.size();
+    createBuffer(indexSize,
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_selectorIndexBuffer, m_selectorIndexMemory);
+
+    vkMapMemory(m_device, m_selectorIndexMemory, 0, indexSize, 0, &data);
+    memcpy(data, kSelectorIndices.data(), indexSize);
+    vkUnmapMemory(m_device, m_selectorIndexMemory);
+
+    VkDeviceSize instanceSize = sizeof(InstanceData);
+    createBuffer(instanceSize,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_selectorInstBuffer, m_selectorInstMemory);
+    vkMapMemory(m_device, m_selectorInstMemory, 0, instanceSize, 0, &m_selectorInstMapped);
 }
 
 void VulkanContext::createInstanceBuffer() {
