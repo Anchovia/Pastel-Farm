@@ -40,6 +40,7 @@ private:
     void createVertexBuffer();
     void createIndexBuffer();
     void createSelectorBuffers();
+    void createChunkPipeline();
     void buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk);
     void rebuildDirtyChunks();
     void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
@@ -94,18 +95,21 @@ private:
     std::vector<VkImageView> m_swapchainImageViews;
     std::vector<VkFramebuffer> m_framebuffers;
 
-    VkRenderPass             m_renderPass       = VK_NULL_HANDLE;
-    VkPipelineLayout         m_pipelineLayout   = VK_NULL_HANDLE;
-    VkPipeline               m_pipeline         = VK_NULL_HANDLE;
+    VkRenderPass             m_renderPass        = VK_NULL_HANDLE;
+    VkPipelineLayout         m_pipelineLayout    = VK_NULL_HANDLE;
+    VkPipeline               m_pipeline          = VK_NULL_HANDLE;  // 플레이어/셀렉터용 (인스턴싱)
+    VkPipeline               m_chunkPipeline     = VK_NULL_HANDLE;  // 청크 메시용
 
     VkBuffer                 m_vertexBuffer        = VK_NULL_HANDLE;
     VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
     VkBuffer                 m_indexBuffer         = VK_NULL_HANDLE;
     VkDeviceMemory           m_indexBufferMemory   = VK_NULL_HANDLE;
     struct ChunkRenderData {
-        VkBuffer       buffer = VK_NULL_HANDLE;
-        VkDeviceMemory memory = VK_NULL_HANDLE;
-        uint32_t       count  = 0;
+        VkBuffer       vertexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
+        VkBuffer       indexBuffer  = VK_NULL_HANDLE;
+        VkDeviceMemory indexMemory  = VK_NULL_HANDLE;
+        uint32_t       indexCount   = 0;
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;

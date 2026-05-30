@@ -21,3 +21,10 @@ struct InstanceData {
     glm::vec3 topColor;
     glm::vec3 sideColor;
 };
+
+// 청크 메시 전용 정점 — 색상이 버텍스에 구워짐 (인스턴싱 없음)
+struct ChunkVertex {
+    glm::vec3 pos;
+    glm::vec3 normal;
+    glm::vec3 color;  // 윗면이면 topColor, 옆/아랫면이면 sideColor
+};

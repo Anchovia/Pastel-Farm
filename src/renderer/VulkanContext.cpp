@@ -136,6 +136,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
+    createChunkPipeline();
     createDepthResources();
     createFramebuffers();
     createCommandPool();
@@ -170,15 +171,20 @@ VulkanContext::~VulkanContext() {
     vkDestroyBuffer(m_device, m_selectorVertexBuffer, nullptr);
     vkFreeMemory(m_device, m_selectorVertexMemory, nullptr);
     for (auto& [coord, data] : m_chunkBuffers) {
-        if (data.buffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(m_device, data.buffer, nullptr);
-            vkFreeMemory(m_device, data.memory, nullptr);
+        if (data.vertexBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, data.vertexBuffer, nullptr);
+            vkFreeMemory(m_device, data.vertexMemory, nullptr);
+        }
+        if (data.indexBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, data.indexBuffer, nullptr);
+            vkFreeMemory(m_device, data.indexMemory, nullptr);
         }
     }
     vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
     vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
     vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
+    vkDestroyPipeline(m_device, m_chunkPipeline, nullptr);
     vkDestroyPipeline(m_device, m_pipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
     vkDestroyRenderPass(m_device, m_renderPass, nullptr);
@@ -660,6 +666,102 @@ void VulkanContext::createGraphicsPipeline() {
     vkDestroyShaderModule(m_device, fragMod, nullptr);
 }
 
+void VulkanContext::createChunkPipeline() {
+    auto vertCode = readFile("shaders/chunk.vert.spv");
+    auto fragCode = readFile("shaders/chunk.frag.spv");
+    VkShaderModule vertMod = createShaderModule(vertCode);
+    VkShaderModule fragMod = createShaderModule(fragCode);
+
+    VkPipelineShaderStageCreateInfo stages[2] = {};
+    stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vertMod;
+    stages[0].pName  = "main";
+    stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fragMod;
+    stages[1].pName  = "main";
+
+    VkVertexInputBindingDescription binding{};
+    binding.binding   = 0;
+    binding.stride    = sizeof(ChunkVertex);
+    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription attrs[3]{};
+    attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, pos)    };
+    attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, normal) };
+    attrs[2] = { 2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, color)  };
+
+    VkPipelineVertexInputStateCreateInfo vertexInput{};
+    vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInput.vertexBindingDescriptionCount   = 1;
+    vertexInput.pVertexBindingDescriptions      = &binding;
+    vertexInput.vertexAttributeDescriptionCount = 3;
+    vertexInput.pVertexAttributeDescriptions    = attrs;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport{ 0, 0,
+        (float)m_swapchainExtent.width, (float)m_swapchainExtent.height, 0.0f, 1.0f };
+    VkRect2D scissor{ {0, 0}, m_swapchainExtent };
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports    = &viewport;
+    viewportState.scissorCount  = 1;
+    viewportState.pScissors     = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo raster{};
+    raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode    = VK_CULL_MODE_BACK_BIT;
+    raster.frontFace   = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth   = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo msaa{};
+    msaa.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    msaa.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAttach{};
+    blendAttach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                 VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo blend{};
+    blend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blend.attachmentCount = 1;
+    blend.pAttachments    = &blendAttach;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable  = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp   = VK_COMPARE_OP_LESS;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount          = 2;
+    pipelineInfo.pStages             = stages;
+    pipelineInfo.pVertexInputState   = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState      = &viewportState;
+    pipelineInfo.pRasterizationState = &raster;
+    pipelineInfo.pMultisampleState   = &msaa;
+    pipelineInfo.pColorBlendState    = &blend;
+    pipelineInfo.pDepthStencilState  = &depthStencil;
+    pipelineInfo.layout              = m_pipelineLayout;
+    pipelineInfo.renderPass          = m_renderPass;
+    pipelineInfo.subpass             = 0;
+
+    if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_chunkPipeline) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create chunk pipeline");
+
+    vkDestroyShaderModule(m_device, vertMod, nullptr);
+    vkDestroyShaderModule(m_device, fragMod, nullptr);
+}
+
 // ============================================================
 //  Framebuffers
 // ============================================================
@@ -721,24 +823,29 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     rp.pClearValues    = clearValues;
 
     vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
         m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
 
-    vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    // ── 청크 메시 (Hidden Face Culling, 전용 파이프라인) ──
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_chunkPipeline);
     for (auto& [coord, data] : m_chunkBuffers) {
-        if (data.buffer == VK_NULL_HANDLE || data.count == 0) continue;
+        if (data.vertexBuffer == VK_NULL_HANDLE || data.indexCount == 0) continue;
 
         glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
         glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
         if (!m_frustum.containsAABB(chunkMin, chunkMax)) continue;
 
-        VkBuffer     buffers[] = { m_vertexBuffer, data.buffer };
-        VkDeviceSize offs[]    = { 0, 0 };
-        vkCmdBindVertexBuffers(cmd, 0, 2, buffers, offs);
-        vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), data.count, 0, 0, 0);
+        VkBuffer     vBuf[] = { data.vertexBuffer };
+        VkDeviceSize offs[] = { 0 };
+        vkCmdBindVertexBuffers(cmd, 0, 1, vBuf, offs);
+        vkCmdBindIndexBuffer(cmd, data.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
     }
+
+    // ── 플레이어 / 셀렉터 (인스턴싱 파이프라인) ──
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+    vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
     if (m_showSelector) {
         VkBuffer     sBufs[] = {m_selectorVertexBuffer, m_selectorInstBuffer};
@@ -1143,39 +1250,104 @@ void VulkanContext::createSelectorBuffers() {
 }
 
 void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
-    std::vector<InstanceData> instances;
+    // 6개 면의 로컬 정점 오프셋, 법선, 이웃 오프셋, 윗면 여부
+    struct FaceDef {
+        glm::vec3  verts[4];
+        glm::vec3  normal;
+        glm::ivec3 neighborOff;
+        bool       isTop;
+    };
+    static const FaceDef kFaces[6] = {
+        // Top (+Z)
+        {{{-0.5f,-0.5f,0.5f},{0.5f,-0.5f,0.5f},{0.5f,0.5f,0.5f},{-0.5f,0.5f,0.5f}}, {0,0,1},  {0,0,1},  true  },
+        // Bottom (-Z)
+        {{{-0.5f,0.5f,-0.5f},{0.5f,0.5f,-0.5f},{0.5f,-0.5f,-0.5f},{-0.5f,-0.5f,-0.5f}}, {0,0,-1}, {0,0,-1}, false },
+        // Front (+Y)
+        {{{0.5f,0.5f,-0.5f},{-0.5f,0.5f,-0.5f},{-0.5f,0.5f,0.5f},{0.5f,0.5f,0.5f}},  {0,1,0},  {0,1,0},  false },
+        // Back (-Y)
+        {{{-0.5f,-0.5f,-0.5f},{0.5f,-0.5f,-0.5f},{0.5f,-0.5f,0.5f},{-0.5f,-0.5f,0.5f}}, {0,-1,0}, {0,-1,0}, false },
+        // Right (+X)
+        {{{0.5f,-0.5f,-0.5f},{0.5f,0.5f,-0.5f},{0.5f,0.5f,0.5f},{0.5f,-0.5f,0.5f}},  {1,0,0},  {1,0,0},  false },
+        // Left (-X)
+        {{{-0.5f,0.5f,-0.5f},{-0.5f,-0.5f,-0.5f},{-0.5f,-0.5f,0.5f},{-0.5f,0.5f,0.5f}}, {-1,0,0}, {-1,0,0}, false },
+    };
+
     const int baseX = coord.x * CHUNK_SIZE;
     const int baseY = coord.y * CHUNK_SIZE;
 
-    for (int z = 0; z < CHUNK_DEPTH; z++)
-        for (int ly = 0; ly < CHUNK_SIZE; ly++)
-            for (int lx = 0; lx < CHUNK_SIZE; lx++) {
-                TileType t = chunk.tiles[z][ly][lx];
-                if (t == TileType::AIR) continue;
-                instances.push_back({m_world.tileCenter(baseX + lx, baseY + ly, z), World::tileColor(t), World::tileSideColor(t)});
-            }
+    std::vector<ChunkVertex> vertices;
+    std::vector<uint32_t>    indices;
+
+    for (int z  = 0; z  < CHUNK_DEPTH; z++)
+    for (int ly = 0; ly < CHUNK_SIZE;  ly++)
+    for (int lx = 0; lx < CHUNK_SIZE;  lx++) {
+        TileType t = chunk.tiles[z][ly][lx];
+        if (t == TileType::AIR) continue;
+
+        const int wx = baseX + lx;
+        const int wy = baseY + ly;
+        const glm::vec3 topColor  = World::tileColor(t);
+        const glm::vec3 sideColor = World::tileSideColor(t);
+        const glm::vec3 center    = { (float)wx, (float)wy, (float)z };
+
+        for (const auto& face : kFaces) {
+            // 이웃 타일이 불투명하면 이 면은 보이지 않음 — 스킵
+            TileType neighbor = m_world.getTile(
+                wx + face.neighborOff.x,
+                wy + face.neighborOff.y,
+                z  + face.neighborOff.z
+            );
+            if (neighbor != TileType::AIR) continue;
+
+            const glm::vec3 color = face.isTop ? topColor : sideColor;
+            const uint32_t  base  = (uint32_t)vertices.size();
+
+            for (int i = 0; i < 4; i++)
+                vertices.push_back({ center + face.verts[i], face.normal, color });
+
+            indices.insert(indices.end(), {
+                base+0, base+1, base+2,
+                base+0, base+2, base+3
+            });
+        }
+    }
 
     auto& data = m_chunkBuffers[coord];
 
-    if (data.buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(m_device, data.buffer, nullptr);
-        vkFreeMemory(m_device, data.memory, nullptr);
-        data.buffer = VK_NULL_HANDLE;
-        data.memory = VK_NULL_HANDLE;
+    // 기존 버퍼 해제
+    if (data.vertexBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_device, data.vertexBuffer, nullptr);
+        vkFreeMemory(m_device, data.vertexMemory, nullptr);
+        data.vertexBuffer = VK_NULL_HANDLE;
+    }
+    if (data.indexBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_device, data.indexBuffer, nullptr);
+        vkFreeMemory(m_device, data.indexMemory, nullptr);
+        data.indexBuffer = VK_NULL_HANDLE;
     }
 
-    data.count = (uint32_t)instances.size();
-    if (data.count == 0) return;
+    data.indexCount = (uint32_t)indices.size();
+    if (data.indexCount == 0) return;
 
-    VkDeviceSize size = sizeof(InstanceData) * data.count;
-    createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    // 버텍스 버퍼
+    VkDeviceSize vSize = sizeof(ChunkVertex) * vertices.size();
+    createBuffer(vSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        data.buffer, data.memory);
+        data.vertexBuffer, data.vertexMemory);
+    void* vMapped;
+    vkMapMemory(m_device, data.vertexMemory, 0, vSize, 0, &vMapped);
+    memcpy(vMapped, vertices.data(), vSize);
+    vkUnmapMemory(m_device, data.vertexMemory);
 
-    void* mapped;
-    vkMapMemory(m_device, data.memory, 0, size, 0, &mapped);
-    memcpy(mapped, instances.data(), size);
-    vkUnmapMemory(m_device, data.memory);
+    // 인덱스 버퍼
+    VkDeviceSize iSize = sizeof(uint32_t) * indices.size();
+    createBuffer(iSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        data.indexBuffer, data.indexMemory);
+    void* iMapped;
+    vkMapMemory(m_device, data.indexMemory, 0, iSize, 0, &iMapped);
+    memcpy(iMapped, indices.data(), iSize);
+    vkUnmapMemory(m_device, data.indexMemory);
 }
 
 void VulkanContext::rebuildDirtyChunks() {

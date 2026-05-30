@@ -197,6 +197,17 @@ Vulkan 공부 겸 엔진 개발 기록.
 - vertex shader: `instanceTopColor / instanceSideColor` 두 색상 fragment로 전달.
 - fragment shader: `step(0.9, fragNormal.z)`로 윗면 판별 → `mix(sideColor, topColor, isTop)`으로 색상 선택.
 - 텍스처 전환 시 `topColor/sideColor` → `topTexId/sideTexId`로 교체만 하면 되는 구조 — 호환성 확보.
+
+### Hidden Face Culling + 청크 메시 생성
+- **인스턴싱 → 청크별 동적 메시**로 전환 — 인접 타일이 있는 면은 버텍스 버퍼에 추가하지 않음.
+- `ChunkVertex { pos, normal, color }` 신규 구조체 — color는 윗면이면 topColor, 옆/아랫면이면 sideColor로 빌드 시 구워짐.
+- 6면 정의 테이블(`kFaces`) — 각 면의 4개 로컬 정점 오프셋, 법선, 이웃 오프셋(neighbor check 방향), isTop 플래그를 정적 배열로 정의.
+- `buildChunkBuffer`: 각 타일 6방향 이웃 타일을 `World::getTile`로 조회 → AIR이면 해당 면의 버텍스 4개+인덱스 6개 추가, AIR이 아니면 스킵.
+- 인덱스 타입 `uint16` → `uint32` — 32×32×8 청크 최악 케이스 294,912 인덱스로 uint16 한계(65535) 초과.
+- `chunk.vert` / `chunk.frag` 신규 셰이더 — 인스턴스 속성 없이 per-vertex color 사용, fragment는 Lambert만.
+- `m_chunkPipeline` 신규 파이프라인 — binding 1개(ChunkVertex), no instancing. 기존 `m_pipeline`(플레이어/셀렉터 인스턴싱)과 공존.
+- `recordCommandBuffer`: 청크는 `m_chunkPipeline`으로 draw, 이후 `m_pipeline`으로 전환하여 플레이어/셀렉터 draw.
+- 청크 `ChunkRenderData`: 단일 버퍼 → `vertexBuffer + indexBuffer` 쌍으로 교체.
 ---
 
 ## 게임 설계 메모
