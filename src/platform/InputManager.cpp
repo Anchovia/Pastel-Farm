@@ -13,7 +13,8 @@ PlayerInput InputManager::pollInput() {
 
     // Mouse position and click state
     glfwGetCursorPos(m_window, &input.mouseX, &input.mouseY);
-    input.leftClick = glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    input.leftClick  = glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT)  == GLFW_PRESS;
+    input.rightClick = glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
     // Window size
     glfwGetFramebufferSize(m_window, &input.windowWidth, &input.windowHeight);

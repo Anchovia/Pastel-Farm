@@ -60,6 +60,7 @@
 - 다단계 지형 — Z=1 언덕 + Z=2 정상, 행별 범위 테이블로 불규칙 지형 정의. 절벽 옆면 갈색/정상 초록 자동 적용
 - 3D 충돌 — `canOccupy`에서 발 아래(Z) walkable + 몸통 높이(Z+1) AIR 이중 체크. 높이 차이 있는 블록 측면 통과 방지
 - 청크 로드/언로드 + 절차적 지형 — FBM noise 기반 `TerrainGen`, load radius=3/unload radius=4, 플레이어 이동 시 자동 생성/해제. 무한 월드 실현
+- 블록 설치/파괴 — 좌클릭=파괴(AIR), 우클릭=설치(STONE). 타겟 Z 자동 탐색(topmost non-AIR), dirty 청크 즉시 GPU 재빌드
 ---
 
 ## 프로젝트 구조

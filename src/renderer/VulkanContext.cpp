@@ -1314,6 +1314,10 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
 
     auto& data = m_chunkBuffers[coord];
 
+    // Wait for GPU before destroying buffers that may still be in flight
+    if (data.vertexBuffer != VK_NULL_HANDLE || data.indexBuffer != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(m_device);
+
     // Release old buffers
     if (data.vertexBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(m_device, data.vertexBuffer, nullptr);
@@ -1352,6 +1356,12 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
 
 void VulkanContext::rebuildDirtyChunks() {
     // Free GPU buffers for chunks no longer in the world
+    bool hasUnloaded = false;
+    for (auto& [coord, data] : m_chunkBuffers)
+        if (m_world.chunks().find(coord) == m_world.chunks().end()) { hasUnloaded = true; break; }
+    if (hasUnloaded)
+        vkDeviceWaitIdle(m_device);
+
     for (auto it = m_chunkBuffers.begin(); it != m_chunkBuffers.end(); ) {
         if (m_world.chunks().find(it->first) == m_world.chunks().end()) {
             auto& d = it->second;

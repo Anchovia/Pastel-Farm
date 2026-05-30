@@ -13,20 +13,21 @@ struct PlayerInput {
     bool moveRight = false;
     double mouseX = 0.0;
     double mouseY = 0.0;
-    bool leftClick = false;
+    bool leftClick  = false;
+    bool rightClick = false;
     int windowWidth = 1280;
     int windowHeight = 720;
 };
 
 class GameState {
 public:
-    void update(float dt, const PlayerInput& input, const Camera& camera, const World& world);
+    void update(float dt, const PlayerInput& input, const Camera& camera, World& world);
 
     const Player& player() const { return m_player; }
     const std::optional<glm::ivec3>& targetTile() const { return m_targetTile; }
 
 private:
-    void updateTargetTile(const World& world);
+    void updateTargetTile(World& world);
 
     Player m_player;
     std::optional<glm::ivec3> m_targetTile;

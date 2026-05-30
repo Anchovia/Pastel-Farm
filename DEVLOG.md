@@ -229,6 +229,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `VulkanContext::rebuildDirtyChunks()` — before rebuilding, frees GPU buffers for chunks no longer in `m_world.chunks()`.
 - `main.cpp` — detects player chunk change each frame; load radius=3, unload radius=4.
 - Handcrafted initial map removed; `World` constructor is now empty — all terrain generated on demand.
+
+### Block Placement/Destruction
+- `PlayerInput::rightClick` added; `InputManager` polls `GLFW_MOUSE_BUTTON_RIGHT`.
+- `GameState::update` signature changed from `const World&` to `World&` to allow tile mutation.
+- Left click → `world.setTile(target, TileType::AIR)` (destroy). Right click → `world.setTile(target.xy, z+1, TileType::STONE)` (place on top).
+- Target tile Z improved: after XY raycast hit, scans from `CHUNK_DEPTH-1` down to find topmost non-AIR tile — elevated blocks are now selectable. `delta.z` clamped ±1 instead of forced 0.
+- GPU sync fix: `vkDeviceWaitIdle` called before destroying chunk buffers in `buildChunkBuffer` and before unloaded-chunk cleanup in `rebuildDirtyChunks` — prevents VUID-vkDestroyBuffer-buffer-00922 when tile changes trigger immediate buffer rebuild.
 ---
 
 ## 게임 설계 메모

@@ -18,7 +18,7 @@ bool canOccupy(const World& world, const glm::vec3& position) {
 }
 }
 
-void GameState::update(float dt, const PlayerInput& input, const Camera& camera, const World& world) {
+void GameState::update(float dt, const PlayerInput& input, const Camera& camera, World& world) {
     const glm::vec3& camPos = camera.position();
     const glm::vec3& playerPos = m_player.position();
 
@@ -64,20 +64,36 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                 glm::vec3 hitPoint = camPos + rayDir * t;
 
                 glm::ivec3 pickedTile = world.worldToTile(hitPoint);
+
+                // Find topmost non-AIR tile at this XY
+                for (int z = CHUNK_DEPTH - 1; z >= 0; z--) {
+                    if (world.getTile(pickedTile.x, pickedTile.y, z) != TileType::AIR) {
+                        pickedTile.z = z;
+                        break;
+                    }
+                }
+
                 glm::ivec3 playerTile = world.worldToTile(m_player.position());
 
                 glm::ivec3 delta = pickedTile - playerTile;
                 delta.x = std::clamp(delta.x, -1, 1);
                 delta.y = std::clamp(delta.y, -1, 1);
-                delta.z = 0;
+                delta.z = std::clamp(delta.z, -1, 1);
 
                 glm::ivec3 finalTargetTile = playerTile + delta;
 
                 if (world.inBounds(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z)) {
                     m_targetTile = finalTargetTile;
 
-                    if (input.leftClick) {
-                        // ??
+                    if (input.leftClick)
+                        world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
+
+                    if (input.rightClick) {
+                        int px = finalTargetTile.x;
+                        int py = finalTargetTile.y;
+                        int pz = finalTargetTile.z + 1;
+                        if (world.getTile(px, py, pz) == TileType::AIR)
+                            world.setTile(px, py, pz, TileType::STONE);
                     }
                 }
                 else {
@@ -88,7 +104,7 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
     }
 }
 
-void GameState::updateTargetTile(const World& world) {
+void GameState::updateTargetTile(World& world) {
     glm::vec3 targetPosition = m_player.position();
     targetPosition.x += m_player.facingDirection().x;
     targetPosition.y += m_player.facingDirection().y;
