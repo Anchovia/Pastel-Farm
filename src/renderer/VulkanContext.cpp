@@ -1351,6 +1351,25 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
 }
 
 void VulkanContext::rebuildDirtyChunks() {
+    // Free GPU buffers for chunks no longer in the world
+    for (auto it = m_chunkBuffers.begin(); it != m_chunkBuffers.end(); ) {
+        if (m_world.chunks().find(it->first) == m_world.chunks().end()) {
+            auto& d = it->second;
+            if (d.vertexBuffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(m_device, d.vertexBuffer, nullptr);
+                vkFreeMemory(m_device, d.vertexMemory, nullptr);
+            }
+            if (d.indexBuffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(m_device, d.indexBuffer, nullptr);
+                vkFreeMemory(m_device, d.indexMemory, nullptr);
+            }
+            it = m_chunkBuffers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Rebuild dirty chunks
     for (auto& [coord, chunk] : m_world.chunks()) {
         if (!chunk.dirty) continue;
         buildChunkBuffer(coord, chunk);

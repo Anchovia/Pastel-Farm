@@ -219,6 +219,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `canOccupy` in `GameState.cpp`: added body-height check — destination tile at `z+1` must be AIR in addition to `isWalkable(x, y, z)`.
 - Previously only the ground tile (Z=0) was checked; player could walk through elevated blocks at Z=1/Z=2.
 - Step-up logic (auto-climb 1 block) and slope movement deferred to later gameplay pass.
+
+### Chunk Load/Unload + Procedural Terrain
+- `TerrainGen.h/cpp` (new): deterministic hash-based FBM noise (4 octaves, no external library). `generate(cx, cy, chunk)` fills a chunk procedurally.
+- Terrain rules: Z=0 always solid (GRASS or DIRT by biome noise), Z=1 hill where height > 0.45, Z=2 stone peak where height > 0.65.
+- Two noise channels: `HEIGHT_SCALE=1/32` for elevation shape, `BIOME_SCALE=1/24` for GRASS/DIRT distribution.
+- `World::loadChunksAround(cx, cy, radius)` — generates unloaded chunks within radius on demand.
+- `World::unloadChunksOutside(cx, cy, radius)` — erases chunks beyond radius from `m_chunks`.
+- `VulkanContext::rebuildDirtyChunks()` — before rebuilding, frees GPU buffers for chunks no longer in `m_world.chunks()`.
+- `main.cpp` — detects player chunk change each frame; load radius=3, unload radius=4.
+- Handcrafted initial map removed; `World` constructor is now empty — all terrain generated on demand.
 ---
 
 ## 게임 설계 메모

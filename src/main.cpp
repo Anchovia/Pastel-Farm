@@ -3,8 +3,12 @@
 #include "platform/InputManager.h"
 #include "renderer/VulkanContext.h"
 #include "world/World.h"
+#include "world/Chunk.h"
 #include <iostream>
 #include "game/Camera.h"
+
+static constexpr int LOAD_RADIUS   = 3;
+static constexpr int UNLOAD_RADIUS = 4;
 
 int main() {
     try {
@@ -15,8 +19,16 @@ int main() {
         InputManager  inputManager(window.handle());
         Camera camera(45.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
 
-        float orbitAngle = 45.0f;
-        double        lastTime = glfwGetTime();
+        // Initial chunk load around spawn
+        glm::ivec2 spawnChunk = World::chunkCoord(
+            (int)gameState.player().position().x,
+            (int)gameState.player().position().y
+        );
+        world.loadChunksAround(spawnChunk.x, spawnChunk.y, LOAD_RADIUS);
+        glm::ivec2 lastPlayerChunk = spawnChunk;
+
+        float  orbitAngle = 45.0f;
+        double lastTime   = glfwGetTime();
 
         while (!window.shouldClose()) {
             window.pollEvents();
@@ -26,9 +38,8 @@ int main() {
             lastTime = now;
 
             GLFWwindow* win = window.handle();
-            if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+            if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
                 glfwSetWindowShouldClose(win, GLFW_TRUE);
-            }
 
             const float rotSpeed = 90.0f * dt;
             if (glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS) orbitAngle -= rotSpeed;
@@ -36,13 +47,23 @@ int main() {
 
             PlayerInput input = inputManager.pollInput();
 
-            if (input.windowWidth > 0 && input.windowHeight > 0) {
+            if (input.windowWidth > 0 && input.windowHeight > 0)
                 camera.setAspectRatio((float)input.windowWidth / input.windowHeight);
-            }
 
             camera.update(gameState.player().position(), orbitAngle);
-
             gameState.update(dt, input, camera, world);
+
+            // Load/unload chunks when player crosses a chunk boundary
+            glm::ivec2 playerChunk = World::chunkCoord(
+                (int)gameState.player().position().x,
+                (int)gameState.player().position().y
+            );
+            if (playerChunk != lastPlayerChunk) {
+                world.loadChunksAround(playerChunk.x, playerChunk.y, LOAD_RADIUS);
+                world.unloadChunksOutside(playerChunk.x, playerChunk.y, UNLOAD_RADIUS);
+                lastPlayerChunk = playerChunk;
+            }
+
             ctx.drawFrame(camera, gameState.player().position(), gameState.targetTile());
         }
         ctx.waitIdle();

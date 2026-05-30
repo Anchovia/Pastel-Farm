@@ -18,14 +18,19 @@ public:
     static glm::vec3 tileColor(TileType type);
     static glm::vec3 tileSideColor(TileType type);
 
+    void loadChunksAround(int cx, int cy, int radius);
+    void unloadChunksOutside(int cx, int cy, int radius);
+
+    static glm::ivec2 chunkCoord(int x, int y);
+
     const std::unordered_map<glm::ivec2, Chunk, IVec2Hash>& chunks() const { return m_chunks; }
           std::unordered_map<glm::ivec2, Chunk, IVec2Hash>& chunks()       { return m_chunks; }
 
 private:
+    void         generateChunk(int cx, int cy);
     Chunk&       getOrCreateChunk(int cx, int cy);
     const Chunk* getChunk(int cx, int cy) const;
 
-    static glm::ivec2 chunkCoord(int x, int y);
     static glm::ivec2 localCoord(int x, int y);
 
     std::unordered_map<glm::ivec2, Chunk, IVec2Hash> m_chunks;

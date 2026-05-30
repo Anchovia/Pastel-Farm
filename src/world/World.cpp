@@ -1,5 +1,7 @@
 #include "World.h"
+#include "TerrainGen.h"
 #include <cmath>
+#include <cstdlib>
 
 static const glm::vec3 kTileColors[] = {
     {0.0f,  0.0f,  0.0f },  // AIR 
@@ -10,73 +12,7 @@ static const glm::vec3 kTileColors[] = {
 };
 
 World::World() {
-    constexpr TileType G = TileType::GRASS;
-    constexpr TileType D = TileType::DIRT;
-    constexpr TileType W = TileType::WATER;
-    constexpr TileType S = TileType::STONE;
-
-    // 32×32 terrain: top-left water, 2 dirt patches, 2 stone patches, rest grass
-    const TileType ground[CHUNK_SIZE][CHUNK_SIZE] = {
-        { W,W,W,W,W,W,W,W,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { W,W,W,W,W,W,W,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { W,W,W,W,W,W,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { W,W,W,W,W,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { W,W,W,W,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { W,W,W,G,G,G,D,D,D,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { W,W,G,G,G,D,D,D,D,D, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { W,G,G,G,D,D,D,D,D,D, D,G,G,G,G,G,G,G,S,S, S,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,D,D,D,D,D,D, D,D,G,G,G,G,G,G,S,S, S,S,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,D,D,D,D,D, D,G,G,G,G,G,G,G,G,S, S,S,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,D,D,D,D, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,D,D,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,D,D,D,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, D,D,D,D,D,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, D,D,D,D,D,D,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,D,D,D,D,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,D,D,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,S,S,S,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,S,S,S,S,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,S,S,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-        { G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G,G,G,G,G,G,G,G,G, G,G },
-    };
-
-    Chunk& chunk = getOrCreateChunk(0, 0);
-    for (int y = 0; y < CHUNK_SIZE; y++)
-        for (int x = 0; x < CHUNK_SIZE; x++)
-            chunk.tiles[0][y][x] = ground[y][x];
-
-    // Height terrain — add tiles by {y, xStart, xEnd} ranges
-    struct Row { int y, x0, x1; };
-
-    // Z=1 hill (irregular oval, upper map)
-    const Row z1[] = {
-        {2, 15,27}, {3, 14,28}, {4, 13,29}, {5, 13,29},
-        {6, 12,30}, {7, 12,30}, {8, 12,30}, {9, 12,29},
-        {10,13,28}, {11,13,27}, {12,14,26}, {13,15,24}, {14,15,22},
-    };
-    for (const auto& r : z1)
-        for (int x = r.x0; x <= r.x1; x++)
-            chunk.tiles[1][r.y][x] = TileType::GRASS;
-
-    // Z=2 peak (smaller area inside Z=1)
-    const Row z2[] = {
-        {4, 17,24}, {5, 16,25}, {6, 16,26}, {7, 15,26},
-        {8, 15,26}, {9, 16,25}, {10,17,24},
-    };
-    for (const auto& r : z2)
-        for (int x = r.x0; x <= r.x1; x++)
-            chunk.tiles[2][r.y][x] = TileType::GRASS;
+    // Chunks are generated on demand via loadChunksAround()
 }
 
 glm::ivec2 World::chunkCoord(int x, int y) {
@@ -91,6 +27,30 @@ glm::ivec2 World::localCoord(int x, int y) {
         ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
         ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
     };
+}
+
+void World::generateChunk(int cx, int cy) {
+    Chunk& chunk = getOrCreateChunk(cx, cy);
+    TerrainGen::generate(cx, cy, chunk);
+}
+
+void World::loadChunksAround(int cx, int cy, int radius) {
+    for (int dy = -radius; dy <= radius; dy++)
+    for (int dx = -radius; dx <= radius; dx++) {
+        glm::ivec2 coord = { cx + dx, cy + dy };
+        if (m_chunks.find(coord) == m_chunks.end())
+            generateChunk(coord.x, coord.y);
+    }
+}
+
+void World::unloadChunksOutside(int cx, int cy, int radius) {
+    for (auto it = m_chunks.begin(); it != m_chunks.end(); ) {
+        if (std::abs(it->first.x - cx) > radius ||
+            std::abs(it->first.y - cy) > radius)
+            it = m_chunks.erase(it);
+        else
+            ++it;
+    }
 }
 
 Chunk& World::getOrCreateChunk(int cx, int cy) {

@@ -32,6 +32,7 @@ add_executable(engine
     src/platform/Window.cpp
     src/renderer/VulkanContext.cpp
     src/world/World.cpp
+    src/world/TerrainGen.cpp
  "src/game/Camera.h" "src/platform/InputManager.h" "src/platform/InputManager.cpp")
 
 target_include_directories(engine PRIVATE src ${Vulkan_INCLUDE_DIRS})
