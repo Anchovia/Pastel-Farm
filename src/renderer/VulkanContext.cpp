@@ -725,6 +725,11 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     for (auto& [coord, data] : m_chunkBuffers) {
         if (data.buffer == VK_NULL_HANDLE || data.count == 0) continue;
+
+        glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+        glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+        if (!m_frustum.containsAABB(chunkMin, chunkMax)) continue;
+
         VkBuffer     buffers[] = { m_vertexBuffer, data.buffer };
         VkDeviceSize offs[]    = { 0, 0 };
         vkCmdBindVertexBuffers(cmd, 0, 2, buffers, offs);
@@ -794,6 +799,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
     updatePlayerInstanceBuffer(playerPosition);
     updateSelectorInstanceBuffer(targetTile);
     rebuildDirtyChunks();
+    m_frustum = Frustum::extractFrom(camera.viewProj());
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 

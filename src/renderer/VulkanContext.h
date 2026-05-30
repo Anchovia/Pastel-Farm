@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include "world/Chunk.h"
+#include "renderer/Frustum.h"
 
 class Window;
 class World;
@@ -107,6 +108,7 @@ private:
         uint32_t       count  = 0;
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
+    Frustum                  m_frustum;
     VkBuffer                 m_playerInstBuffer     = VK_NULL_HANDLE;
     VkDeviceMemory           m_playerInstMemory     = VK_NULL_HANDLE;
     void*                    m_playerInstMapped     = nullptr;

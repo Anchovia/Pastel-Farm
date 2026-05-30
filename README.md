@@ -54,6 +54,7 @@
 - copyBuffer 동기화 개선 — `vkQueueWaitIdle`(큐 전체 블로킹) → `VkFence`(해당 전송만 대기)로 교체, 청크 런타임 로드 대비
 - World 3D 그리드 전환 — `m_grid[H][W]` → `m_grid[DEPTH][H][W]` (DEPTH=8), `TileType::AIR` 추가, 블록 배치/파괴 기반 마련
 - 청크 시스템 (16×16) — 고정 배열을 `unordered_map<ivec2, Chunk>`로 전환, dirty 플래그 기반 청크별 GPU 버퍼 재빌드, 무한 월드 확장 기반 마련
+- Frustum Culling — Gribb & Hartmann 방법으로 viewProj에서 6평면 추출, 청크 AABB 테스트로 시야 밖 draw call 완전 차단
 ---
 
 ## 프로젝트 구조
@@ -81,6 +82,7 @@ game project/
    │  └─ Window.cpp
    ├─ renderer/
    │  ├─ Types.h           # Vertex, InstanceData, TileType 정의
+   │  ├─ Frustum.h         # Frustum 구조체 (6평면 추출 + AABB 테스트)
    │  ├─ VulkanContext.h   # Vulkan 렌더러 선언
    │  └─ VulkanContext.cpp # Vulkan 렌더러 구현
    └─ world/
@@ -120,7 +122,7 @@ game project/
 ### 최적화 우선순위
 1. ~~인스턴싱으로 드로우콜 감소~~ ✅
 2. ~~청크 기반 구조 전환~~ ✅
-3. 청크 단위 Frustum Culling
+3. ~~청크 단위 Frustum Culling~~ ✅
 4. 시야 밖 청크 언로드
 
 ---

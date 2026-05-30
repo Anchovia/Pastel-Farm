@@ -174,6 +174,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `rebuildDirtyChunks()`: 매 프레임 dirty 청크만 버퍼 재빌드 → 블록 변경 시 전체가 아닌 해당 청크만 GPU 업로드.
 - `recordCommandBuffer`: 청크 맵을 순회하며 청크당 draw call 1번 — 청크 단위 프러스텀 컬링 기반 마련.
 - `inBounds`: X/Y 무한 확장 대응으로 Z 범위만 검사.
+
+### Frustum Culling (청크 단위)
+- `renderer/Frustum.h` 신규 생성 — GLM만 의존하는 독립 구조체.
+- **Gribb & Hartmann 방법**: `viewProj` 행렬 행 조합으로 6개 평면(left/right/bottom/top/near/far)을 O(1)에 추출. 정규화 생략 — 부호 판정만 필요하므로 불필요한 sqrt 없음.
+- `containsAABB(min, max)`: 각 평면에 대해 "positive vertex"(법선 방향으로 가장 먼 꼭짓점)를 구해 평면 바깥이면 즉시 `false` 반환 — 최악 6번 dot product.
+- 청크 AABB: `min={cx*16, cy*16, 0}`, `max={(cx+1)*16, (cy+1)*16, 8}`.
+- `drawFrame`에서 `camera.viewProj()`로 매 프레임 frustum 갱신, `recordCommandBuffer`에서 각 청크 draw call 전 AABB 테스트 → 시야 밖 청크는 draw call 자체가 발생하지 않음.
+- 현재 청크가 (0,0) 하나뿐이라 실측 효과 없음 — 청크 수가 늘어나면 즉시 작동.
 ---
 
 ## 게임 설계 메모
