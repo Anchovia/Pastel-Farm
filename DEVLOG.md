@@ -276,6 +276,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - Dedicated `m_objectPipeline` reuses `m_pipelineLayout` (same UBO descriptor). `cullMode = NONE` — procedural cone/box winding isn't guaranteed outward-facing, so draw both sides (overdraw negligible for small meshes).
 - Drawn per chunk after chunk meshes, reusing the existing frustum-cull AABB test.
 - NOTE: trees no longer block movement (objects have no collision). Deferred to Phase 3 (tool system / object interaction).
+
+### In-game Time System
+- `DAY_DURATION = 120.0f` seconds per in-game day (adjustable constant in `GameState.h`).
+- `GameState` gains `m_time` (total elapsed seconds), `m_day` (int, increments each full day), `m_timeOfDay` (0.0 = midnight → 0.5 = noon → 1.0 = midnight). All three updated in `update()` each frame.
+- `day()` and `timeOfDay()` accessors exposed for the farming system (crop growth checks against `m_day`).
+- Sky clear color in `VulkanContext` now lerps across 4 keyframes keyed on `timeOfDay × 4`: midnight (dark navy), dawn (pink/orange), noon (sky blue), dusk (orange/red). Stored in `m_skyColor[4]`, set in `drawFrame()`, read in `recordCommandBuffer()`.
+- No dynamic lighting change yet — terrain brightness stays constant. Ambient light tie-in deferred to Phase 6 (rendering polish).
 ---
 
 ## 게임 설계 메모

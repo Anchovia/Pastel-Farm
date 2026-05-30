@@ -8,6 +8,8 @@
 class World;
 class Camera;
 
+static constexpr float DAY_DURATION = 120.0f; // seconds per in-game day
+
 struct PlayerInput {
     bool moveForward = false;
     bool moveBackward = false;
@@ -35,6 +37,9 @@ public:
     int selectedSlot() const { return m_selectedSlot; }
     const std::array<TileType, HOTBAR_SLOTS>& palette() const { return m_palette; }
 
+    int   day()       const { return m_day; }
+    float timeOfDay() const { return m_timeOfDay; } // 0.0=midnight, 0.5=noon, 1.0=midnight
+
 private:
     void updateTargetTile(World& world);
 
@@ -43,4 +48,8 @@ private:
 
     int m_selectedSlot = 0;
     std::array<TileType, HOTBAR_SLOTS> m_palette;
+
+    float m_time    = 0.0f;
+    int   m_day     = 0;
+    float m_timeOfDay = 0.0f;
 };

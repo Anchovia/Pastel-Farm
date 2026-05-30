@@ -1165,7 +1165,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkBeginCommandBuffer(cmd, &begin);
 
     VkClearValue clearValues[2];
-    clearValues[0].color        = {{0.08f, 0.08f, 0.12f, 1.0f}};
+    clearValues[0].color        = {{m_skyColor[0], m_skyColor[1], m_skyColor[2], 1.0f}};
     clearValues[1].depthStencil = {1.0f, 0};
     VkRenderPassBeginInfo rp{};
     rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1270,9 +1270,23 @@ void VulkanContext::createSyncObjects() {
 //  drawFrame
 // ============================================================
 void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                              int hotbarSelected, const std::array<TileType, HOTBAR_SLOTS>& palette) {
+                              int hotbarSelected, const std::array<TileType, HOTBAR_SLOTS>& palette, float timeOfDay) {
     m_hotbarSelected = hotbarSelected;
     m_hotbarPalette  = palette;
+
+    // Sky color: 4 keyframes keyed on timeOfDay (0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk)
+    static constexpr float kSkyKeys[4][3] = {
+        {0.05f, 0.05f, 0.12f}, // midnight
+        {0.85f, 0.55f, 0.35f}, // dawn
+        {0.45f, 0.72f, 0.95f}, // noon
+        {0.80f, 0.40f, 0.20f}, // dusk
+    };
+    const float t4  = timeOfDay * 4.0f;
+    const int   seg = static_cast<int>(t4) % 4;
+    const float f   = t4 - static_cast<int>(t4);
+    const int   next = (seg + 1) % 4;
+    for (int i = 0; i < 3; ++i)
+        m_skyColor[i] = kSkyKeys[seg][i] * (1.0f - f) + kSkyKeys[next][i] * f;
 
     // Wait for the previous frame using this slot to finish
     vkWaitForFences(m_device, 1, &m_inFlight[m_currentFrame], VK_TRUE, UINT64_MAX);

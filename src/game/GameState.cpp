@@ -27,6 +27,11 @@ GameState::GameState() {
 }
 
 void GameState::update(float dt, const PlayerInput& input, const Camera& camera, World& world) {
+    // Time
+    m_time += dt;
+    m_day = static_cast<int>(m_time / DAY_DURATION);
+    m_timeOfDay = std::fmod(m_time, DAY_DURATION) / DAY_DURATION;
+
     // Hotbar selection
     if (input.selectSlot >= 0 && input.selectSlot < HOTBAR_SLOTS)
         m_selectedSlot = input.selectSlot;
