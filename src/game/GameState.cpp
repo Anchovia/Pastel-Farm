@@ -13,16 +13,17 @@
 namespace {
 bool canOccupy(const World& world, const glm::vec3& position) {
     const glm::ivec3 tile = world.worldToTile(position);
-    return world.isWalkable(tile.x, tile.y, tile.z)
-        && world.getTile(tile.x, tile.y, tile.z + 1) == TileType::AIR;
+    TileType body = world.getTile(tile.x, tile.y, tile.z + 1);
+    bool bodyPassable = (body == TileType::AIR || body == TileType::WHEAT);
+    return world.isWalkable(tile.x, tile.y, tile.z) && bodyPassable;
 }
 }
 
 GameState::GameState() {
     m_palette = {
-        ItemType::BLOCK_GRASS,  ItemType::BLOCK_DIRT,  ItemType::BLOCK_STONE,
-        ItemType::BLOCK_WOOD,   ItemType::BLOCK_LEAVES, ItemType::BLOCK_WATER,
-        ItemType::TOOL_HOE,     ItemType::TOOL_AXE,    ItemType::NONE,
+        ItemType::BLOCK_GRASS,  ItemType::BLOCK_DIRT,   ItemType::BLOCK_STONE,
+        ItemType::BLOCK_WOOD,   ItemType::BLOCK_LEAVES,  ItemType::BLOCK_WATER,
+        ItemType::TOOL_HOE,     ItemType::TOOL_AXE,      ItemType::SEED_WHEAT,
     };
 }
 
@@ -31,6 +32,12 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
     m_time += dt;
     m_day = static_cast<int>(m_time / DAY_DURATION);
     m_timeOfDay = std::fmod(m_time, DAY_DURATION) / DAY_DURATION;
+
+    // Growth tick once per day
+    if (m_day != m_prevDay) {
+        world.growthTick(m_day);
+        m_prevDay = m_day;
+    }
 
     // Inventory toggle (I key — edge-detect to avoid repeated triggers)
     if (input.toggleInventory && !m_prevToggleInv)
@@ -145,15 +152,28 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
 
                         if (input.rightClick) {
                             ItemType item = m_palette[m_selectedSlot];
+                            const int tx = finalTargetTile.x;
+                            const int ty = finalTargetTile.y;
+                            const int tz = finalTargetTile.z;
+
                             if (isBlock(item)) {
                                 TileType block = itemToTile(item);
-                                int px = finalTargetTile.x;
-                                int py = finalTargetTile.y;
-                                int pz = finalTargetTile.z + 1;
-                                if (world.getTile(px, py, pz) == TileType::AIR)
-                                    world.setTile(px, py, pz, block);
+                                if (world.getTile(tx, ty, tz + 1) == TileType::AIR)
+                                    world.setTile(tx, ty, tz + 1, block);
+                            } else if (item == ItemType::TOOL_HOE) {
+                                TileType cur = world.getTile(tx, ty, tz);
+                                if (cur == TileType::GRASS || cur == TileType::DIRT)
+                                    world.setTile(tx, ty, tz, TileType::FARMLAND);
+                            } else if (item == ItemType::SEED_WHEAT) {
+                                if (world.getTile(tx, ty, tz) == TileType::FARMLAND &&
+                                    world.getTile(tx, ty, tz + 1) == TileType::AIR) {
+                                    world.setTile(tx, ty, tz + 1, TileType::WHEAT);
+                                    TileState s;
+                                    s.growthStage    = 0;
+                                    s.lastUpdatedDay = (uint32_t)m_day;
+                                    world.setTileState(tx, ty, tz + 1, s);
+                                }
                             }
-                            // Tool actions handled in later phase (hoe -> farmland, etc.)
                         }
                     }
                     else {

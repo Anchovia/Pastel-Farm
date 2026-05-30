@@ -1753,8 +1753,9 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
 
         const int wx = baseX + lx;
         const int wy = baseY + ly;
-        const glm::vec3 topColor  = World::tileColor(t);
-        const glm::vec3 sideColor = World::tileSideColor(t);
+        const uint8_t   growthStage = chunk.states[z][ly][lx].growthStage;
+        const glm::vec3 topColor    = World::tileColor(t, growthStage);
+        const glm::vec3 sideColor   = World::tileSideColor(t);
         const glm::vec3 center    = { (float)wx, (float)wy, (float)z };
 
         for (const auto& face : kFaces) {

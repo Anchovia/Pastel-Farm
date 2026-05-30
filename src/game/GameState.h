@@ -57,5 +57,6 @@ private:
 
     float m_time      = 0.0f;
     int   m_day       = 0;
+    int   m_prevDay   = -1;
     float m_timeOfDay = 0.0f;
 };

@@ -11,6 +11,8 @@ static const glm::vec3 kTileColors[] = {
     {0.55f, 0.55f, 0.55f},  // STONE
     {0.42f, 0.28f, 0.15f},  // WOOD
     {0.30f, 0.55f, 0.25f},  // LEAVES
+    {0.30f, 0.18f, 0.08f},  // FARMLAND
+    {0.58f, 0.75f, 0.32f},  // WHEAT (stage 0 fallback; overridden by growthStage)
 };
 
 World::World() {
@@ -82,13 +84,51 @@ void World::setTile(int x, int y, int z, TileType t) {
     chunk.dirty = true;
 }
 
+TileState World::getTileState(int x, int y, int z) const {
+    if (z < 0 || z >= CHUNK_DEPTH) return {};
+    auto cc = chunkCoord(x, y);
+    const Chunk* chunk = getChunk(cc.x, cc.y);
+    if (!chunk) return {};
+    auto lc = localCoord(x, y);
+    return chunk->states[z][lc.y][lc.x];
+}
+
+void World::setTileState(int x, int y, int z, const TileState& s) {
+    if (z < 0 || z >= CHUNK_DEPTH) return;
+    auto cc = chunkCoord(x, y);
+    Chunk& chunk = getOrCreateChunk(cc.x, cc.y);
+    auto lc = localCoord(x, y);
+    chunk.states[z][lc.y][lc.x] = s;
+}
+
+static constexpr int GROWTH_DAYS = 2;
+
+void World::growthTick(int currentDay) {
+    for (auto& [coord, chunk] : m_chunks) {
+        bool changed = false;
+        for (int z  = 0; z  < CHUNK_DEPTH; z++)
+        for (int ly = 0; ly < CHUNK_SIZE;  ly++)
+        for (int lx = 0; lx < CHUNK_SIZE;  lx++) {
+            if (chunk.tiles[z][ly][lx] != TileType::WHEAT) continue;
+            TileState& s = chunk.states[z][ly][lx];
+            if (s.growthStage >= 3) continue;
+            if (currentDay - (int)s.lastUpdatedDay >= GROWTH_DAYS) {
+                s.growthStage++;
+                s.lastUpdatedDay = (uint32_t)currentDay;
+                changed = true;
+            }
+        }
+        if (changed) chunk.dirty = true;
+    }
+}
+
 bool World::inBounds(int x, int y, int z) const {
     return z >= 0 && z < CHUNK_DEPTH;
 }
 
 bool World::isWalkable(int x, int y, int z) const {
     TileType t = getTile(x, y, z);
-    return t != TileType::AIR && t != TileType::WATER;
+    return t != TileType::AIR && t != TileType::WATER && t != TileType::WHEAT;
 }
 
 glm::ivec3 World::worldToTile(const glm::vec3& position) const {
@@ -103,7 +143,16 @@ glm::vec3 World::tileCenter(int x, int y, int z) const {
     return { static_cast<float>(x), static_cast<float>(y), static_cast<float>(z) };
 }
 
-glm::vec3 World::tileColor(TileType type) {
+glm::vec3 World::tileColor(TileType type, uint8_t growthStage) {
+    if (type == TileType::WHEAT) {
+        static const glm::vec3 kWheatColors[4] = {
+            {0.58f, 0.75f, 0.32f},  // stage 0: pale green sprout
+            {0.70f, 0.78f, 0.22f},  // stage 1: yellow-green
+            {0.85f, 0.78f, 0.12f},  // stage 2: yellow
+            {0.95f, 0.78f, 0.05f},  // stage 3: golden
+        };
+        return kWheatColors[growthStage < 4 ? growthStage : 3];
+    }
     return kTileColors[(int)type];
 }
 
@@ -115,6 +164,8 @@ static const glm::vec3 kTileSideColors[] = {
     {0.38f, 0.38f, 0.38f},  // STONE
     {0.34f, 0.22f, 0.11f},  // WOOD
     {0.24f, 0.45f, 0.20f},  // LEAVES
+    {0.22f, 0.12f, 0.05f},  // FARMLAND
+    {0.50f, 0.38f, 0.15f},  // WHEAT (straw)
 };
 
 glm::vec3 World::tileSideColor(TileType type) {

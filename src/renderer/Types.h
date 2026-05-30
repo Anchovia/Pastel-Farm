@@ -11,6 +11,8 @@ enum class TileType : uint8_t {
     STONE,
     WOOD,
     LEAVES,
+    FARMLAND,
+    WHEAT,
 };
 
 enum class ItemType : uint8_t {
@@ -23,6 +25,7 @@ enum class ItemType : uint8_t {
     BLOCK_WATER,
     TOOL_HOE,
     TOOL_AXE,
+    SEED_WHEAT,
     COUNT,
 };
 
@@ -53,6 +56,7 @@ inline glm::vec3 itemColor(ItemType t) {
         case ItemType::BLOCK_WATER:  return {0.20f, 0.45f, 0.70f};
         case ItemType::TOOL_HOE:     return {0.80f, 0.70f, 0.50f};
         case ItemType::TOOL_AXE:     return {0.50f, 0.50f, 0.55f};
+        case ItemType::SEED_WHEAT:   return {0.80f, 0.75f, 0.20f};
         default:                     return {0.0f,  0.0f,  0.0f};
     }
 }

@@ -7,15 +7,20 @@ class World {
 public:
     World();
 
-    TileType getTile(int x, int y, int z) const;
-    void     setTile(int x, int y, int z, TileType t);
+    TileType  getTile(int x, int y, int z) const;
+    void      setTile(int x, int y, int z, TileType t);
+
+    TileState getTileState(int x, int y, int z) const;
+    void      setTileState(int x, int y, int z, const TileState& s);
+
+    void growthTick(int currentDay);
 
     bool       inBounds(int x, int y, int z) const;
     bool       isWalkable(int x, int y, int z) const;
     glm::ivec3 worldToTile(const glm::vec3& position) const;
     glm::vec3  tileCenter(int x, int y, int z) const;
 
-    static glm::vec3 tileColor(TileType type);
+    static glm::vec3 tileColor(TileType type, uint8_t growthStage = 0);
     static glm::vec3 tileSideColor(TileType type);
 
     void loadChunksAround(int cx, int cy, int radius);

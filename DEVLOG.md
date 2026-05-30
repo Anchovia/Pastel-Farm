@@ -291,6 +291,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `I` key toggles inventory; edge-detected with `m_prevToggleInv` to avoid repeated fires on hold.
 - Inventory click: mouse position checked against each slot rect using the shared layout constants. Matching slot's `ItemType` written to `m_palette[m_selectedSlot]`.
 - `VulkanContext`: `updateHotbar()` now reads `ItemType` and calls `itemColor()` directly — no more `World::tileColor` in the UI path. Inventory open → full-screen dim quad + panel background + 4×2 item grid rendered on top of hotbar. UI vertex buffer expanded from 256 to 512.
+
+### Farming System (Farmland / Seeds / Growth)
+- New `TileType`: `FARMLAND` (dark moist brown), `WHEAT` (growth-stage color).
+- New `ItemType`: `SEED_WHEAT` (replaces the last NONE slot in the default palette).
+- **HOE right-click** on GRASS/DIRT → replaces that tile with FARMLAND (same Z, in-place tilling).
+- **SEED_WHEAT right-click** on FARMLAND → places WHEAT at Z+1, initializes `TileState { growthStage=0, lastUpdatedDay=currentDay }`.
+- **Growth**: `World::growthTick(currentDay)` called once per in-game day from `GameState`. Iterates all loaded WHEAT tiles; if `currentDay - lastUpdatedDay >= 2`, increments `growthStage` (max 3) and marks chunk dirty.
+- **WHEAT color** is growth-stage-aware: `World::tileColor(TileType, uint8_t growthStage)` returns pale green → yellow-green → yellow → golden. `buildChunkBuffer` reads `chunk.states[z][ly][lx].growthStage` for WHEAT tiles.
+- **Harvest**: left-click on any WHEAT → AIR (existing destroy logic). FARMLAND below is unaffected.
+- **Walkability**: `isWalkable` excludes WHEAT (crop is not solid ground). `canOccupy` treats WHEAT as passable for the body-height check so the player can walk over farmland with growing crops.
 ---
 
 ## 게임 설계 메모
