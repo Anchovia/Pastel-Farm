@@ -4,6 +4,7 @@
 #include <optional>
 
 class World;
+class Camera;
 
 struct PlayerInput {
     bool moveForward = false;
@@ -19,7 +20,7 @@ struct PlayerInput {
 
 class GameState {
 public:
-    void update(float dt, const PlayerInput& input, float cameraAngleDegrees, const World& world);
+    void update(float dt, const PlayerInput& input, const Camera& camera, const World& world);
 
     const Player& player() const { return m_player; }
     const std::optional<glm::ivec2>& targetTile() const { return m_targetTile; }

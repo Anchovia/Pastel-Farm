@@ -2,6 +2,7 @@
 #include "renderer/Types.h"
 #include "platform/Window.h"
 #include "world/World.h"
+#include "game/Camera.h"
 
 #include <stdexcept>
 #include <iostream>
@@ -191,10 +192,6 @@ VulkanContext::~VulkanContext() {
 }
 
 void VulkanContext::waitIdle() { vkDeviceWaitIdle(m_device); }
-
-void VulkanContext::rotateOrbit(float degrees) {
-    m_orbitAngle += degrees;
-}
 
 // ============================================================
 //  Instance
@@ -769,7 +766,7 @@ void VulkanContext::createSyncObjects() {
 // ============================================================
 //  drawFrame
 // ============================================================
-void VulkanContext::drawFrame(const glm::vec3& playerPosition, const std::optional<glm::ivec2>& targetTile) {
+void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec2>& targetTile) {
     // Wait for the previous frame using this slot to finish
     vkWaitForFences(m_device, 1, &m_inFlight[m_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -786,7 +783,7 @@ void VulkanContext::drawFrame(const glm::vec3& playerPosition, const std::option
         throw std::runtime_error("Failed to acquire swapchain image");
 
     vkResetFences(m_device, 1, &m_inFlight[m_currentFrame]);
-    updateUniformBuffer(m_currentFrame, playerPosition);
+    updateUniformBuffer(m_currentFrame, camera);
     updatePlayerInstanceBuffer(playerPosition);
     updateSelectorInstanceBuffer(targetTile);
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
@@ -1050,23 +1047,11 @@ void VulkanContext::createDescriptorSets() {
 // ============================================================
 //  Update uniform buffer (called every frame)
 // ============================================================
-void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const glm::vec3& playerPosition) {
-    m_orbitTarget = {playerPosition.x, playerPosition.y, 0.0f};
-
-    float rad   = glm::radians(m_orbitAngle);
-    float pitch = glm::radians(m_orbitPitch);
-    glm::vec3 camPos = m_orbitTarget + glm::vec3{
-        m_orbitDistance * glm::cos(pitch) * glm::cos(rad),
-        m_orbitDistance * glm::cos(pitch) * glm::sin(rad),
-        m_orbitDistance * glm::sin(pitch)
-    };
-
+void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& camera) {
     UniformBufferObject ubo{};
     ubo.model = glm::mat4(1.0f);
-    ubo.view  = glm::lookAt(camPos, m_orbitTarget, glm::vec3{0.0f, 0.0f, 1.0f});
-    ubo.proj  = glm::perspective(glm::radians(45.0f),
-        (float)m_swapchainExtent.width / m_swapchainExtent.height, 0.1f, 100.0f);
-    ubo.proj[1][1] *= -1;
+    ubo.view = camera.view();
+    ubo.proj = camera.proj();
 
     memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }

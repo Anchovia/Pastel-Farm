@@ -3,6 +3,7 @@
 #include "renderer/VulkanContext.h"
 #include "world/World.h"
 #include <iostream>
+#include "game/Camera.h"
 
 int main() {
     try {
@@ -10,6 +11,10 @@ int main() {
         World         world;
         GameState     gameState;
         VulkanContext ctx(window, world);
+
+        Camera camera(45.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
+        float orbitAngle = 45.0f;
+
         double        lastTime = glfwGetTime();
 
         while (!window.shouldClose()) {
@@ -25,8 +30,8 @@ int main() {
             }
 
             const float rotSpeed = 90.0f * dt;
-            if (glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS) ctx.rotateOrbit(-rotSpeed);
-            if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) ctx.rotateOrbit(rotSpeed);
+            if (glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS) orbitAngle -= rotSpeed;
+            if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) orbitAngle += rotSpeed;
 
             PlayerInput input{};
             input.moveForward  = glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS;
@@ -39,9 +44,14 @@ int main() {
             input.leftClick = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
             glfwGetFramebufferSize(win, &input.windowWidth, &input.windowHeight);
 
-            gameState.update(dt, input, ctx.orbitAngle(), world);
+            if (input.windowWidth > 0 && input.windowHeight > 0) {
+                camera.setAspectRatio((float)input.windowWidth / input.windowHeight);
+            }
 
-            ctx.drawFrame(gameState.player().position(), gameState.targetTile());
+            camera.update(gameState.player().position(), orbitAngle);
+
+            gameState.update(dt, input, camera, world);
+            ctx.drawFrame(camera, gameState.player().position(), gameState.targetTile());
         }
         ctx.waitIdle();
     } catch (const std::exception& e) {

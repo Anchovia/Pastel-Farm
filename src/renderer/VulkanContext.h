@@ -8,16 +8,15 @@
 
 class Window;
 class World;
+class Camera;
 
 class VulkanContext {
 public:
     VulkanContext(Window& window, World& world);
     ~VulkanContext();
 
-    void drawFrame(const glm::vec3& playerPosition, const std::optional<glm::ivec2>& targetTile);
+    void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec2>& targetTile);
     void waitIdle();
-    void rotateOrbit(float degrees);
-    float orbitAngle() const { return m_orbitAngle; }
 
 private:
     void createInstance();
@@ -42,7 +41,7 @@ private:
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
-    void updateUniformBuffer(uint32_t currentFrame, const glm::vec3& playerPosition);
+    void updateUniformBuffer(uint32_t currentFrame, const Camera& camera);
     void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
     void updateSelectorInstanceBuffer(const std::optional<glm::ivec2>& targetTile);
     void createDepthResources();
@@ -132,9 +131,4 @@ private:
     std::vector<VkSemaphore> m_renderFinished;
     std::vector<VkFence>     m_inFlight;
     uint32_t                 m_currentFrame     = 0;
-
-    glm::vec3 m_orbitTarget   = {0.0f, 0.0f, 0.0f};
-    float     m_orbitAngle    = 45.0f;
-    float     m_orbitDistance = 14.0f;
-    float     m_orbitPitch    = 45.0f;
 };

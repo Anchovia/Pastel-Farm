@@ -32,7 +32,7 @@ add_executable(engine
     src/platform/Window.cpp
     src/renderer/VulkanContext.cpp
     src/world/World.cpp
-)
+ "src/game/Camera.h")
 
 target_include_directories(engine PRIVATE src ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(engine PRIVATE Vulkan::Vulkan glfw glm::glm)

@@ -65,6 +65,7 @@ game project/
 └─ src/
    ├─ main.cpp             # 진입점: 창 생성 + 렌더 루프
    ├─ game/
+   │  ├─ Camera.h          # 카메라 상태 및 행렬 계산 캡슐화
    │  ├─ Player.h          # 플레이어 위치/이동 속도
    │  ├─ GameState.h       # 게임 상태 및 입력 스냅샷 선언
    │  └─ GameState.cpp     # 플레이어 이동/충돌 규칙 업데이트
