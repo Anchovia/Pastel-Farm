@@ -51,6 +51,7 @@
 - 상호작용 사거리 제한 — 플레이어 기준 반경 1칸(3x3) 내에서만 마우스 타겟팅이 되도록 Clamp 적용
 - Staging Buffer 도입 — 정적 메시 데이터를 임시 버퍼를 거쳐 GPU 전용 메모리(DEVICE_LOCAL)로 이전하여 렌더링 성능 최적화
 - 입력 시스템 분리 (InputManager) — 메인 루프에서 GLFW 입력 로직을 분리하여 확장성 및 가독성 향상
+- copyBuffer 동기화 개선 — `vkQueueWaitIdle`(큐 전체 블로킹) → `VkFence`(해당 전송만 대기)로 교체, 청크 런타임 로드 대비
 ---
 
 ## 프로젝트 구조
@@ -80,7 +81,7 @@ game project/
    │  ├─ Types.h           # Vertex, InstanceData, TileType 정의
    │  ├─ VulkanContext.h   # Vulkan 렌더러 선언
    │  └─ VulkanContext.cpp # Vulkan 렌더러 구현
-   └─ world/
+   └─ world/1
       ├─ World.h           # 타일 그리드 및 월드 좌표 질의 선언
       └─ World.cpp         # 타일 데이터, 색상, 보행 가능 여부 정의
 ```
