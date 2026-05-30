@@ -127,6 +127,7 @@ VulkanContext::VulkanContext(Window& window) : m_window(window) {
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
+    createInstanceBuffer();
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
@@ -144,6 +145,8 @@ VulkanContext::~VulkanContext() {
     }
     vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
+    vkDestroyBuffer(m_device, m_instanceBuffer, nullptr);
+    vkFreeMemory(m_device, m_instanceBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
     vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
@@ -522,12 +525,15 @@ void VulkanContext::createGraphicsPipeline() {
     stages[1].pName  = "main";
 
     // Vertex 구조체의 메모리 레이아웃을 파이프라인에 등록
-    VkVertexInputBindingDescription bindingDesc{};
-    bindingDesc.binding   = 0;
-    bindingDesc.stride    = sizeof(Vertex);
-    bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    VkVertexInputBindingDescription bindingDescs[2]{};
+    bindingDescs[0].binding   = 0;
+    bindingDescs[0].stride    = sizeof(Vertex);
+    bindingDescs[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    bindingDescs[1].binding   = 1;
+    bindingDescs[1].stride    = sizeof(InstanceData);
+    bindingDescs[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-    VkVertexInputAttributeDescription attributeDescs[3]{};
+    VkVertexInputAttributeDescription attributeDescs[4]{};
     attributeDescs[0].binding  = 0;
     attributeDescs[0].location = 0;
     attributeDescs[0].format   = VK_FORMAT_R32G32B32_SFLOAT;
@@ -540,12 +546,16 @@ void VulkanContext::createGraphicsPipeline() {
     attributeDescs[2].location = 2;
     attributeDescs[2].format   = VK_FORMAT_R32G32B32_SFLOAT;
     attributeDescs[2].offset   = offsetof(Vertex, color);
+    attributeDescs[3].binding  = 1;
+    attributeDescs[3].location = 3;
+    attributeDescs[3].format   = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescs[3].offset   = offsetof(InstanceData, pos);
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount   = 1;
-    vertexInput.pVertexBindingDescriptions      = &bindingDesc;
-    vertexInput.vertexAttributeDescriptionCount = 3;
+    vertexInput.vertexBindingDescriptionCount   = 2;
+    vertexInput.pVertexBindingDescriptions      = bindingDescs;
+    vertexInput.vertexAttributeDescriptionCount = 4;
     vertexInput.pVertexAttributeDescriptions    = attributeDescs;
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -685,9 +695,12 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     VkDeviceSize offsets[]       = {0};
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
         m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
-    vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
+
+    VkBuffer     buffers[] = {m_vertexBuffer, m_instanceBuffer};
+    VkDeviceSize offs[]    = {0, 0};
+    vkCmdBindVertexBuffers(cmd, 0, 2, buffers, offs);
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-    vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), m_instanceCount, 0, 0, 0);
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
 }
@@ -1027,6 +1040,28 @@ void VulkanContext::processInput(float dt) {
     if (glfwGetKey(win, GLFW_KEY_E)      == GLFW_PRESS) m_orbitAngle += rotSpeed;
     if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(win, GLFW_TRUE);
+}
+
+void VulkanContext::createInstanceBuffer() {
+    constexpr int   GRID   = 10;
+    constexpr float OFFSET = (GRID - 1) * 0.5f;
+    std::vector<InstanceData> instances;
+    instances.reserve(GRID * GRID);
+    for (int x = 0; x < GRID; x++)
+        for (int y = 0; y < GRID; y++)
+            instances.push_back({{x - OFFSET, y - OFFSET, 0.0f}});
+    m_instanceCount = (uint32_t)instances.size();
+
+    VkDeviceSize size = sizeof(InstanceData) * m_instanceCount;
+    createBuffer(size,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_instanceBuffer, m_instanceBufferMemory);
+
+    void* data;
+    vkMapMemory(m_device, m_instanceBufferMemory, 0, size, 0, &data);
+    memcpy(data, instances.data(), size);
+    vkUnmapMemory(m_device, m_instanceBufferMemory);
 }
 
 void VulkanContext::createIndexBuffer() {

@@ -33,6 +33,7 @@ private:
     void createDescriptorSetLayout();
     void createVertexBuffer();
     void createIndexBuffer();
+    void createInstanceBuffer();
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
@@ -86,10 +87,13 @@ private:
     VkPipelineLayout         m_pipelineLayout   = VK_NULL_HANDLE;
     VkPipeline               m_pipeline         = VK_NULL_HANDLE;
 
-    VkBuffer                 m_vertexBuffer       = VK_NULL_HANDLE;
-    VkDeviceMemory           m_vertexBufferMemory = VK_NULL_HANDLE;
-    VkBuffer                 m_indexBuffer        = VK_NULL_HANDLE;
-    VkDeviceMemory           m_indexBufferMemory  = VK_NULL_HANDLE;
+    VkBuffer                 m_vertexBuffer        = VK_NULL_HANDLE;
+    VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
+    VkBuffer                 m_indexBuffer         = VK_NULL_HANDLE;
+    VkDeviceMemory           m_indexBufferMemory   = VK_NULL_HANDLE;
+    VkBuffer                 m_instanceBuffer      = VK_NULL_HANDLE;
+    VkDeviceMemory           m_instanceBufferMemory= VK_NULL_HANDLE;
+    uint32_t                 m_instanceCount       = 0;
 
     VkImage                      m_depthImage           = VK_NULL_HANDLE;
     VkDeviceMemory               m_depthImageMemory     = VK_NULL_HANDLE;
@@ -113,7 +117,7 @@ private:
 
     glm::vec3 m_orbitTarget   = {0.0f, 0.0f, 0.0f};
     float     m_orbitAngle    = 45.0f;
-    float     m_orbitDistance = 5.0f;
+    float     m_orbitDistance = 14.0f;
     float     m_orbitPitch    = 45.0f;
     double    m_lastTime      = 0.0;
 };

@@ -19,6 +19,15 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 파이프라인에 Vertex Input 바인딩 정보 등록
 - `vkCmdBindVertexBuffers` + `vkCmdDraw`로 그라데이션 삼각형 출력
 
+### 인스턴싱
+- `InstanceData { glm::vec3 pos }` 구조체 추가
+- 인스턴스 버퍼 생성 (10×10 그리드 위치 데이터)
+- 파이프라인에 binding 1 추가 (`VK_VERTEX_INPUT_RATE_INSTANCE`)
+- 셰이더: `layout(location=3) in vec3 instancePos` → `worldPos = inPosition + instancePos`
+- `vkCmdDrawIndexed(indexCount, instanceCount=100, ...)` — 드로우콜 1번
+- 그리드 원점 중심 정렬: 각 위치를 `x - (GRID-1)/2` 로 오프셋
+- 경계 타일 옆면 saw-tooth 현상은 타일 시스템 구현 시 내부 면 제거로 해결 예정
+
 ### 플랫 셰이딩
 - `Vertex`에 `normal` 필드 추가
 - 큐브 정점 8개 → 24개 (면당 4정점, 법선 공유 불가)
@@ -222,6 +231,29 @@ vkUnmapMemory(...);                        // 매핑 해제
 
 나중에 **staging buffer** 방식으로 업그레이드 예정:
 `CPU → HOST_VISIBLE 임시 버퍼 → (GPU가 복사) → DEVICE_LOCAL 버퍼`
+
+---
+
+### 인스턴싱 개념
+
+같은 메시를 여러 위치에 그릴 때, 드로우콜을 N번 호출하는 대신 인스턴스 데이터를 GPU에 한 번에 올리고 `instanceCount=N`으로 1번만 호출한다.
+
+```
+// 일반 방식: 드로우콜 N번
+for each tile:
+    updateUBO(tilePos)
+    vkCmdDrawIndexed(..., 1, ...)
+
+// 인스턴싱: 드로우콜 1번
+uploadInstanceBuffer(allPositions)
+vkCmdDrawIndexed(..., N, ...)
+```
+
+버텍스 버퍼(binding 0)는 `VERTEX`당 한 번 읽고,
+인스턴스 버퍼(binding 1)는 `INSTANCE`당 한 번 읽는다.
+셰이더에서 두 데이터를 합쳐 최종 위치를 계산한다.
+
+타일 수가 늘어도 드로우콜은 1번이므로 CPU 부하가 거의 없다.
 
 ---
 

@@ -8,3 +8,7 @@ struct Vertex {
     glm::vec3 normal;
     glm::vec3 color;
 };
+
+struct InstanceData {
+    glm::vec3 pos;
+};
