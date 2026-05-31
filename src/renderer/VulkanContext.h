@@ -55,7 +55,7 @@ private:
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
-    void updateUniformBuffer(uint32_t currentFrame, const Camera& camera);
+    void updateUniformBuffer(uint32_t currentFrame, const Camera& camera, float timeOfDay);
     void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
     void updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile);
     void createDepthResources();

@@ -155,7 +155,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
         throw std::runtime_error("Failed to acquire swapchain image");
 
     vkResetFences(m_device, 1, &m_inFlight[m_currentFrame]);
-    updateUniformBuffer(m_currentFrame, camera);
+    updateUniformBuffer(m_currentFrame, camera, timeOfDay);
     updatePlayerInstanceBuffer(playerPosition);
     updateSelectorInstanceBuffer(targetTile);
     updateHotbar();
@@ -196,11 +196,22 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
 // ============================================================
 //  Per-frame update functions
 // ============================================================
-void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& camera) {
+void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& camera, float timeOfDay) {
+    // Sun arc: elevation 0 at midnight, 1 at noon, 0 at next midnight
+    float elevation = sinf(timeOfDay * 3.14159265f);
+    float azimuth   = timeOfDay * 6.28318530f;
+
+    glm::vec3 sunDir = glm::normalize(glm::vec3(
+        cosf(azimuth),
+        sinf(azimuth),
+        elevation
+    ));
+
     UniformBufferObject ubo{};
-    ubo.model = glm::mat4(1.0f);
-    ubo.view  = camera.view();
-    ubo.proj  = camera.proj();
+    ubo.model    = glm::mat4(1.0f);
+    ubo.view     = camera.view();
+    ubo.proj     = camera.proj();
+    ubo.lightDir = glm::vec4(sunDir, elevation); // w = dayFactor
     memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
 

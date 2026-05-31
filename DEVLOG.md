@@ -342,6 +342,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 분리 기준: Init = 시작 시 1회 호출, Frame = 매 프레임, Chunk = 월드 지오메트리. 헬퍼 함수는 Init/Frame/Chunk 양쪽에서 쓰이므로 core 파일에 유지.
 - `buildChunkObjectBuffer`에서 `vkDestroyBuffer`를 즉시 호출하던 버그 수정 → `deferDestroy()`로 교체. GPU가 아직 읽는 도중 버퍼를 파괴해 `VUID-vkDestroyBuffer-buffer-00922` validation error + 블록 설치/파괴 직후 크래시가 발생하던 문제 해결.
 
+### Dynamic Sun Lighting
+- `UniformBufferObject`에 `vec4 lightDir` 추가 (xyz = 태양 방향, w = dayFactor 0..1). 기존 192 bytes → 208 bytes.
+- `updateUniformBuffer()`가 `timeOfDay`를 받아 매 프레임 태양 위치 계산: `elevation = sin(tod × π)` (자정=0, 정오=1), `azimuth = tod × 2π` (하루 동안 360° 회전). sunDir은 두 값으로 구성한 단위 벡터.
+- Descriptor set layout의 UBO stage flags: `VERTEX_BIT` → `VERTEX_BIT | FRAGMENT_BIT`. Fragment shader에서 UBO를 읽으려면 필수.
+- `chunk.frag` / `triangle.frag`에 UBO 바인딩 추가. Lambert diffuse에 `dayFactor` 곱해 낮엔 full lighting, 밤엔 diffuse=0. ambient는 `mix(0.15, 0.3, dayFactor)`로 보간 — 밤엔 0.15(달빛), 낮엔 0.3.
+- `chunk.vert`, `object.vert`, `triangle.vert` UBO 구조체에 `vec4 lightDir` 선언 추가 (C++ 쪽 버퍼 크기와 일치).
+- 결과: 시간 흐름에 따라 태양 방향이 회전하고 밤이 되면 어두워짐. Shadow Map의 light matrix 기반이 되는 단계.
+
 ---
 
 ## 게임 설계 메모
