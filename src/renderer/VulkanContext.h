@@ -59,6 +59,7 @@ private:
     void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
     void updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile);
     void createDepthResources();
+    void createShadowResources();
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
@@ -159,6 +160,13 @@ private:
     VkImage                      m_depthImage           = VK_NULL_HANDLE;
     VkDeviceMemory               m_depthImageMemory     = VK_NULL_HANDLE;
     VkImageView                  m_depthImageView       = VK_NULL_HANDLE;
+
+    static constexpr uint32_t    SHADOW_MAP_SIZE        = 1024;
+    VkImage                      m_shadowImage          = VK_NULL_HANDLE;
+    VkDeviceMemory               m_shadowImageMemory    = VK_NULL_HANDLE;
+    VkImageView                  m_shadowImageView      = VK_NULL_HANDLE;
+    VkRenderPass                 m_shadowRenderPass     = VK_NULL_HANDLE;
+    VkFramebuffer                m_shadowFramebuffer    = VK_NULL_HANDLE;
 
     VkDescriptorSetLayout        m_descriptorSetLayout = VK_NULL_HANDLE;
     std::vector<VkBuffer>        m_uniformBuffers;

@@ -931,6 +931,91 @@ void VulkanContext::createDepthResources() {
 }
 
 // ============================================================
+//  Shadow map resources (image, render pass, framebuffer)
+// ============================================================
+void VulkanContext::createShadowResources() {
+    VkFormat depthFormat = findDepthFormat();
+
+    createImage(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, depthFormat,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_shadowImage, m_shadowImageMemory);
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image                           = m_shadowImage;
+    viewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format                          = depthFormat;
+    viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+    viewInfo.subresourceRange.baseMipLevel   = 0;
+    viewInfo.subresourceRange.levelCount     = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount     = 1;
+    if (vkCreateImageView(m_device, &viewInfo, nullptr, &m_shadowImageView) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow image view");
+
+    VkAttachmentDescription depthAttachment{};
+    depthAttachment.format         = depthFormat;
+    depthAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference depthRef{};
+    depthRef.attachment = 0;
+    depthRef.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.pDepthStencilAttachment = &depthRef;
+
+    // Dependency: wait for previous shadow read before writing depth again
+    VkSubpassDependency deps[2]{};
+    deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
+    deps[0].dstSubpass      = 0;
+    deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    deps[0].dstStageMask    = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT;
+    deps[0].dstAccessMask   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    // Dependency: depth write must finish before the main pass samples it
+    deps[1].srcSubpass      = 0;
+    deps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
+    deps[1].srcStageMask    = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    deps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    deps[1].srcAccessMask   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    deps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT;
+    deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    VkRenderPassCreateInfo rpInfo{};
+    rpInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpInfo.attachmentCount = 1;
+    rpInfo.pAttachments    = &depthAttachment;
+    rpInfo.subpassCount    = 1;
+    rpInfo.pSubpasses      = &subpass;
+    rpInfo.dependencyCount = 2;
+    rpInfo.pDependencies   = deps;
+    if (vkCreateRenderPass(m_device, &rpInfo, nullptr, &m_shadowRenderPass) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow render pass");
+
+    VkFramebufferCreateInfo fbInfo{};
+    fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbInfo.renderPass      = m_shadowRenderPass;
+    fbInfo.attachmentCount = 1;
+    fbInfo.pAttachments    = &m_shadowImageView;
+    fbInfo.width           = SHADOW_MAP_SIZE;
+    fbInfo.height          = SHADOW_MAP_SIZE;
+    fbInfo.layers          = 1;
+    if (vkCreateFramebuffer(m_device, &fbInfo, nullptr, &m_shadowFramebuffer) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow framebuffer");
+}
+
+// ============================================================
 //  Descriptor set layout
 // ============================================================
 void VulkanContext::createDescriptorSetLayout() {

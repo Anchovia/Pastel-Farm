@@ -350,6 +350,15 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `chunk.vert`, `object.vert`, `triangle.vert` UBO 구조체에 `vec4 lightDir` 선언 추가 (C++ 쪽 버퍼 크기와 일치).
 - 결과: 시간 흐름에 따라 태양 방향이 회전하고 밤이 되면 어두워짐. Shadow Map의 light matrix 기반이 되는 단계.
 
+### Shadow Map Infrastructure
+- Shadow map 전용 Vulkan 리소스 생성 (`createShadowResources()`). 스왑체인과 무관하게 한 번만 생성되며 리사이즈 시 재생성 불필요.
+- `VkImage` (1024×1024, depth format, `DEPTH_STENCIL_ATTACHMENT | SAMPLED` usage) + `VkDeviceMemory` + `VkImageView` (depth aspect).
+- Shadow 전용 `VkRenderPass`: color attachment 없이 depth attachment 1개만. `loadOp=CLEAR`, `storeOp=STORE`, `finalLayout=DEPTH_STENCIL_READ_ONLY_OPTIMAL` — 이후 main pass의 fragment shader가 샘플링할 수 있는 상태로 전환.
+- Subpass dependency 2개: (1) 이전 프레임의 shadow 샘플링 → 이번 depth write 순서 보장, (2) depth write 완료 → main pass fragment 샘플링 순서 보장. 이 두 dependency가 없으면 GPU가 shadow map을 읽는 도중 덮어쓰는 race condition 발생.
+- `VkFramebuffer` (shadow image view 연결).
+- 소멸자에 5개 리소스 정리 추가.
+- 이 단계에서 화면 변화 없음. 다음 단계(shadow pipeline + shadow pass 실행)의 기반.
+
 ---
 
 ## 게임 설계 메모
