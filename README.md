@@ -80,6 +80,7 @@
 - 안개 (Fog) — view-space 깊이 기반 선형 안개. `FOG_START=27, FOG_END=57`. 먼 거리 지형이 하늘색으로 자연스럽게 희미해지고 청크 경계가 가려짐. 안개 색은 UBO `fogColor`로 sky color와 동기화되어 시간대에 따라 자동 변화
 - Shadow PCF — `chunk.frag`/`triangle.frag`에 3×3 수동 PCF 추가. 하드웨어 2×2 bilinear PCF(LINEAR 샘플러)와 결합해 shadow map 샘플링 경계 개선
 - 리사이즈 viewport 수정 — 파이프라인 viewport/scissor를 dynamic state로 전환, 창 크기 변경 시 렌더 영역이 새 swapchain 크기에 맞게 갱신 (이전엔 옛 크기로 고정돼 화면이 쏠림)
+- 프레임별 동적 버퍼 분리 — player/selector/UI 인스턴스 버퍼를 frame-in-flight 수만큼 복제해, GPU가 읽는 도중 덮어쓰던 data race 제거
 ---
 
 ## 프로젝트 구조

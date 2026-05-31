@@ -804,10 +804,15 @@ void VulkanContext::createObjectPipeline() {
 // Capacity: hotbar (~66 verts) + inventory overlay (~120 verts) + margin
 void VulkanContext::createUIBuffer() {
     VkDeviceSize size = sizeof(UIVertex) * 512;
-    createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_uiBuffer, m_uiMemory);
-    vkMapMemory(m_device, m_uiMemory, 0, size, 0, &m_uiMapped);
+    m_uiBuffer.resize(MAX_FRAMES_IN_FLIGHT);
+    m_uiMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    m_uiMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_uiBuffer[i], m_uiMemory[i]);
+        vkMapMemory(m_device, m_uiMemory[i], 0, size, 0, &m_uiMapped[i]);
+    }
 }
 
 // ============================================================
@@ -1328,11 +1333,16 @@ void VulkanContext::createVertexBuffer() {
 
 void VulkanContext::createPlayerInstanceBuffer(const glm::vec3& playerPosition) {
     VkDeviceSize size = sizeof(InstanceData);
-    createBuffer(size,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_playerInstBuffer, m_playerInstMemory);
-    vkMapMemory(m_device, m_playerInstMemory, 0, size, 0, &m_playerInstMapped);
+    m_playerInstBuffer.resize(MAX_FRAMES_IN_FLIGHT);
+    m_playerInstMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    m_playerInstMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(size,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_playerInstBuffer[i], m_playerInstMemory[i]);
+        vkMapMemory(m_device, m_playerInstMemory[i], 0, size, 0, &m_playerInstMapped[i]);
+    }
 
     updatePlayerInstanceBuffer(playerPosition);
 }
@@ -1372,8 +1382,13 @@ void VulkanContext::createSelectorBuffers() {
     vkFreeMemory(m_device, stagingMemory, nullptr);
 
     VkDeviceSize instanceSize = sizeof(InstanceData);
-    createBuffer(instanceSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_selectorInstBuffer, m_selectorInstMemory);
-    vkMapMemory(m_device, m_selectorInstMemory, 0, instanceSize, 0, &m_selectorInstMapped);
+    m_selectorInstBuffer.resize(MAX_FRAMES_IN_FLIGHT);
+    m_selectorInstMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    m_selectorInstMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(instanceSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_selectorInstBuffer[i], m_selectorInstMemory[i]);
+        vkMapMemory(m_device, m_selectorInstMemory[i], 0, instanceSize, 0, &m_selectorInstMapped[i]);
+    }
 }

@@ -405,6 +405,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 메인 패스 파이프라인 4개(triangle/chunk/ui/object)에 `VK_DYNAMIC_STATE_VIEWPORT` + `VK_DYNAMIC_STATE_SCISSOR` 추가, `recordCommandBuffer`의 메인 패스 시작 직후 `vkCmdSetViewport`/`vkCmdSetScissor`를 `m_swapchainExtent` 기준으로 매 프레임 설정.
 - shadow 파이프라인은 2048×2048 고정이라 정적 viewport 유지. `recreateSwapchain`은 파이프라인 재생성 없이도 새 크기에 맞게 렌더됨.
 
+### 프레임별 동적 버퍼 분리 (frame-in-flight 경합 수정)
+- player/selector/UI 인스턴스 버퍼가 단일 버퍼라 매 프레임 in-place `memcpy` → frame N의 GPU가 읽는 도중 frame N+1이 덮어쓰는 data race 존재.
+- `m_playerInst*` / `m_selectorInst*` / `m_ui*`(buffer·memory·mapped)를 `std::vector`로 전환해 `MAX_FRAMES_IN_FLIGHT`개씩 생성, update/bind를 `[m_currentFrame]`로 분리 (UBO와 동일 패턴).
+- selector 정점/인덱스 버퍼는 정적이라 단일 유지. `m_uiVertexCount`는 같은 프레임 내에서 쓰고 그리므로 단일 값 유지.
+
 ---
 
 ## 게임 설계 메모

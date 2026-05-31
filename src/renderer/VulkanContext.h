@@ -138,25 +138,25 @@ private:
     VkDeviceMemory           m_treeVertexMemory = VK_NULL_HANDLE;
     uint32_t                 m_treeVertexCount  = 0;
 
-    // UI / hotbar
-    VkBuffer                 m_uiBuffer        = VK_NULL_HANDLE;
-    VkDeviceMemory           m_uiMemory        = VK_NULL_HANDLE;
-    void*                    m_uiMapped        = nullptr;
+    // UI / hotbar — one buffer per frame in flight (avoids overwrite while GPU still reads)
+    std::vector<VkBuffer>       m_uiBuffer;
+    std::vector<VkDeviceMemory> m_uiMemory;
+    std::vector<void*>          m_uiMapped;
     uint32_t                 m_uiVertexCount   = 0;
     int                      m_hotbarSelected  = 0;
     std::array<ItemType, HOTBAR_SLOTS> m_hotbarPalette{};
     bool                     m_inventoryOpen   = false;
     std::array<float, 4>     m_skyColor        = {0.08f, 0.08f, 0.12f, 1.0f};
-    VkBuffer                 m_playerInstBuffer     = VK_NULL_HANDLE;
-    VkDeviceMemory           m_playerInstMemory     = VK_NULL_HANDLE;
-    void*                    m_playerInstMapped     = nullptr;
+    std::vector<VkBuffer>       m_playerInstBuffer;
+    std::vector<VkDeviceMemory> m_playerInstMemory;
+    std::vector<void*>          m_playerInstMapped;
     VkBuffer                 m_selectorVertexBuffer  = VK_NULL_HANDLE;
     VkDeviceMemory           m_selectorVertexMemory  = VK_NULL_HANDLE;
     VkBuffer                 m_selectorIndexBuffer   = VK_NULL_HANDLE;
     VkDeviceMemory           m_selectorIndexMemory   = VK_NULL_HANDLE;
-    VkBuffer                 m_selectorInstBuffer    = VK_NULL_HANDLE;
-    VkDeviceMemory           m_selectorInstMemory    = VK_NULL_HANDLE;
-    void*                    m_selectorInstMapped    = nullptr;
+    std::vector<VkBuffer>       m_selectorInstBuffer;
+    std::vector<VkDeviceMemory> m_selectorInstMemory;
+    std::vector<void*>          m_selectorInstMapped;
     bool                     m_showSelector          = false;
 
     VkImage                      m_depthImage           = VK_NULL_HANDLE;

@@ -109,7 +109,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
     if (m_showSelector) {
-        VkBuffer     sBufs[] = {m_selectorVertexBuffer, m_selectorInstBuffer};
+        VkBuffer     sBufs[] = {m_selectorVertexBuffer, m_selectorInstBuffer[m_currentFrame]};
         VkDeviceSize sOffs[] = {0, 0};
         vkCmdBindVertexBuffers(cmd, 0, 2, sBufs, sOffs);
         vkCmdBindIndexBuffer(cmd, m_selectorIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
@@ -117,7 +117,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     }
 
     // Player
-    VkBuffer     pBufs[] = {m_vertexBuffer, m_playerInstBuffer};
+    VkBuffer     pBufs[] = {m_vertexBuffer, m_playerInstBuffer[m_currentFrame]};
     VkDeviceSize pOffs[] = {0, 0};
     vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
@@ -126,7 +126,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     // UI overlay (screen-space, on top of everything)
     if (m_uiVertexCount > 0) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiPipeline);
-        VkBuffer     uiBufs[] = { m_uiBuffer };
+        VkBuffer     uiBufs[] = { m_uiBuffer[m_currentFrame] };
         VkDeviceSize uiOffs[] = { 0 };
         vkCmdBindVertexBuffers(cmd, 0, 1, uiBufs, uiOffs);
         vkCmdDraw(cmd, m_uiVertexCount, 1, 0, 0);
@@ -271,7 +271,7 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& cam
 void VulkanContext::updatePlayerInstanceBuffer(const glm::vec3& playerPosition) {
     static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
     InstanceData inst{playerPosition, kPlayerColor, kPlayerColor};
-    memcpy(m_playerInstMapped, &inst, sizeof(inst));
+    memcpy(m_playerInstMapped[m_currentFrame], &inst, sizeof(inst));
 }
 
 void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile) {
@@ -281,7 +281,7 @@ void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec3>
     static const glm::vec3 kSelectorColor = {1.0f, 0.9f, 0.1f};
     const glm::ivec3 tile = *targetTile;
     InstanceData inst{m_world.tileCenter(tile.x, tile.y, tile.z), kSelectorColor, kSelectorColor};
-    memcpy(m_selectorInstMapped, &inst, sizeof(inst));
+    memcpy(m_selectorInstMapped[m_currentFrame], &inst, sizeof(inst));
 }
 
 // ============================================================
@@ -372,5 +372,5 @@ void VulkanContext::updateHotbar() {
     }
 
     m_uiVertexCount = (uint32_t)verts.size();
-    memcpy(m_uiMapped, verts.data(), sizeof(UIVertex) * verts.size());
+    memcpy(m_uiMapped[m_currentFrame], verts.data(), sizeof(UIVertex) * verts.size());
 }

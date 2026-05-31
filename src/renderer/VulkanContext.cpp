@@ -72,10 +72,12 @@ VulkanContext::~VulkanContext() {
     }
     vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
-    vkDestroyBuffer(m_device, m_playerInstBuffer, nullptr);
-    vkFreeMemory(m_device, m_playerInstMemory, nullptr);
-    vkDestroyBuffer(m_device, m_selectorInstBuffer, nullptr);
-    vkFreeMemory(m_device, m_selectorInstMemory, nullptr);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyBuffer(m_device, m_playerInstBuffer[i], nullptr);
+        vkFreeMemory(m_device, m_playerInstMemory[i], nullptr);
+        vkDestroyBuffer(m_device, m_selectorInstBuffer[i], nullptr);
+        vkFreeMemory(m_device, m_selectorInstMemory[i], nullptr);
+    }
     vkDestroyBuffer(m_device, m_selectorIndexBuffer, nullptr);
     vkFreeMemory(m_device, m_selectorIndexMemory, nullptr);
     vkDestroyBuffer(m_device, m_selectorVertexBuffer, nullptr);
@@ -100,8 +102,10 @@ VulkanContext::~VulkanContext() {
     vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
     vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
-    vkDestroyBuffer(m_device, m_uiBuffer, nullptr);
-    vkFreeMemory(m_device, m_uiMemory, nullptr);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyBuffer(m_device, m_uiBuffer[i], nullptr);
+        vkFreeMemory(m_device, m_uiMemory[i], nullptr);
+    }
     vkDestroyPipeline(m_device, m_uiPipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_uiPipelineLayout, nullptr);
     vkDestroyPipeline(m_device, m_objectPipeline, nullptr);
