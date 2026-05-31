@@ -61,6 +61,7 @@ private:
     void createDepthResources();
     void createShadowResources();
     void createShadowPipeline();
+    void createShadowSampler();
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
@@ -170,6 +171,7 @@ private:
     VkFramebuffer                m_shadowFramebuffer    = VK_NULL_HANDLE;
     VkPipelineLayout             m_shadowPipelineLayout = VK_NULL_HANDLE;
     VkPipeline                   m_shadowPipeline       = VK_NULL_HANDLE;
+    VkSampler                    m_shadowSampler        = VK_NULL_HANDLE;
     glm::mat4                    m_lightMVP             = glm::mat4(1.0f);
 
     VkDescriptorSetLayout        m_descriptorSetLayout = VK_NULL_HANDLE;

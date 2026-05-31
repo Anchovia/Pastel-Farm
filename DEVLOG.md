@@ -367,6 +367,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `recordCommandBuffer` 첫 부분에 shadow pass 삽입: shadow render pass begin → pipeline bind → push constant → 청크 메시 전체 draw → render pass end. 이후 기존 main pass 실행.
 - 결과: 매 프레임 청크 메시의 깊이가 태양 시점으로 shadow map에 기록됨. 화면 변화 없음 — 다음 단계(descriptor에 shadow sampler 추가 + fragment shader에서 비교)에서 실제 그림자가 보임.
 
+### Shadow Sampler + Descriptor 연결
+- `createShadowSampler()`: `VK_COMPARE_OP_LESS_OR_EQUAL` comparison sampler. `CLAMP_TO_BORDER` + `FLOAT_OPAQUE_WHITE`(depth=1.0) — shadow map 밖 영역은 항상 lit 처리. `LINEAR` filter로 PCF 효과(비교 결과를 4 texel bilinear 평균).
+- `createDescriptorSetLayout()`: binding 1 추가 — `COMBINED_IMAGE_SAMPLER`, `FRAGMENT_BIT`.
+- `createDescriptorPool()`: `COMBINED_IMAGE_SAMPLER` pool size 추가 (`MAX_FRAMES_IN_FLIGHT`개).
+- `createDescriptorSets()`: binding 1에 shadow image view(`DEPTH_STENCIL_READ_ONLY_OPTIMAL`) + sampler 바인딩. `vkUpdateDescriptorSets`에 write 2개로 UBO + sampler 동시 업데이트.
+- 이 단계에서 화면 변화 없음. 다음 단계(chunk.vert에서 light space 좌표 출력 + chunk.frag에서 `sampler2DShadow`로 비교)에서 실제 그림자가 보임.
+
 ---
 
 ## 게임 설계 메모

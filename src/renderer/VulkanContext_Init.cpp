@@ -1118,19 +1118,44 @@ void VulkanContext::createShadowPipeline() {
 }
 
 // ============================================================
+//  Shadow sampler
+// ============================================================
+void VulkanContext::createShadowSampler() {
+    VkSamplerCreateInfo info{};
+    info.sType         = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    info.magFilter     = VK_FILTER_LINEAR;
+    info.minFilter     = VK_FILTER_LINEAR;
+    info.addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    info.addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    info.addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    info.borderColor   = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE; // depth=1.0 outside map = lit
+    info.compareEnable = VK_TRUE;
+    info.compareOp     = VK_COMPARE_OP_LESS_OR_EQUAL;
+    info.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    if (vkCreateSampler(m_device, &info, nullptr, &m_shadowSampler) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow sampler");
+}
+
+// ============================================================
 //  Descriptor set layout
 // ============================================================
 void VulkanContext::createDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding uboBinding{};
-    uboBinding.binding         = 0;
-    uboBinding.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboBinding.descriptorCount = 1;
-    uboBinding.stageFlags      = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutBinding bindings[2]{};
+
+    bindings[0].binding         = 0;
+    bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    bindings[1].binding         = 1;
+    bindings[1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo info{};
     info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    info.bindingCount = 1;
-    info.pBindings    = &uboBinding;
+    info.bindingCount = 2;
+    info.pBindings    = bindings;
 
     if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
         throw std::runtime_error("Failed to create descriptor set layout");
@@ -1158,14 +1183,16 @@ void VulkanContext::createUniformBuffers() {
 //  Descriptor pool + sets
 // ============================================================
 void VulkanContext::createDescriptorPool() {
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    VkDescriptorPoolSize poolSizes[2]{};
+    poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
     VkDescriptorPoolCreateInfo info{};
     info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    info.poolSizeCount = 1;
-    info.pPoolSizes    = &poolSize;
+    info.poolSizeCount = 2;
+    info.pPoolSizes    = poolSizes;
     info.maxSets       = MAX_FRAMES_IN_FLIGHT;
 
     if (vkCreateDescriptorPool(m_device, &info, nullptr, &m_descriptorPool) != VK_SUCCESS)
@@ -1190,16 +1217,27 @@ void VulkanContext::createDescriptorSets() {
         bufferInfo.offset = 0;
         bufferInfo.range  = sizeof(UniformBufferObject);
 
-        VkWriteDescriptorSet write{};
-        write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet          = m_descriptorSets[i];
-        write.dstBinding      = 0;
-        write.dstArrayElement = 0;
-        write.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        write.descriptorCount = 1;
-        write.pBufferInfo     = &bufferInfo;
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        imageInfo.imageView   = m_shadowImageView;
+        imageInfo.sampler     = m_shadowSampler;
 
-        vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+        VkWriteDescriptorSet writes[2]{};
+        writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[0].dstSet          = m_descriptorSets[i];
+        writes[0].dstBinding      = 0;
+        writes[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writes[0].descriptorCount = 1;
+        writes[0].pBufferInfo     = &bufferInfo;
+
+        writes[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[1].dstSet          = m_descriptorSets[i];
+        writes[1].dstBinding      = 1;
+        writes[1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[1].descriptorCount = 1;
+        writes[1].pImageInfo      = &imageInfo;
+
+        vkUpdateDescriptorSets(m_device, 2, writes, 0, nullptr);
     }
 }
 

@@ -73,6 +73,7 @@
 - 동적 태양 조명 — UBO에 `lightDir(xyz) + dayFactor(w)` 추가. `timeOfDay` 기반으로 태양 고도/방위각 계산, 낮엔 Lambert diffuse 최대, 밤엔 ambient 0.15(달빛)만 남도록 셰이더 전체 적용
 - Shadow Map 인프라 — 1024×1024 depth-only `VkImage` + shadow 전용 `VkRenderPass` / `VkFramebuffer` 생성. 스왑체인과 독립적으로 한 번만 생성. Shadow pass 실행 및 셰이더 샘플링은 다음 단계
 - Shadow Pass 파이프라인 — depth-only 파이프라인 + `shadow.vert`(push constant lightMVP). `drawFrame`에서 태양 방향 기반 orthographic light matrix 계산, main pass 이전에 청크 메시를 태양 시점으로 렌더링해 shadow map을 채움
+- Shadow Sampler + Descriptor 연결 — comparison sampler(`LESS_OR_EQUAL`) 생성. descriptor layout binding 1에 `combinedImageSampler` 추가, descriptor set에 shadow image view + sampler 바인딩. fragment shader에서 shadow map을 읽을 준비 완료
 ---
 
 ## 프로젝트 구조

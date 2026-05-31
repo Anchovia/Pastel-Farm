@@ -48,6 +48,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     rebuildDirtyChunks();
     createPlayerInstanceBuffer({15.0f, 15.0f, 1.0f});
     createUniformBuffers();
+    createShadowSampler();
     createDescriptorPool();
     createDescriptorSets();
     createCommandBuffers();
@@ -109,6 +110,7 @@ VulkanContext::~VulkanContext() {
     vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
     vkDestroyPipeline      (m_device, m_shadowPipeline,       nullptr);
     vkDestroyPipelineLayout(m_device, m_shadowPipelineLayout, nullptr);
+    vkDestroySampler       (m_device, m_shadowSampler,        nullptr);
     vkDestroyFramebuffer   (m_device, m_shadowFramebuffer,    nullptr);
     vkDestroyRenderPass    (m_device, m_shadowRenderPass,     nullptr);
     vkDestroyImageView  (m_device, m_shadowImageView,    nullptr);
