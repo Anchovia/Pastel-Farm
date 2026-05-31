@@ -188,7 +188,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
     // Light space matrix — orthographic from sun direction, centered on player
     {
         float elevation = sinf(timeOfDay * 3.14159265f);
-        float azimuth   = timeOfDay * 6.28318530f;
+        float azimuth   = -timeOfDay * 6.28318530f;
         glm::vec3 sunDir = glm::normalize(glm::vec3(cosf(azimuth), sinf(azimuth), elevation));
         const float range = 80.0f;
         glm::mat4 lightView = glm::lookAt(
@@ -244,7 +244,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
 void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& camera, float timeOfDay) {
     // Sun arc: elevation 0 at midnight, 1 at noon, 0 at next midnight
     float elevation = sinf(timeOfDay * 3.14159265f);
-    float azimuth   = timeOfDay * 6.28318530f;
+    float azimuth   = -timeOfDay * 6.28318530f;
 
     glm::vec3 sunDir = glm::normalize(glm::vec3(
         cosf(azimuth),
@@ -258,6 +258,7 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& cam
     ubo.proj     = camera.proj();
     ubo.lightDir = glm::vec4(sunDir, elevation); // w = dayFactor
     ubo.lightMVP = m_lightMVP;
+    ubo.fogColor = glm::vec4(m_skyColor[0], m_skyColor[1], m_skyColor[2], 1.0f);
     memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
 

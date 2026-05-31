@@ -6,6 +6,7 @@ layout(binding = 0) uniform UniformBufferObject {
     mat4 proj;
     vec4 lightDir;
     mat4 lightMVP;
+    vec4 fogColor;
 } ubo;
 
 layout(binding = 1) uniform sampler2DShadow shadowMap;
@@ -14,13 +15,14 @@ layout(location = 0) flat in vec3 fragNormal;
 layout(location = 1) flat in vec3 fragTopColor;
 layout(location = 2) flat in vec3 fragSideColor;
 layout(location = 3)      in vec4 fragPosLightSpace;
+layout(location = 4)      in float fragViewDepth;
 layout(location = 0) out vec4 outColor;
 
 void main() {
     vec3  lightDir  = normalize(ubo.lightDir.xyz);
     float dayFactor = ubo.lightDir.w;
 
-    // Shadow map lookup
+    // Shadow
     vec3  projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords.xy    = projCoords.xy * 0.5 + 0.5;
     float shadow     = 1.0;
@@ -36,8 +38,13 @@ void main() {
     float light   = ambient + diff * 0.7 * dayFactor * shadowFactor;
 
     // top face (normal.z > 0.9) uses topColor, sides use sideColor
-    float isTop = step(0.9, fragNormal.z);
-    vec3  color = mix(fragSideColor, fragTopColor, isTop);
+    float isTop  = step(0.9, fragNormal.z);
+    vec3  color  = mix(fragSideColor, fragTopColor, isTop);
+    vec3  litColor = color * light;
 
-    outColor = vec4(color * light, 1.0);
+    // Fog
+    const float FOG_START = 27.0;
+    const float FOG_END   = 57.0;
+    float fogFactor = clamp((FOG_END - fragViewDepth) / (FOG_END - FOG_START), 0.0, 1.0);
+    outColor = vec4(mix(ubo.fogColor.rgb, litColor, fogFactor), 1.0);
 }

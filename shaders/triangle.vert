@@ -6,6 +6,7 @@ layout(binding = 0) uniform UniformBufferObject {
     mat4 proj;
     vec4 lightDir;
     mat4 lightMVP;
+    vec4 fogColor;
 } ubo;
 
 layout(location = 0) in vec3 inPosition;
@@ -18,12 +19,15 @@ layout(location = 0) flat out vec3 fragNormal;
 layout(location = 1) flat out vec3 fragTopColor;
 layout(location = 2) flat out vec3 fragSideColor;
 layout(location = 3)      out vec4 fragPosLightSpace;
+layout(location = 4)      out float fragViewDepth;
 
 void main() {
     vec3 worldPos     = inPosition + instancePos;
-    gl_Position       = ubo.proj * ubo.view * vec4(worldPos, 1.0);
+    vec4 viewPos      = ubo.view * vec4(worldPos, 1.0);
+    gl_Position       = ubo.proj * viewPos;
     fragNormal        = inNormal;
     fragTopColor      = instanceTopColor;
     fragSideColor     = instanceSideColor;
     fragPosLightSpace = ubo.lightMVP * vec4(worldPos, 1.0);
+    fragViewDepth     = -viewPos.z;
 }

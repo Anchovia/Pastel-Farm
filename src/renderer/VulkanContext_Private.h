@@ -15,6 +15,7 @@ struct UniformBufferObject {
     glm::mat4 proj;
     glm::vec4 lightDir; // xyz = toward sun, w = dayFactor (0=night, 1=noon)
     glm::mat4 lightMVP; // light-space transform for shadow map lookup
+    glm::vec4 fogColor; // rgb = sky color at current time of day
 };
 
 // ============================================================

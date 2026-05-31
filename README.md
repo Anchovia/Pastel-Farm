@@ -76,6 +76,8 @@
 - Shadow Sampler + Descriptor 연결 — comparison sampler(`LESS_OR_EQUAL`) 생성. descriptor layout binding 1에 `combinedImageSampler` 추가, descriptor set에 shadow image view + sampler 바인딩. fragment shader에서 shadow map을 읽을 준비 완료
 - Shadow Rendering — UBO에 `lightMVP` 추가. `chunk.vert`/`object.vert`/`triangle.vert`에서 `fragPosLightSpace` 출력, `chunk.frag`/`triangle.frag`에서 `sampler2DShadow`로 shadow 비교. NdotL 기반 가변 bias로 shadow acne 억제. shadow map 2048×2048, ortho ±80
 - Shadow 깊이 범위 수정 — `GLM_FORCE_DEPTH_ZERO_TO_ONE` 추가. GLM ortho가 Vulkan 기준 [0,1] 깊이로 매핑되도록 수정. 플레이어 이동 시 그림자가 잘리던 문제 해결
+- 태양 방향 수정 — azimuth 부호 반전(`-timeOfDay × 2π`). 그림자 회전 방향이 더 자연스러워짐
+- 안개 (Fog) — view-space 깊이 기반 선형 안개. `FOG_START=27, FOG_END=57`. 먼 거리 지형이 하늘색으로 자연스럽게 희미해지고 청크 경계가 가려짐. 안개 색은 UBO `fogColor`로 sky color와 동기화되어 시간대에 따라 자동 변화
 ---
 
 ## 프로젝트 구조

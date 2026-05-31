@@ -384,8 +384,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - Shadow map 2048×2048 (기존 1024), ortho range ±80 (초기 ±60 → ±45 시도 후 최종 ±80). texel 크기 ≈ 0.078 units/texel.
 - `GLM_FORCE_DEPTH_ZERO_TO_ONE` 를 `CMakeLists.txt`에 추가. 근본 원인: GLM `ortho`가 기본적으로 OpenGL 깊이 범위 [-1,1]로 계산 → Vulkan [0,1] 불일치 → 플레이어 근처 geometry가 NDC Z ≈ 0 경계에 걸려 shadow map에서 들어갔다 나갔다 → 이동할 때 그림자 잘림. 수정 후 정상 동작.
 - **미결 항목 (추후 처리):**
-  - 태양 방향: `azimuth = -timeOfDay * 2π`로 뒤집으면 그림자 방향이 더 자연스러워짐. 게임 월드 방향 확정 후 적용 예정.
   - Shadow aliasing (경계 계단 현상): PCF 샘플 수 증가로 개선 가능. 로우폴리 스타일에서 허용 범위 안이므로 렌더링 폴리시 2차 때 검토.
+
+### 태양 방향 수정
+- `azimuth = timeOfDay * 2π` → `-timeOfDay * 2π`. 한 줄 수정으로 그림자 회전 방향이 더 자연스러워짐.
+
+### Fog (안개)
+- UBO에 `vec4 fogColor` 추가 (272 → 288 bytes). `updateUniformBuffer()`에서 `m_skyColor`를 그대로 기록 → 안개 색이 시간대 sky color와 자동 동기화 (낮=파랑, 노을=주황 등).
+- `chunk.vert` / `object.vert` / `triangle.vert`: view-space 깊이 계산 `fragViewDepth = -(ubo.view * worldPos).z` 추가 (각 location 3, 3, 4).
+- `chunk.frag` / `triangle.frag`: `FOG_START=27, FOG_END=57` 선형 안개. `fogFactor = clamp((END - depth) / (END - START), 0, 1)` → `mix(fogColor, litColor, fogFactor)`. 안개 범위는 카메라 기준이므로 플레이어 기준 약 7~37 유닛 밖에서 적용.
+- 결과: 먼 지형이 하늘색으로 자연스럽게 희미해지고 청크 경계가 가려짐.
 
 ---
 
