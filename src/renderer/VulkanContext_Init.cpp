@@ -843,11 +843,11 @@ void VulkanContext::createShadowPipeline() {
     VkPipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
-    rasterizer.cullMode                = VK_CULL_MODE_FRONT_BIT; // front-cull reduces peter-panning
+    rasterizer.cullMode                = VK_CULL_MODE_NONE; // NONE for tighter shadow contact (was FRONT; shader/pipeline bias controls acne)
     rasterizer.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable         = VK_TRUE;
-    rasterizer.depthBiasConstantFactor = 2.0f;
-    rasterizer.depthBiasSlopeFactor    = 1.5f;
+    rasterizer.depthBiasConstantFactor = 0.0f;
+    rasterizer.depthBiasSlopeFactor    = 0.0f;
     rasterizer.lineWidth               = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
@@ -951,8 +951,8 @@ void VulkanContext::createShadowObjectPipeline() {
     rasterizer.cullMode                = VK_CULL_MODE_NONE;  // tree mesh isn't watertight
     rasterizer.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable         = VK_TRUE;
-    rasterizer.depthBiasConstantFactor = 2.0f;
-    rasterizer.depthBiasSlopeFactor    = 1.5f;
+    rasterizer.depthBiasConstantFactor = 1.5f;
+    rasterizer.depthBiasSlopeFactor    = 1.2f;
     rasterizer.lineWidth               = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
@@ -1039,11 +1039,11 @@ void VulkanContext::createShadowPlayerPipeline() {
     VkPipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
-    rasterizer.cullMode                = VK_CULL_MODE_FRONT_BIT; // watertight cube — front-cull reduces peter-panning
+    rasterizer.cullMode                = VK_CULL_MODE_NONE; // match chunk shadow (tighter contact)
     rasterizer.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable         = VK_TRUE;
-    rasterizer.depthBiasConstantFactor = 2.0f;
-    rasterizer.depthBiasSlopeFactor    = 1.5f;
+    rasterizer.depthBiasConstantFactor = 0.0f;
+    rasterizer.depthBiasSlopeFactor    = 0.0f;
     rasterizer.lineWidth               = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multisampling{};

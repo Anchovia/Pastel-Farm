@@ -462,6 +462,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 플레이어 큐브도 shadow map에 기록. `shadow_player.vert`(pos + instancePos + push constant `lightMVP`) + `m_shadowPlayerPipeline`(depth-only, `Vertex`+`InstanceData`, cullMode FRONT_BIT=watertight 큐브 피터패닝 억제) 추가.
 - shadow pass에서 나무 다음으로 플레이어 cube를 인덱스 draw. 라이트 박스 중심이라 컬링 없음.
 
+### 문서 4종 체계 + 월드 모델 방향 결정
+- README/DEVLOG에 더해 `ARCHITECTURE.md`(엔진 구조 + 기술 방향, `[구현됨]`/`[계획]` 태그)와 `DESIGN.md`(게임 기획·비전·스코프) 추가. README 상단에 4종 문서 역할·갱신주기 표.
+- 갱신 정책: README=기능 추가 시 / DEVLOG=작업마다 / ARCHITECTURE=구조 변경 시 / DESIGN=방향 변경 시. 각 사실은 한 문서에만(중복·노후화 방지).
+- 결정: 월드 모델은 **고정맵 + 절차 레이어** 방향(문서상). 청크=스트리밍 단위라 추후 `WorldSource` 추상화로 전환, 현재 구현은 절차생성 유지.
+
+### 그림자 접지(contact) 튜닝
+- 피터패닝(그림자가 geometry에서 떠 보임) 교정. 원인: 파이프라인 depthBias + 셰이더 bias 이중 적용 + front-face culling.
+- 단계: ① 셰이더 bias `mix(0.008,0.001)` → `mix(0.0015,0.0003)` ② 파이프라인 depthBias `2.0/1.5` → chunk·player `0/0` ③ chunk·player shadow `cullMode FRONT → NONE`(접지 다이얼의 핵심). 나무는 `1.5/1.2`·NONE 유지(현 느낌 좋음).
+- `max(shadow,0.4)`(파스텔 부드러움)는 유지. 잔여 극미세 틈은 shadow map texel 해상도 한계 — 필요 시 ortho 범위 축소/해상도↑로 개선.
+
 ---
 
 ## 게임 설계 메모
