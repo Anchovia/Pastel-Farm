@@ -400,6 +400,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `LINEAR` 샘플러가 이미 하드웨어 2×2 bilinear PCF를 수행하므로 수동 3×3과 결합하면 샘플링 부드러움 개선.
 - 참고: 지형의 계단 모양 그림자는 shadow map 문제가 아니라 블록 지형 자체의 기하학적 계단에서 기인. PCF로 해결 불가, 로우폴리 복셀 스타일에서 자연스러운 특성으로 수용.
 
+### 리사이즈 viewport 수정 (dynamic state)
+- 파이프라인이 viewport/scissor를 정적 상태로 구워, 창 리사이즈 후에도 옛 크기로 렌더돼 화면이 한쪽으로 쏠리거나 잘리던 버그 수정.
+- 메인 패스 파이프라인 4개(triangle/chunk/ui/object)에 `VK_DYNAMIC_STATE_VIEWPORT` + `VK_DYNAMIC_STATE_SCISSOR` 추가, `recordCommandBuffer`의 메인 패스 시작 직후 `vkCmdSetViewport`/`vkCmdSetScissor`를 `m_swapchainExtent` 기준으로 매 프레임 설정.
+- shadow 파이프라인은 2048×2048 고정이라 정적 viewport 유지. `recreateSwapchain`은 파이프라인 재생성 없이도 새 크기에 맞게 렌더됨.
+
 ---
 
 ## 게임 설계 메모

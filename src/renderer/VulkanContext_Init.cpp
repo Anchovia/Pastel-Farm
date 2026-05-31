@@ -403,6 +403,13 @@ void VulkanContext::createGraphicsPipeline() {
     viewportState.scissorCount  = 1;
     viewportState.pScissors     = &scissor;
 
+    // Viewport/scissor as dynamic state so window resize doesn't need a pipeline rebuild
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates    = dynamicStates;
+
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster.polygonMode = VK_POLYGON_MODE_FILL;
@@ -450,6 +457,7 @@ void VulkanContext::createGraphicsPipeline() {
     pipelineInfo.layout              = m_pipelineLayout;
     pipelineInfo.renderPass          = m_renderPass;
     pipelineInfo.subpass             = 0;
+    pipelineInfo.pDynamicState       = &dynamicState;
 
     if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_pipeline) != VK_SUCCESS)
         throw std::runtime_error("Failed to create graphics pipeline");
@@ -506,6 +514,13 @@ void VulkanContext::createChunkPipeline() {
     viewportState.scissorCount  = 1;
     viewportState.pScissors     = &scissor;
 
+    // Viewport/scissor as dynamic state so window resize doesn't need a pipeline rebuild
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates    = dynamicStates;
+
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster.polygonMode = VK_POLYGON_MODE_FILL;
@@ -546,6 +561,7 @@ void VulkanContext::createChunkPipeline() {
     pipelineInfo.layout              = m_pipelineLayout;
     pipelineInfo.renderPass          = m_renderPass;
     pipelineInfo.subpass             = 0;
+    pipelineInfo.pDynamicState       = &dynamicState;
 
     if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_chunkPipeline) != VK_SUCCESS)
         throw std::runtime_error("Failed to create chunk pipeline");
@@ -600,6 +616,13 @@ void VulkanContext::createUIPipeline() {
     viewportState.pViewports    = &viewport;
     viewportState.scissorCount  = 1;
     viewportState.pScissors     = &scissor;
+
+    // Viewport/scissor as dynamic state so window resize doesn't need a pipeline rebuild
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates    = dynamicStates;
 
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -656,6 +679,7 @@ void VulkanContext::createUIPipeline() {
     pipelineInfo.layout              = m_uiPipelineLayout;
     pipelineInfo.renderPass          = m_renderPass;
     pipelineInfo.subpass             = 0;
+    pipelineInfo.pDynamicState       = &dynamicState;
 
     if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_uiPipeline) != VK_SUCCESS)
         throw std::runtime_error("Failed to create UI pipeline");
@@ -718,6 +742,13 @@ void VulkanContext::createObjectPipeline() {
     viewportState.scissorCount  = 1;
     viewportState.pScissors     = &scissor;
 
+    // Viewport/scissor as dynamic state so window resize doesn't need a pipeline rebuild
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates    = dynamicStates;
+
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster.polygonMode = VK_POLYGON_MODE_FILL;
@@ -758,6 +789,7 @@ void VulkanContext::createObjectPipeline() {
     pipelineInfo.layout              = m_pipelineLayout;  // reuse UBO descriptor layout
     pipelineInfo.renderPass          = m_renderPass;
     pipelineInfo.subpass             = 0;
+    pipelineInfo.pDynamicState       = &dynamicState;
 
     if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_objectPipeline) != VK_SUCCESS)
         throw std::runtime_error("Failed to create object pipeline");
