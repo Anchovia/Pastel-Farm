@@ -446,6 +446,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 메인 패스 파이프라인 4개(player/selector·chunk·ui·object)가 복붙하던 shader stage·input assembly·viewport+dynamic·rasterizer·multisample·blend·depth·pipelineInfo 조립을 `createPipeline(PipelineConfig)` 헬퍼 하나로 통합.
 - 각 함수는 vertex binding/attribute·cullMode·depthTest·alphaBlend·shader 경로·layout만 `PipelineConfig`로 채워 호출(~430줄 → ~110줄). pipeline layout 생성은 각 함수에 유지, shadow 파이프라인(depth-only·push constant·고정 viewport)은 성격이 달라 미변경. 렌더 결과 동일.
 
+### 디스크 로드 청크 나무 복원 (버그 수정)
+- `save.dat`에서 로드된 수정 청크는 오브젝트(나무)가 저장도 재생성도 되지 않아 나무가 사라지던 버그 수정.
+- `World::load()`에서 청크마다 `TerrainGen::generate`를 임시 청크에 돌려 `objects`만 가져와 적용. 저장된 타일/상태는 보존하고 나무만 좌표 기반 결정론으로 원래대로 복원. 시작 시 수정 청크 수만큼 1회.
+
 ---
 
 ## 게임 설계 메모

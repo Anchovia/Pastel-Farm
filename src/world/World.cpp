@@ -197,6 +197,13 @@ bool World::load(const std::string& path, glm::vec3& outPlayerPos, float& outGam
 
         if (!f) return false;
 
+        // Objects (trees) aren't saved — regenerate them deterministically from the
+        // coords so loaded modified chunks keep their trees. Saved tiles/states are
+        // preserved; only temp.objects is taken from the regenerated terrain.
+        Chunk temp;
+        TerrainGen::generate(cx, cy, temp);
+        chunk.objects = std::move(temp.objects);
+
         chunk.modified = true;
         chunk.dirty    = true;
         m_modifiedUnloaded[{cx, cy}] = std::move(chunk);
