@@ -129,6 +129,7 @@ private:
         VkBuffer       objInstBuffer = VK_NULL_HANDLE;  // per-chunk tree instances
         VkDeviceMemory objInstMemory = VK_NULL_HANDLE;
         uint32_t       objInstCount  = 0;
+        bool           objInstBuilt  = false;           // objects don't change after generation
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;

@@ -84,6 +84,7 @@
 - present semaphore 이미지별 분리 — `m_renderFinished`를 스왑체인 이미지별로 두고 `imagesInFlight` 추적 추가, present semaphore 재사용 위반 제거
 - Frustum near 평면 수정 — `GLM_FORCE_DEPTH_ZERO_TO_ONE`에 맞춰 near 평면을 `row(2)`로 (Vulkan [0,1] depth)
 - 밤 shadow pass 스킵 — 태양이 지평선 아래일 땐 shadow map 청크 렌더를 건너뛰어 야간 GPU 부하 감소 (clear·레이아웃 전환은 유지)
+- object 인스턴스 버퍼 1회 빌드 — 나무 인스턴스 버퍼를 청크 로드당 한 번만 생성, 메시 리빌드 때마다 재생성하던 비용 제거
 ---
 
 ## 프로젝트 구조
@@ -177,6 +178,7 @@ game project/
 | `fix:` | 버그 수정 |
 | `docs:` | 문서만 변경 |
 | `refactor:` | 동작 변경 없는 코드 정리 |
+| `perf:` | 동작 변경 없는 성능 최적화 |
 
 ---
 

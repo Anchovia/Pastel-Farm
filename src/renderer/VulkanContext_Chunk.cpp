@@ -140,7 +140,11 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     memcpy(iMapped, indices.data(), iSize);
     vkUnmapMemory(m_device, data.indexMemory);
 
-    buildChunkObjectBuffer(coord, chunk);
+    // Tree instances don't change after generation — build once per chunk load
+    if (!data.objInstBuilt) {
+        buildChunkObjectBuffer(coord, chunk);
+        data.objInstBuilt = true;
+    }
 }
 
 // ============================================================
