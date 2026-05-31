@@ -49,22 +49,19 @@ int main() {
             float  dt  = static_cast<float>(now - lastTime);
             lastTime = now;
 
-            GLFWwindow* win = window.handle();
-            if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-                glfwSetWindowShouldClose(win, GLFW_TRUE);
+            PlayerInput input = inputManager.pollInput();
+
+            if (input.quit)
+                window.close();
 
             const float rotSpeed = 90.0f * dt;
-            if (glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS) orbitAngle -= rotSpeed;
-            if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) orbitAngle += rotSpeed;
+            if (input.rotateLeft)  orbitAngle -= rotSpeed;
+            if (input.rotateRight) orbitAngle += rotSpeed;
 
             // Ctrl+S save (edge-detect)
-            bool ctrlS = glfwGetKey(win, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
-                      && glfwGetKey(win, GLFW_KEY_S)            == GLFW_PRESS;
-            if (ctrlS && !prevCtrlS)
+            if (input.saveKey && !prevCtrlS)
                 world.save("save.dat", gameState.player().position(), gameState.time());
-            prevCtrlS = ctrlS;
-
-            PlayerInput input = inputManager.pollInput();
+            prevCtrlS = input.saveKey;
 
             if (input.windowWidth > 0 && input.windowHeight > 0)
                 camera.setAspectRatio((float)input.windowWidth / input.windowHeight);

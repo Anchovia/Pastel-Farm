@@ -32,6 +32,13 @@ PlayerInput InputManager::pollInput() {
 
     input.toggleInventory = glfwGetKey(win, GLFW_KEY_I) == GLFW_PRESS;
 
+    // Camera / system keys
+    input.quit        = glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+    input.rotateLeft  = glfwGetKey(win, GLFW_KEY_Q)      == GLFW_PRESS;
+    input.rotateRight = glfwGetKey(win, GLFW_KEY_E)      == GLFW_PRESS;
+    input.saveKey     = glfwGetKey(win, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
+                     && glfwGetKey(win, GLFW_KEY_S)            == GLFW_PRESS;
+
     // Window size
     glfwGetFramebufferSize(win, &input.windowWidth, &input.windowHeight);
 

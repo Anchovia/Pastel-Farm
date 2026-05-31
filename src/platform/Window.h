@@ -9,6 +9,7 @@ public:
     ~Window();
 
     bool shouldClose() const;
+    void close() { glfwSetWindowShouldClose(m_window, GLFW_TRUE); }
     void pollEvents();
 
     GLFWwindow* handle() const { return m_window; }

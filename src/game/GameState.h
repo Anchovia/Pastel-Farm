@@ -20,6 +20,10 @@ struct PlayerInput {
     bool leftClick       = false;
     bool rightClick      = false;
     bool toggleInventory = false;
+    bool quit            = false;  // ESC
+    bool rotateLeft      = false;  // Q
+    bool rotateRight     = false;  // E
+    bool saveKey         = false;  // Ctrl+S (raw; main edge-detects)
     int  selectSlot  = -1;  // 0..HOTBAR_SLOTS-1 if a number key was pressed, else -1
     int  scrollDelta = 0;   // slots to move from scroll wheel
     int windowWidth = 1280;

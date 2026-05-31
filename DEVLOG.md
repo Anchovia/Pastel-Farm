@@ -438,6 +438,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `rebuildDirtyChunks`가 매 프레임 dirty 청크를 전부 빌드하던 것을 프레임당 `MAX_CHUNK_BUILDS_PER_FRAME`(=2)개로 제한. 초과분은 `dirty=true`로 남아 다음 프레임들에 분산.
 - 청크 스트리밍(경계 넘을 때 한 줄 ~7개)·작물 성장(날짜 전환 시 다수 청크 동시 dirty) 시 한 프레임에 몰리던 스파이크 완화. 농장 게임 특성상 성장 색 변화는 지연에 둔감해 분산 처리가 적합. N은 튜닝 가능(우선순위/시간예산 방식은 추후).
 
+### 입력 일원화 (InputManager)
+- `main.cpp`이 직접 `glfwGetKey`로 읽던 ESC·Q/E·Ctrl+S를 `InputManager::pollInput`으로 이전. `PlayerInput`에 `quit`/`rotateLeft`/`rotateRight`/`saveKey` 추가.
+- `Window::close()` 추가로 main이 raw glfw 호출 없이 종료 요청. main은 폴링된 `input`으로 종료/회전/저장(edge-detect) 처리. 동작 동일, 입력 수집이 한 곳으로 통일.
+
 ---
 
 ## 게임 설계 메모
