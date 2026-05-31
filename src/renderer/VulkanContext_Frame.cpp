@@ -57,6 +57,25 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
                 vkCmdBindIndexBuffer(cmd, data.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
             }
+
+            // Trees cast shadows too — instanced, reuse the same light frustum cull
+            if (m_treeVertexCount > 0) {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowObjectPipeline);
+                vkCmdPushConstants(cmd, m_shadowPipelineLayout,
+                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
+                for (auto& [coord, data] : m_chunkBuffers) {
+                    if (data.objInstBuffer == VK_NULL_HANDLE || data.objInstCount == 0) continue;
+
+                    glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+                    glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+                    if (!lightFrustum.containsAABB(chunkMin, chunkMax)) continue;
+
+                    VkBuffer     bufs[] = { m_treeVertexBuffer, data.objInstBuffer };
+                    VkDeviceSize offs[] = { 0, 0 };
+                    vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+                    vkCmdDraw(cmd, m_treeVertexCount, data.objInstCount, 0, 0);
+                }
+            }
         }
         vkCmdEndRenderPass(cmd);
     }

@@ -454,6 +454,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 - shadow pass(주간)가 로드된 청크를 전부 그리던 것을, `m_lightMVP`에서 추출한 라이트 프러스텀으로 청크 AABB 컬링. 태양 직교 박스 밖 청크는 어차피 shadow map에 안 잡히므로 그림자 손실 없이 draw call만 감소.
 - 메인 패스 컬링과 동일한 `Frustum::extractFrom`/`containsAABB` 재사용. (4번 near 평면 수정 덕에 직교+[0,1] depth에도 정확)
 
+### 나무 그림자 캐스팅
+- shadow pass가 청크 메시만 그려 나무가 그림자를 못 드리우던 것 해결. `shadow_object.vert`(인스턴스 scale/rot/pos 변환 + push constant `lightMVP`) + `m_shadowObjectPipeline`(depth-only, `ChunkVertex`+`ObjectInstance`) 추가.
+- shadow pass에서 청크 다음으로 나무 인스턴스를 그림 — 2a의 라이트 프러스텀 컬링 재사용, `m_shadowPipelineLayout`(push constant)·`m_shadowRenderPass` 공유. cullMode NONE(나무 메시 비watertight). 시간에 따라 그림자 방향 회전.
+
 ---
 
 ## 게임 설계 메모
