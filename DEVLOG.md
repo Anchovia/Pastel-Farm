@@ -419,6 +419,9 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `GLM_FORCE_DEPTH_ZERO_TO_ONE`(Vulkan [0,1] depth)를 쓰는데 Gribb-Hartmann near 평면을 OpenGL [-1,1] 공식(`row(3)+row(2)`)으로 추출하던 버그 수정 → `row(2)`로 변경.
 - 나머지 5개 평면(left/right/bottom/top/far)은 clip-space x·y, far 모두 두 깊이 규약에서 동일하므로 그대로.
 
+### 죽은 코드 제거 (updateTargetTile)
+- 마우스 레이캐스팅으로 대체돼 호출처가 없던 `GameState::updateTargetTile` 선언/정의 제거. 동작 변화 없음.
+
 ---
 
 ## 게임 설계 메모

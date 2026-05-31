@@ -195,16 +195,3 @@ void GameState::setTime(float t) {
     m_prevDay   = m_day; // suppress immediate growthTick on load
     m_timeOfDay = std::fmod(m_time, DAY_DURATION) / DAY_DURATION;
 }
-
-void GameState::updateTargetTile(World& world) {
-    glm::vec3 targetPosition = m_player.position();
-    targetPosition.x += m_player.facingDirection().x;
-    targetPosition.y += m_player.facingDirection().y;
-
-    const glm::ivec3 tile = world.worldToTile(targetPosition);
-    if (world.inBounds(tile.x, tile.y, tile.z)) {
-        m_targetTile = tile;
-    } else {
-        m_targetTile.reset();
-    }
-}

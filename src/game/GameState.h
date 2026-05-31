@@ -48,8 +48,6 @@ public:
     void setTime(float t);
 
 private:
-    void updateTargetTile(World& world);
-
     Player m_player;
     std::optional<glm::ivec3> m_targetTile;
 
