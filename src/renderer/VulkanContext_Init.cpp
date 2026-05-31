@@ -281,7 +281,7 @@ void VulkanContext::createRenderPass() {
     color.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     color.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-    color.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    color.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // sampled by the post pass
 
     VkAttachmentDescription depth{};
     depth.format         = findDepthFormat();
@@ -307,16 +307,23 @@ void VulkanContext::createRenderPass() {
     subpass.pColorAttachments       = &colorRef;
     subpass.pDepthStencilAttachment = &depthRef;
 
-    VkSubpassDependency dep{};
-    dep.srcSubpass    = VK_SUBPASS_EXTERNAL;
-    dep.dstSubpass    = 0;
-    dep.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dep.srcAccessMask = 0;
-    dep.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    VkSubpassDependency deps[2]{};
+    deps[0].srcSubpass    = VK_SUBPASS_EXTERNAL;
+    deps[0].dstSubpass    = 0;
+    deps[0].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    deps[0].srcAccessMask = 0;
+    deps[0].dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    // Offscreen color write must finish before the post pass samples it
+    deps[1].srcSubpass    = 0;
+    deps[1].dstSubpass    = VK_SUBPASS_EXTERNAL;
+    deps[1].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    deps[1].dstStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
     VkAttachmentDescription attachments[] = {color, depth};
     VkRenderPassCreateInfo info{};
@@ -325,8 +332,8 @@ void VulkanContext::createRenderPass() {
     info.pAttachments    = attachments;
     info.subpassCount    = 1;
     info.pSubpasses      = &subpass;
-    info.dependencyCount = 1;
-    info.pDependencies   = &dep;
+    info.dependencyCount = 2;
+    info.pDependencies   = deps;
 
     if (vkCreateRenderPass(m_device, &info, nullptr, &m_renderPass) != VK_SUCCESS)
         throw std::runtime_error("Failed to create render pass");
@@ -621,10 +628,11 @@ void VulkanContext::createTreeMesh() {
 //  Framebuffers
 // ============================================================
 void VulkanContext::createFramebuffers() {
-    m_framebuffers.resize(m_swapchainImageViews.size());
-    for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
+    // Scene framebuffers — per-frame offscreen color + shared depth
+    m_sceneFramebuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkImageView attachments[] = { m_offscreenView[i], m_depthImageView };
         VkFramebufferCreateInfo info{};
-        VkImageView attachments[] = { m_swapchainImageViews[i], m_depthImageView };
         info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         info.renderPass      = m_renderPass;
         info.attachmentCount = 2;
@@ -632,9 +640,252 @@ void VulkanContext::createFramebuffers() {
         info.width           = m_swapchainExtent.width;
         info.height          = m_swapchainExtent.height;
         info.layers          = 1;
-        if (vkCreateFramebuffer(m_device, &info, nullptr, &m_framebuffers[i]) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create framebuffer");
+        if (vkCreateFramebuffer(m_device, &info, nullptr, &m_sceneFramebuffers[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create scene framebuffer");
     }
+
+    // Post framebuffers — one per swapchain image
+    m_postFramebuffers.resize(m_swapchainImageViews.size());
+    for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
+        VkImageView attachments[] = { m_swapchainImageViews[i] };
+        VkFramebufferCreateInfo info{};
+        info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        info.renderPass      = m_postRenderPass;
+        info.attachmentCount = 1;
+        info.pAttachments    = attachments;
+        info.width           = m_swapchainExtent.width;
+        info.height          = m_swapchainExtent.height;
+        info.layers          = 1;
+        if (vkCreateFramebuffer(m_device, &info, nullptr, &m_postFramebuffers[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create post framebuffer");
+    }
+}
+
+// ============================================================
+//  Post-process: offscreen target, render pass, pipeline, descriptors
+// ============================================================
+void VulkanContext::createPostRenderPass() {
+    VkAttachmentDescription color{};
+    color.format         = m_swapchainFormat;
+    color.samples        = VK_SAMPLE_COUNT_1_BIT;
+    color.loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE; // fullscreen pass overwrites every pixel
+    color.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    color.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    color.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorRef{};
+    colorRef.attachment = 0;
+    colorRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments    = &colorRef;
+
+    VkSubpassDependency dep{};
+    dep.srcSubpass    = VK_SUBPASS_EXTERNAL;
+    dep.dstSubpass    = 0;
+    dep.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dep.srcAccessMask = 0;
+    dep.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    VkRenderPassCreateInfo info{};
+    info.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    info.attachmentCount = 1;
+    info.pAttachments    = &color;
+    info.subpassCount    = 1;
+    info.pSubpasses      = &subpass;
+    info.dependencyCount = 1;
+    info.pDependencies   = &dep;
+    if (vkCreateRenderPass(m_device, &info, nullptr, &m_postRenderPass) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create post render pass");
+}
+
+void VulkanContext::createOffscreenResources() {
+    m_offscreenImage.resize(MAX_FRAMES_IN_FLIGHT);
+    m_offscreenMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    m_offscreenView.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createImage(m_swapchainExtent.width, m_swapchainExtent.height, m_swapchainFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            m_offscreenImage[i], m_offscreenMemory[i]);
+
+        VkImageViewCreateInfo v{};
+        v.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        v.image                           = m_offscreenImage[i];
+        v.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+        v.format                          = m_swapchainFormat;
+        v.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+        v.subresourceRange.levelCount     = 1;
+        v.subresourceRange.layerCount     = 1;
+        if (vkCreateImageView(m_device, &v, nullptr, &m_offscreenView[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create offscreen image view");
+    }
+}
+
+void VulkanContext::createPostPipeline() {
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding         = 0;
+    binding.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    binding.descriptorCount = 1;
+    binding.stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutCreateInfo dl{};
+    dl.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dl.bindingCount = 1;
+    dl.pBindings    = &binding;
+    if (vkCreateDescriptorSetLayout(m_device, &dl, nullptr, &m_postDescriptorSetLayout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create post descriptor set layout");
+
+    VkPipelineLayoutCreateInfo pl{};
+    pl.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pl.setLayoutCount = 1;
+    pl.pSetLayouts    = &m_postDescriptorSetLayout;
+    if (vkCreatePipelineLayout(m_device, &pl, nullptr, &m_postPipelineLayout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create post pipeline layout");
+
+    auto vertCode = readFile("shaders/post.vert.spv");
+    auto fragCode = readFile("shaders/post.frag.spv");
+    VkShaderModule vertMod = createShaderModule(vertCode);
+    VkShaderModule fragMod = createShaderModule(fragCode);
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vertMod;
+    stages[0].pName  = "main";
+    stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fragMod;
+    stages[1].pName  = "main";
+
+    VkPipelineVertexInputStateCreateInfo vertexInput{}; // no vertex buffers (gl_VertexIndex)
+    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport{ 0, 0, (float)m_swapchainExtent.width, (float)m_swapchainExtent.height, 0.0f, 1.0f };
+    VkRect2D   scissor{ {0, 0}, m_swapchainExtent };
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports    = &viewport;
+    viewportState.scissorCount  = 1;
+    viewportState.pScissors     = &scissor;
+
+    VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates    = dynamicStates;
+
+    VkPipelineRasterizationStateCreateInfo raster{};
+    raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode    = VK_CULL_MODE_NONE;
+    raster.frontFace   = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth   = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo msaa{};
+    msaa.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    msaa.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAttach{};
+    blendAttach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                 VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendStateCreateInfo blend{};
+    blend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blend.attachmentCount = 1;
+    blend.pAttachments    = &blendAttach;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable  = VK_FALSE;
+    depthStencil.depthWriteEnable = VK_FALSE;
+    depthStencil.depthCompareOp   = VK_COMPARE_OP_ALWAYS;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount          = 2;
+    pipelineInfo.pStages             = stages;
+    pipelineInfo.pVertexInputState   = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState      = &viewportState;
+    pipelineInfo.pRasterizationState = &raster;
+    pipelineInfo.pMultisampleState   = &msaa;
+    pipelineInfo.pColorBlendState    = &blend;
+    pipelineInfo.pDepthStencilState  = &depthStencil;
+    pipelineInfo.pDynamicState       = &dynamicState;
+    pipelineInfo.layout              = m_postPipelineLayout;
+    pipelineInfo.renderPass          = m_postRenderPass;
+    pipelineInfo.subpass             = 0;
+
+    if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_postPipeline) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create post pipeline");
+
+    vkDestroyShaderModule(m_device, vertMod, nullptr);
+    vkDestroyShaderModule(m_device, fragMod, nullptr);
+}
+
+void VulkanContext::createPostSampler() {
+    VkSamplerCreateInfo info{};
+    info.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    info.magFilter    = VK_FILTER_LINEAR;
+    info.minFilter    = VK_FILTER_LINEAR;
+    info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    info.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    if (vkCreateSampler(m_device, &info, nullptr, &m_postSampler) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create post sampler");
+}
+
+void VulkanContext::updatePostDescriptors() {
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorImageInfo img{};
+        img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        img.imageView   = m_offscreenView[i];
+        img.sampler     = m_postSampler;
+        VkWriteDescriptorSet w{};
+        w.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet          = m_postDescriptorSets[i];
+        w.dstBinding      = 0;
+        w.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w.descriptorCount = 1;
+        w.pImageInfo      = &img;
+        vkUpdateDescriptorSets(m_device, 1, &w, 0, nullptr);
+    }
+}
+
+void VulkanContext::createPostDescriptors() {
+    VkDescriptorPoolSize ps{};
+    ps.type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    ps.descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    VkDescriptorPoolCreateInfo pi{};
+    pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pi.poolSizeCount = 1;
+    pi.pPoolSizes    = &ps;
+    pi.maxSets       = MAX_FRAMES_IN_FLIGHT;
+    if (vkCreateDescriptorPool(m_device, &pi, nullptr, &m_postDescriptorPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create post descriptor pool");
+
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_postDescriptorSetLayout);
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool     = m_postDescriptorPool;
+    ai.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
+    ai.pSetLayouts        = layouts.data();
+    m_postDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    if (vkAllocateDescriptorSets(m_device, &ai, m_postDescriptorSets.data()) != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate post descriptor sets");
+
+    updatePostDescriptors();
 }
 
 // ============================================================

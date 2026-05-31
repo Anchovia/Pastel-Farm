@@ -98,7 +98,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     VkRenderPassBeginInfo rp{};
     rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rp.renderPass      = m_renderPass;
-    rp.framebuffer     = m_framebuffers[imageIndex];
+    rp.framebuffer     = m_sceneFramebuffers[m_currentFrame]; // render into offscreen color
     rp.renderArea      = {{0, 0}, m_swapchainExtent};
     rp.clearValueCount = 2;
     rp.pClearValues    = clearValues;
@@ -175,7 +175,31 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdDraw(cmd, m_uiVertexCount, 1, 0, 0);
     }
 
-    vkCmdEndRenderPass(cmd);
+    vkCmdEndRenderPass(cmd); // end scene pass (offscreen color now SHADER_READ_ONLY)
+
+    // Post-process pass — sample offscreen scene, output to swapchain
+    {
+        VkRenderPassBeginInfo postRp{};
+        postRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        postRp.renderPass      = m_postRenderPass;
+        postRp.framebuffer     = m_postFramebuffers[imageIndex];
+        postRp.renderArea      = {{0, 0}, m_swapchainExtent};
+        postRp.clearValueCount = 0;
+        vkCmdBeginRenderPass(cmd, &postRp, VK_SUBPASS_CONTENTS_INLINE);
+
+        VkViewport pvp{ 0.0f, 0.0f, (float)m_swapchainExtent.width, (float)m_swapchainExtent.height, 0.0f, 1.0f };
+        VkRect2D   psc{ {0, 0}, m_swapchainExtent };
+        vkCmdSetViewport(cmd, 0, 1, &pvp);
+        vkCmdSetScissor(cmd, 0, 1, &psc);
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_postPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            m_postPipelineLayout, 0, 1, &m_postDescriptorSets[m_currentFrame], 0, nullptr);
+        vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
+
+        vkCmdEndRenderPass(cmd);
+    }
+
     vkEndCommandBuffer(cmd);
 }
 

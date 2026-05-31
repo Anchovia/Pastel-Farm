@@ -61,6 +61,12 @@ private:
     void createUIBuffer();
     void updateHotbar();
     void createObjectPipeline();
+    void createPostRenderPass();
+    void createOffscreenResources();
+    void createPostPipeline();
+    void createPostSampler();
+    void createPostDescriptors();
+    void updatePostDescriptors();
     void createTreeMesh();
     void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
     void createUniformBuffers();
@@ -119,7 +125,8 @@ private:
     VkFormat                 m_swapchainFormat  = VK_FORMAT_UNDEFINED;
     VkExtent2D               m_swapchainExtent  = {};
     std::vector<VkImageView> m_swapchainImageViews;
-    std::vector<VkFramebuffer> m_framebuffers;
+    std::vector<VkFramebuffer> m_sceneFramebuffers;  // offscreen color + depth (per frame in flight)
+    std::vector<VkFramebuffer> m_postFramebuffers;   // swapchain (per image)
 
     VkRenderPass             m_renderPass        = VK_NULL_HANDLE;
     VkPipelineLayout         m_pipelineLayout    = VK_NULL_HANDLE;
@@ -128,6 +135,18 @@ private:
     VkPipeline               m_uiPipeline        = VK_NULL_HANDLE;  // 2D UI overlay
     VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
     VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props (trees)
+
+    // Post-process: scene → offscreen color, then fullscreen pass → swapchain
+    VkRenderPass             m_postRenderPass          = VK_NULL_HANDLE;
+    VkPipeline               m_postPipeline            = VK_NULL_HANDLE;
+    VkPipelineLayout         m_postPipelineLayout      = VK_NULL_HANDLE;
+    VkDescriptorSetLayout    m_postDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool         m_postDescriptorPool      = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> m_postDescriptorSets;
+    VkSampler                m_postSampler             = VK_NULL_HANDLE;
+    std::vector<VkImage>        m_offscreenImage;   // per frame in flight
+    std::vector<VkDeviceMemory> m_offscreenMemory;
+    std::vector<VkImageView>    m_offscreenView;
 
     VkBuffer                 m_vertexBuffer        = VK_NULL_HANDLE;
     VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
