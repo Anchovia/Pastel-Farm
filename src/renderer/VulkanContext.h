@@ -33,6 +33,17 @@ private:
     void createSwapchain();
     void createImageViews();
     void createRenderPass();
+    struct PipelineConfig {
+        const char*                                    vertPath;
+        const char*                                    fragPath;
+        std::vector<VkVertexInputBindingDescription>   bindings;
+        std::vector<VkVertexInputAttributeDescription> attributes;
+        VkCullModeFlags  cullMode;
+        bool             depthTest;   // depthTestEnable + depthWriteEnable
+        bool             alphaBlend;  // semi-transparent (UI)
+        VkPipelineLayout layout;
+    };
+    VkPipeline createPipeline(const PipelineConfig& cfg);
     void createGraphicsPipeline();
     void createFramebuffers();
     void createCommandPool();

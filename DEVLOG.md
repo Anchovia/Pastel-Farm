@@ -442,6 +442,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `main.cpp`이 직접 `glfwGetKey`로 읽던 ESC·Q/E·Ctrl+S를 `InputManager::pollInput`으로 이전. `PlayerInput`에 `quit`/`rotateLeft`/`rotateRight`/`saveKey` 추가.
 - `Window::close()` 추가로 main이 raw glfw 호출 없이 종료 요청. main은 폴링된 `input`으로 종료/회전/저장(edge-detect) 처리. 동작 동일, 입력 수집이 한 곳으로 통일.
 
+### 파이프라인 생성 보일러플레이트 헬퍼화
+- 메인 패스 파이프라인 4개(player/selector·chunk·ui·object)가 복붙하던 shader stage·input assembly·viewport+dynamic·rasterizer·multisample·blend·depth·pipelineInfo 조립을 `createPipeline(PipelineConfig)` 헬퍼 하나로 통합.
+- 각 함수는 vertex binding/attribute·cullMode·depthTest·alphaBlend·shader 경로·layout만 `PipelineConfig`로 채워 호출(~430줄 → ~110줄). pipeline layout 생성은 각 함수에 유지, shadow 파이프라인(depth-only·push constant·고정 viewport)은 성격이 달라 미변경. 렌더 결과 동일.
+
 ---
 
 ## 게임 설계 메모
