@@ -185,9 +185,10 @@ private:
     std::vector<VkCommandBuffer> m_commandBuffers;
 
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-    std::vector<VkSemaphore> m_imageAvailable;
-    std::vector<VkSemaphore> m_renderFinished;
-    std::vector<VkFence>     m_inFlight;
+    std::vector<VkSemaphore> m_imageAvailable;   // per frame in flight
+    std::vector<VkSemaphore> m_renderFinished;   // per swapchain image (present wait)
+    std::vector<VkFence>     m_inFlight;          // per frame in flight
+    std::vector<VkFence>     m_imagesInFlight;    // per swapchain image; non-owning fence refs
     uint32_t                 m_currentFrame     = 0;
 
     struct DeferredDelete {

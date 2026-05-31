@@ -926,8 +926,9 @@ void VulkanContext::createCommandBuffers() {
 // ============================================================
 void VulkanContext::createSyncObjects() {
     m_imageAvailable.resize(MAX_FRAMES_IN_FLIGHT);
-    m_renderFinished.resize(MAX_FRAMES_IN_FLIGHT);
     m_inFlight.resize(MAX_FRAMES_IN_FLIGHT);
+    m_renderFinished.resize(m_swapchainImages.size());        // present wait — one per image
+    m_imagesInFlight.assign(m_swapchainImages.size(), VK_NULL_HANDLE);
 
     VkSemaphoreCreateInfo semInfo{};
     semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -937,9 +938,10 @@ void VulkanContext::createSyncObjects() {
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkCreateSemaphore(m_device, &semInfo,   nullptr, &m_imageAvailable[i]);
-        vkCreateSemaphore(m_device, &semInfo,   nullptr, &m_renderFinished[i]);
         vkCreateFence    (m_device, &fenceInfo, nullptr, &m_inFlight[i]);
     }
+    for (auto& sem : m_renderFinished)
+        vkCreateSemaphore(m_device, &semInfo, nullptr, &sem);
 }
 
 // ============================================================

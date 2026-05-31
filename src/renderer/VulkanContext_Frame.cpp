@@ -189,6 +189,11 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         throw std::runtime_error("Failed to acquire swapchain image");
 
+    // If a previous frame is still using this image, wait on its fence first
+    if (m_imagesInFlight[imageIndex] != VK_NULL_HANDLE)
+        vkWaitForFences(m_device, 1, &m_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+    m_imagesInFlight[imageIndex] = m_inFlight[m_currentFrame];
+
     vkResetFences(m_device, 1, &m_inFlight[m_currentFrame]);
 
     // Light space matrix — orthographic from sun direction, centered on player
@@ -224,13 +229,13 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
     submit.commandBufferCount   = 1;
     submit.pCommandBuffers      = &m_commandBuffers[m_currentFrame];
     submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores    = &m_renderFinished[m_currentFrame];
+    submit.pSignalSemaphores    = &m_renderFinished[imageIndex];
     vkQueueSubmit(m_graphicsQueue, 1, &submit, m_inFlight[m_currentFrame]);
 
     VkPresentInfoKHR present{};
     present.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores    = &m_renderFinished[m_currentFrame];
+    present.pWaitSemaphores    = &m_renderFinished[imageIndex];
     present.swapchainCount     = 1;
     present.pSwapchains        = &m_swapchain;
     present.pImageIndices      = &imageIndex;

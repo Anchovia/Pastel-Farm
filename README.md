@@ -81,6 +81,7 @@
 - Shadow PCF — `chunk.frag`/`triangle.frag`에 3×3 수동 PCF 추가. 하드웨어 2×2 bilinear PCF(LINEAR 샘플러)와 결합해 shadow map 샘플링 경계 개선
 - 리사이즈 viewport 수정 — 파이프라인 viewport/scissor를 dynamic state로 전환, 창 크기 변경 시 렌더 영역이 새 swapchain 크기에 맞게 갱신 (이전엔 옛 크기로 고정돼 화면이 쏠림)
 - 프레임별 동적 버퍼 분리 — player/selector/UI 인스턴스 버퍼를 frame-in-flight 수만큼 복제해, GPU가 읽는 도중 덮어쓰던 data race 제거
+- present semaphore 이미지별 분리 — `m_renderFinished`를 스왑체인 이미지별로 두고 `imagesInFlight` 추적 추가, present semaphore 재사용 위반 제거
 ---
 
 ## 프로젝트 구조

@@ -410,6 +410,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `m_playerInst*` / `m_selectorInst*` / `m_ui*`(buffer·memory·mapped)를 `std::vector`로 전환해 `MAX_FRAMES_IN_FLIGHT`개씩 생성, update/bind를 `[m_currentFrame]`로 분리 (UBO와 동일 패턴).
 - selector 정점/인덱스 버퍼는 정적이라 단일 유지. `m_uiVertexCount`는 같은 프레임 내에서 쓰고 그리므로 단일 값 유지.
 
+### present semaphore 이미지별 분리 + imagesInFlight
+- present용 `m_renderFinished` semaphore가 frame-in-flight 단위(2개)라, present wait가 끝나기 전에 같은 semaphore가 재signal돼 검증 레이어가 잡던 동기화 위반 수정.
+- `m_renderFinished`를 스왑체인 이미지 개수만큼 생성하고 submit signal / present wait를 `[imageIndex]`로 변경. imageAvailable·inFlight fence는 frame-in-flight 단위 유지.
+- `m_imagesInFlight`(이미지별 fence 참조) 추가 — acquire한 이미지가 이전 프레임에서 아직 사용 중이면 그 fence를 먼저 대기. `recreateSwapchain`에서 이미지 수 변동에 대비해 semaphore·추적 배열 재생성.
+
 ---
 
 ## 게임 설계 메모

@@ -124,9 +124,10 @@ VulkanContext::~VulkanContext() {
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(m_device, m_imageAvailable[i], nullptr);
-        vkDestroySemaphore(m_device, m_renderFinished[i], nullptr);
         vkDestroyFence(m_device, m_inFlight[i], nullptr);
     }
+    for (auto sem : m_renderFinished)
+        vkDestroySemaphore(m_device, sem, nullptr);
     vkDestroyCommandPool(m_device, m_commandPool, nullptr);
     vkDestroyDevice(m_device, nullptr);
     if (kEnableValidation) DestroyDebugMessenger(m_instance, m_debugMessenger);
@@ -278,6 +279,16 @@ void VulkanContext::recreateSwapchain() {
     createImageViews();
     createDepthResources();
     createFramebuffers();
+
+    // Swapchain image count may have changed — recreate per-image present semaphores
+    for (auto sem : m_renderFinished)
+        vkDestroySemaphore(m_device, sem, nullptr);
+    m_renderFinished.resize(m_swapchainImages.size());
+    VkSemaphoreCreateInfo semInfo{};
+    semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    for (auto& sem : m_renderFinished)
+        vkCreateSemaphore(m_device, &semInfo, nullptr, &sem);
+    m_imagesInFlight.assign(m_swapchainImages.size(), VK_NULL_HANDLE);
 }
 
 // ============================================================
