@@ -16,7 +16,7 @@ struct Frustum {
         f.planes[1] = row(3) - row(0); // right
         f.planes[2] = row(3) + row(1); // bottom
         f.planes[3] = row(3) - row(1); // top
-        f.planes[4] = row(3) + row(2); // near
+        f.planes[4] = row(2);          // near (Vulkan [0,1] depth — GLM_FORCE_DEPTH_ZERO_TO_ONE)
         f.planes[5] = row(3) - row(2); // far
         return f;
     }

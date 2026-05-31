@@ -82,6 +82,7 @@
 - 리사이즈 viewport 수정 — 파이프라인 viewport/scissor를 dynamic state로 전환, 창 크기 변경 시 렌더 영역이 새 swapchain 크기에 맞게 갱신 (이전엔 옛 크기로 고정돼 화면이 쏠림)
 - 프레임별 동적 버퍼 분리 — player/selector/UI 인스턴스 버퍼를 frame-in-flight 수만큼 복제해, GPU가 읽는 도중 덮어쓰던 data race 제거
 - present semaphore 이미지별 분리 — `m_renderFinished`를 스왑체인 이미지별로 두고 `imagesInFlight` 추적 추가, present semaphore 재사용 위반 제거
+- Frustum near 평면 수정 — `GLM_FORCE_DEPTH_ZERO_TO_ONE`에 맞춰 near 평면을 `row(2)`로 (Vulkan [0,1] depth)
 ---
 
 ## 프로젝트 구조

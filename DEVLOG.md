@@ -415,6 +415,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `m_renderFinished`를 스왑체인 이미지 개수만큼 생성하고 submit signal / present wait를 `[imageIndex]`로 변경. imageAvailable·inFlight fence는 frame-in-flight 단위 유지.
 - `m_imagesInFlight`(이미지별 fence 참조) 추가 — acquire한 이미지가 이전 프레임에서 아직 사용 중이면 그 fence를 먼저 대기. `recreateSwapchain`에서 이미지 수 변동에 대비해 semaphore·추적 배열 재생성.
 
+### Frustum near 평면 수정 (Vulkan depth)
+- `GLM_FORCE_DEPTH_ZERO_TO_ONE`(Vulkan [0,1] depth)를 쓰는데 Gribb-Hartmann near 평면을 OpenGL [-1,1] 공식(`row(3)+row(2)`)으로 추출하던 버그 수정 → `row(2)`로 변경.
+- 나머지 5개 평면(left/right/bottom/top/far)은 clip-space x·y, far 모두 두 깊이 규약에서 동일하므로 그대로.
+
 ---
 
 ## 게임 설계 메모
