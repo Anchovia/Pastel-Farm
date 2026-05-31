@@ -74,6 +74,8 @@
 - Shadow Map 인프라 — 1024×1024 depth-only `VkImage` + shadow 전용 `VkRenderPass` / `VkFramebuffer` 생성. 스왑체인과 독립적으로 한 번만 생성. Shadow pass 실행 및 셰이더 샘플링은 다음 단계
 - Shadow Pass 파이프라인 — depth-only 파이프라인 + `shadow.vert`(push constant lightMVP). `drawFrame`에서 태양 방향 기반 orthographic light matrix 계산, main pass 이전에 청크 메시를 태양 시점으로 렌더링해 shadow map을 채움
 - Shadow Sampler + Descriptor 연결 — comparison sampler(`LESS_OR_EQUAL`) 생성. descriptor layout binding 1에 `combinedImageSampler` 추가, descriptor set에 shadow image view + sampler 바인딩. fragment shader에서 shadow map을 읽을 준비 완료
+- Shadow Rendering — UBO에 `lightMVP` 추가. `chunk.vert`/`object.vert`/`triangle.vert`에서 `fragPosLightSpace` 출력, `chunk.frag`/`triangle.frag`에서 `sampler2DShadow`로 shadow 비교. NdotL 기반 가변 bias로 shadow acne 억제. shadow map 2048×2048, ortho ±80
+- Shadow 깊이 범위 수정 — `GLM_FORCE_DEPTH_ZERO_TO_ONE` 추가. GLM ortho가 Vulkan 기준 [0,1] 깊이로 매핑되도록 수정. 플레이어 이동 시 그림자가 잘리던 문제 해결
 ---
 
 ## 프로젝트 구조

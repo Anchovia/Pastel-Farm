@@ -40,6 +40,7 @@ add_executable(engine
 
 target_include_directories(engine PRIVATE src ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(engine PRIVATE Vulkan::Vulkan glfw glm::glm)
+target_compile_definitions(engine PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
 # VS 디버거 작업 디렉토리를 exe 위치로 고정 (셰이더 경로 문제 해결)
 set_target_properties(engine PROPERTIES

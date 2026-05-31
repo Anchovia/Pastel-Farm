@@ -374,6 +374,19 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `createDescriptorSets()`: binding 1에 shadow image view(`DEPTH_STENCIL_READ_ONLY_OPTIMAL`) + sampler 바인딩. `vkUpdateDescriptorSets`에 write 2개로 UBO + sampler 동시 업데이트.
 - 이 단계에서 화면 변화 없음. 다음 단계(chunk.vert에서 light space 좌표 출력 + chunk.frag에서 `sampler2DShadow`로 비교)에서 실제 그림자가 보임.
 
+### Shadow Rendering
+- UBO에 `mat4 lightMVP` 추가 (208 → 272 bytes). `updateUniformBuffer()`에서 `m_lightMVP`를 UBO에 기록.
+- `chunk.vert` / `object.vert` / `triangle.vert`: UBO에 `lightMVP` 추가, `fragPosLightSpace = ubo.lightMVP * vec4(worldPos, 1.0)` 출력 (location 2 또는 3).
+- `chunk.frag` / `triangle.frag`: `sampler2DShadow shadowMap` (binding 1). `fragPosLightSpace` perspective divide → UV 변환 (`xy * 0.5 + 0.5`) → NdotL 기반 bias(`mix(0.008, 0.001, NdotL)`) 적용 후 `texture(shadowMap, vec3(projCoords.xy, z - bias))` 비교. `shadowFactor = max(shadow, 0.4)` — 그림자 안도 40% 밝기 유지.
+- 결과: 지형·나무·플레이어에 그림자가 드리워지고 시간에 따라 방향 변화.
+
+### Shadow Quality Tuning + Depth Fix
+- Shadow map 2048×2048 (기존 1024), ortho range ±80 (초기 ±60 → ±45 시도 후 최종 ±80). texel 크기 ≈ 0.078 units/texel.
+- `GLM_FORCE_DEPTH_ZERO_TO_ONE` 를 `CMakeLists.txt`에 추가. 근본 원인: GLM `ortho`가 기본적으로 OpenGL 깊이 범위 [-1,1]로 계산 → Vulkan [0,1] 불일치 → 플레이어 근처 geometry가 NDC Z ≈ 0 경계에 걸려 shadow map에서 들어갔다 나갔다 → 이동할 때 그림자 잘림. 수정 후 정상 동작.
+- **미결 항목 (추후 처리):**
+  - 태양 방향: `azimuth = -timeOfDay * 2π`로 뒤집으면 그림자 방향이 더 자연스러워짐. 게임 월드 방향 확정 후 적용 예정.
+  - Shadow aliasing (경계 계단 현상): PCF 샘플 수 증가로 개선 가능. 로우폴리 스타일에서 허용 범위 안이므로 렌더링 폴리시 2차 때 검토.
+
 ---
 
 ## 게임 설계 메모

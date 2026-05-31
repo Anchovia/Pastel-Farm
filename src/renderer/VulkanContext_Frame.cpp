@@ -190,7 +190,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
         float elevation = sinf(timeOfDay * 3.14159265f);
         float azimuth   = timeOfDay * 6.28318530f;
         glm::vec3 sunDir = glm::normalize(glm::vec3(cosf(azimuth), sinf(azimuth), elevation));
-        const float range = 60.0f;
+        const float range = 80.0f;
         glm::mat4 lightView = glm::lookAt(
             playerPosition + sunDir * 150.0f,
             playerPosition,
@@ -257,6 +257,7 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& cam
     ubo.view     = camera.view();
     ubo.proj     = camera.proj();
     ubo.lightDir = glm::vec4(sunDir, elevation); // w = dayFactor
+    ubo.lightMVP = m_lightMVP;
     memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
 

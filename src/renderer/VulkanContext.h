@@ -163,7 +163,7 @@ private:
     VkDeviceMemory               m_depthImageMemory     = VK_NULL_HANDLE;
     VkImageView                  m_depthImageView       = VK_NULL_HANDLE;
 
-    static constexpr uint32_t    SHADOW_MAP_SIZE        = 1024;
+    static constexpr uint32_t    SHADOW_MAP_SIZE        = 2048;
     VkImage                      m_shadowImage          = VK_NULL_HANDLE;
     VkDeviceMemory               m_shadowImageMemory    = VK_NULL_HANDLE;
     VkImageView                  m_shadowImageView      = VK_NULL_HANDLE;
