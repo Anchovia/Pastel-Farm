@@ -76,6 +76,18 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
                     vkCmdDraw(cmd, m_treeVertexCount, data.objInstCount, 0, 0);
                 }
             }
+
+            // Player cube casts a shadow too (always inside the light box — no cull)
+            {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPlayerPipeline);
+                vkCmdPushConstants(cmd, m_shadowPipelineLayout,
+                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
+                VkBuffer     pBufs[] = { m_vertexBuffer, m_playerInstBuffer[m_currentFrame] };
+                VkDeviceSize pOffs[] = { 0, 0 };
+                vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
+                vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+                vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
+            }
         }
         vkCmdEndRenderPass(cmd);
     }

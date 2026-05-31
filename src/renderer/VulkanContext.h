@@ -73,6 +73,7 @@ private:
     void createShadowResources();
     void createShadowPipeline();
     void createShadowObjectPipeline();
+    void createShadowPlayerPipeline();
     void createShadowSampler();
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
@@ -185,6 +186,7 @@ private:
     VkPipelineLayout             m_shadowPipelineLayout = VK_NULL_HANDLE;
     VkPipeline                   m_shadowPipeline       = VK_NULL_HANDLE;
     VkPipeline                   m_shadowObjectPipeline = VK_NULL_HANDLE;  // instanced tree shadow caster
+    VkPipeline                   m_shadowPlayerPipeline = VK_NULL_HANDLE;  // player cube shadow caster
     VkSampler                    m_shadowSampler        = VK_NULL_HANDLE;
     glm::mat4                    m_lightMVP             = glm::mat4(1.0f);
     glm::vec3                    m_sunDir               = glm::vec3(0.0f, 0.0f, 1.0f);

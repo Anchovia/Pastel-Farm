@@ -458,6 +458,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 - shadow pass가 청크 메시만 그려 나무가 그림자를 못 드리우던 것 해결. `shadow_object.vert`(인스턴스 scale/rot/pos 변환 + push constant `lightMVP`) + `m_shadowObjectPipeline`(depth-only, `ChunkVertex`+`ObjectInstance`) 추가.
 - shadow pass에서 청크 다음으로 나무 인스턴스를 그림 — 2a의 라이트 프러스텀 컬링 재사용, `m_shadowPipelineLayout`(push constant)·`m_shadowRenderPass` 공유. cullMode NONE(나무 메시 비watertight). 시간에 따라 그림자 방향 회전.
 
+### 플레이어 그림자 캐스팅
+- 플레이어 큐브도 shadow map에 기록. `shadow_player.vert`(pos + instancePos + push constant `lightMVP`) + `m_shadowPlayerPipeline`(depth-only, `Vertex`+`InstanceData`, cullMode FRONT_BIT=watertight 큐브 피터패닝 억제) 추가.
+- shadow pass에서 나무 다음으로 플레이어 cube를 인덱스 draw. 라이트 박스 중심이라 컬링 없음.
+
 ---
 
 ## 게임 설계 메모
