@@ -72,6 +72,7 @@
 - 세계 저장/로드 — 플레이어가 수정한 청크만 `save.dat`에 바이너리로 저장(타일 + TileState). Ctrl+S 저장, 시작 시 자동 로드. 언로드된 수정 청크는 메모리에 보관했다가 재방문 시 복원
 - 동적 태양 조명 — UBO에 `lightDir(xyz) + dayFactor(w)` 추가. `timeOfDay` 기반으로 태양 고도/방위각 계산, 낮엔 Lambert diffuse 최대, 밤엔 ambient 0.15(달빛)만 남도록 셰이더 전체 적용
 - Shadow Map 인프라 — 1024×1024 depth-only `VkImage` + shadow 전용 `VkRenderPass` / `VkFramebuffer` 생성. 스왑체인과 독립적으로 한 번만 생성. Shadow pass 실행 및 셰이더 샘플링은 다음 단계
+- Shadow Pass 파이프라인 — depth-only 파이프라인 + `shadow.vert`(push constant lightMVP). `drawFrame`에서 태양 방향 기반 orthographic light matrix 계산, main pass 이전에 청크 메시를 태양 시점으로 렌더링해 shadow map을 채움
 ---
 
 ## 프로젝트 구조

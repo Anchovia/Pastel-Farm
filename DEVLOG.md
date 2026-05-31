@@ -359,6 +359,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 소멸자에 5개 리소스 정리 추가.
 - 이 단계에서 화면 변화 없음. 다음 단계(shadow pipeline + shadow pass 실행)의 기반.
 
+### Shadow Pass Pipeline
+- `shadow.vert` 신규 셰이더: push constant `mat4 lightMVP` 하나만 받아 위치 변환. UBO 불필요 — light matrix는 매 프레임 바뀌고 double-buffering이 필요 없어 push constant가 적합 (최소 보장 크기 128 bytes, mat4 = 64 bytes).
+- `createShadowPipeline()`: fragment shader 없는 depth-only 파이프라인. `ChunkVertex` binding (stride 36 bytes) + location 0(pos)만 선언. `cullMode = FRONT_BIT` (back-face shadow map에서 peter-panning 억제), `depthBias` 상수 2.0 + slope 1.5 (shadow acne 방지). viewport/scissor 고정 1024×1024.
+- `m_shadowPipelineLayout`: push constant range 1개(VERTEX stage, 64 bytes). descriptor set 없음.
+- `drawFrame`에서 매 프레임 light matrix 계산: `elevation = sin(tod×π)`, `azimuth = tod×2π`로 sunDir 구성 → `glm::lookAt(player + sunDir×150, player, Z_UP)` + `glm::ortho(±60, ±60, 1, 300)` + Vulkan Y-flip.
+- `recordCommandBuffer` 첫 부분에 shadow pass 삽입: shadow render pass begin → pipeline bind → push constant → 청크 메시 전체 draw → render pass end. 이후 기존 main pass 실행.
+- 결과: 매 프레임 청크 메시의 깊이가 태양 시점으로 shadow map에 기록됨. 화면 변화 없음 — 다음 단계(descriptor에 shadow sampler 추가 + fragment shader에서 비교)에서 실제 그림자가 보임.
+
 ---
 
 ## 게임 설계 메모

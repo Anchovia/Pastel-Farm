@@ -20,6 +20,35 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     vkBeginCommandBuffer(cmd, &begin);
 
+    // Shadow pass — render chunk depth from sun's perspective
+    {
+        VkClearValue shadowClear{};
+        shadowClear.depthStencil = {1.0f, 0};
+        VkRenderPassBeginInfo shadowRp{};
+        shadowRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        shadowRp.renderPass      = m_shadowRenderPass;
+        shadowRp.framebuffer     = m_shadowFramebuffer;
+        shadowRp.renderArea      = {{0, 0}, {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE}};
+        shadowRp.clearValueCount = 1;
+        shadowRp.pClearValues    = &shadowClear;
+
+        vkCmdBeginRenderPass(cmd, &shadowRp, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
+        vkCmdPushConstants(cmd, m_shadowPipelineLayout,
+            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
+
+        for (auto& [coord, data] : m_chunkBuffers) {
+            if (data.vertexBuffer == VK_NULL_HANDLE || data.indexCount == 0) continue;
+            VkBuffer     vBuf[] = {data.vertexBuffer};
+            VkDeviceSize offs[] = {0};
+            vkCmdBindVertexBuffers(cmd, 0, 1, vBuf, offs);
+            vkCmdBindIndexBuffer(cmd, data.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
+        }
+
+        vkCmdEndRenderPass(cmd);
+    }
+
     VkClearValue clearValues[2];
     clearValues[0].color        = {{m_skyColor[0], m_skyColor[1], m_skyColor[2], 1.0f}};
     clearValues[1].depthStencil = {1.0f, 0};
@@ -155,6 +184,22 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
         throw std::runtime_error("Failed to acquire swapchain image");
 
     vkResetFences(m_device, 1, &m_inFlight[m_currentFrame]);
+
+    // Light space matrix — orthographic from sun direction, centered on player
+    {
+        float elevation = sinf(timeOfDay * 3.14159265f);
+        float azimuth   = timeOfDay * 6.28318530f;
+        glm::vec3 sunDir = glm::normalize(glm::vec3(cosf(azimuth), sinf(azimuth), elevation));
+        const float range = 60.0f;
+        glm::mat4 lightView = glm::lookAt(
+            playerPosition + sunDir * 150.0f,
+            playerPosition,
+            glm::vec3(0.0f, 0.0f, 1.0f));
+        glm::mat4 lightProj = glm::ortho(-range, range, -range, range, 1.0f, 300.0f);
+        lightProj[1][1] *= -1.0f;
+        m_lightMVP = lightProj * lightView;
+    }
+
     updateUniformBuffer(m_currentFrame, camera, timeOfDay);
     updatePlayerInstanceBuffer(playerPosition);
     updateSelectorInstanceBuffer(targetTile);

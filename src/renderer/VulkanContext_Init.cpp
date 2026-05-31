@@ -1016,6 +1016,108 @@ void VulkanContext::createShadowResources() {
 }
 
 // ============================================================
+//  Shadow pipeline (depth-only, push constant light MVP)
+// ============================================================
+void VulkanContext::createShadowPipeline() {
+    auto vert = readFile("shaders/shadow.vert.spv");
+    VkShaderModule vertMod = createShaderModule(vert);
+
+    VkPipelineShaderStageCreateInfo vertStage{};
+    vertStage.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertStage.stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    vertStage.module = vertMod;
+    vertStage.pName  = "main";
+
+    // ChunkVertex binding — shadow shader only reads pos (location 0)
+    VkVertexInputBindingDescription binding{};
+    binding.binding   = 0;
+    binding.stride    = sizeof(ChunkVertex);
+    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription attr{};
+    attr.binding  = 0;
+    attr.location = 0;
+    attr.format   = VK_FORMAT_R32G32B32_SFLOAT;
+    attr.offset   = 0;
+
+    VkPipelineVertexInputStateCreateInfo vertInput{};
+    vertInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertInput.vertexBindingDescriptionCount   = 1;
+    vertInput.pVertexBindingDescriptions      = &binding;
+    vertInput.vertexAttributeDescriptionCount = 1;
+    vertInput.pVertexAttributeDescriptions    = &attr;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport{0.0f, 0.0f, (float)SHADOW_MAP_SIZE, (float)SHADOW_MAP_SIZE, 0.0f, 1.0f};
+    VkRect2D   scissor{{0, 0}, {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE}};
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports    = &viewport;
+    viewportState.scissorCount  = 1;
+    viewportState.pScissors     = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
+    rasterizer.cullMode                = VK_CULL_MODE_FRONT_BIT; // front-cull reduces peter-panning
+    rasterizer.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.depthBiasEnable         = VK_TRUE;
+    rasterizer.depthBiasConstantFactor = 2.0f;
+    rasterizer.depthBiasSlopeFactor    = 1.5f;
+    rasterizer.lineWidth               = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable  = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+    VkPipelineColorBlendStateCreateInfo colorBlend{};
+    colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+
+    VkPushConstantRange pushRange{};
+    pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushRange.offset     = 0;
+    pushRange.size       = sizeof(glm::mat4);
+
+    VkPipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges    = &pushRange;
+    if (vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &m_shadowPipelineLayout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow pipeline layout");
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount          = 1;
+    pipelineInfo.pStages             = &vertStage;
+    pipelineInfo.pVertexInputState   = &vertInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState      = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState   = &multisampling;
+    pipelineInfo.pDepthStencilState  = &depthStencil;
+    pipelineInfo.pColorBlendState    = &colorBlend;
+    pipelineInfo.layout              = m_shadowPipelineLayout;
+    pipelineInfo.renderPass          = m_shadowRenderPass;
+    pipelineInfo.subpass             = 0;
+
+    if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_shadowPipeline) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow pipeline");
+
+    vkDestroyShaderModule(m_device, vertMod, nullptr);
+}
+
+// ============================================================
 //  Descriptor set layout
 // ============================================================
 void VulkanContext::createDescriptorSetLayout() {

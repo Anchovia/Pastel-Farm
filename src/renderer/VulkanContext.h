@@ -60,6 +60,7 @@ private:
     void updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile);
     void createDepthResources();
     void createShadowResources();
+    void createShadowPipeline();
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
@@ -167,6 +168,9 @@ private:
     VkImageView                  m_shadowImageView      = VK_NULL_HANDLE;
     VkRenderPass                 m_shadowRenderPass     = VK_NULL_HANDLE;
     VkFramebuffer                m_shadowFramebuffer    = VK_NULL_HANDLE;
+    VkPipelineLayout             m_shadowPipelineLayout = VK_NULL_HANDLE;
+    VkPipeline                   m_shadowPipeline       = VK_NULL_HANDLE;
+    glm::mat4                    m_lightMVP             = glm::mat4(1.0f);
 
     VkDescriptorSetLayout        m_descriptorSetLayout = VK_NULL_HANDLE;
     std::vector<VkBuffer>        m_uniformBuffers;

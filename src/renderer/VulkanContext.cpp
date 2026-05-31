@@ -37,6 +37,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createObjectPipeline();
     createDepthResources();
     createShadowResources();
+    createShadowPipeline();
     createFramebuffers();
     createCommandPool();
     createVertexBuffer();
@@ -106,8 +107,10 @@ VulkanContext::~VulkanContext() {
     vkDestroyPipeline(m_device, m_chunkPipeline, nullptr);
     vkDestroyPipeline(m_device, m_pipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
-    vkDestroyFramebuffer(m_device, m_shadowFramebuffer,  nullptr);
-    vkDestroyRenderPass (m_device, m_shadowRenderPass,   nullptr);
+    vkDestroyPipeline      (m_device, m_shadowPipeline,       nullptr);
+    vkDestroyPipelineLayout(m_device, m_shadowPipelineLayout, nullptr);
+    vkDestroyFramebuffer   (m_device, m_shadowFramebuffer,    nullptr);
+    vkDestroyRenderPass    (m_device, m_shadowRenderPass,     nullptr);
     vkDestroyImageView  (m_device, m_shadowImageView,    nullptr);
     vkDestroyImage      (m_device, m_shadowImage,        nullptr);
     vkFreeMemory        (m_device, m_shadowImageMemory,  nullptr);
