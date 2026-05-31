@@ -207,10 +207,11 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
 //  drawFrame
 // ============================================================
 void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                              int hotbarSelected, const std::array<ItemType, HOTBAR_SLOTS>& palette, float timeOfDay, bool inventoryOpen) {
+                              int hotbarSelected, const std::array<ItemType, HOTBAR_SLOTS>& palette, float timeOfDay, bool inventoryOpen, int day) {
     m_hotbarSelected = hotbarSelected;
     m_hotbarPalette  = palette;
     m_inventoryOpen  = inventoryOpen;
+    m_dayHud         = day;
 
     // Advance frame counter and free buffers that are no longer in flight
     m_frameCount++;
@@ -434,6 +435,30 @@ void VulkanContext::updateHotbar() {
                          glm::vec4(col, 1.0f));
             }
         }
+    }
+
+    // --- Day counter HUD (top-left) ---
+    // Digits drawn as 3x5 dot-matrix quads (no font texture). Row bits: 4=left,2=mid,1=right.
+    {
+        static const uint8_t DIGITS[10][5] = {
+            {7,5,5,5,7}, {2,2,2,2,2}, {7,1,7,4,7}, {7,1,7,1,7}, {5,5,7,1,1},
+            {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,1,1}, {7,5,7,5,7}, {7,5,7,1,7},
+        };
+        auto pushNumber = [&](int value, float ox, float oy, float px, glm::vec4 col) {
+            if (value < 0) value = 0;
+            int digs[12]; int n = 0;
+            if (value == 0) digs[n++] = 0;
+            else for (int v = value; v > 0 && n < 12; v /= 10) digs[n++] = v % 10;
+            float cx = ox;
+            for (int i = n - 1; i >= 0; i--) {        // most significant first
+                for (int r = 0; r < 5; r++)
+                    for (int c = 0; c < 3; c++)
+                        if (DIGITS[digs[i]][r] & (1 << (2 - c)))
+                            pushQuad(cx + c * px, oy + r * px, px, px, col);
+                cx += 4.0f * px;
+            }
+        };
+        pushNumber(m_dayHud, 16.0f, 16.0f, 4.0f, {1.0f, 1.0f, 1.0f, 0.9f});
     }
 
     m_uiVertexCount = (uint32_t)verts.size();

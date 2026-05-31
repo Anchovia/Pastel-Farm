@@ -85,6 +85,13 @@ Explore → Gather → Farm/Build → Progress → Unlock → Return to world
 ## Resource Philosophy
 자원은 재생한다. **영구 세계 + 지속 변경 + 재생 자원 레이어**. (돌 재생 / 계절 forage / wildlife 이동 / 식생 변화) → 세계가 고갈되지 않음.
 
+## Building & Resource Interaction (Stardew-style) — 결정됨
+- **지형은 불변** — 플레이어는 땅을 파거나 부수지 않는다(복셀 블록 파괴 없음). 지형/고도는 authored·고정.
+- 자원은 **필드 오브젝트**(나무·돌 등). 도구로 채집(도끼→나무, 곡괭이→돌) → 오브젝트가 **아이템을 드롭** → 인벤토리로.
+- **제작(crafting)**: 채집한 자원을 작업대에서 **설치 가능한 오브젝트**(울타리·구조물·장식)로 제작.
+- **건축**: 제작 오브젝트를 월드에 설치, **플레이어가 설치한 오브젝트만 철거** 가능(지형·자연물은 자유 파괴 불가).
+- 기존 Minecraft식 복셀 설치/파괴는 **은퇴** — 복셀 지형은 고정, 건축은 오브젝트 레이어에서 일어난다.
+
 ## Visual Direction
 타깃: **스타일라이즈드 grounded 로우폴리**. 비주얼 퀄리티는 조명·그림자·분위기·구도·scene dressing·color grading에서 나온다. 사실성·PBR·AAA 충실도 아님.
 

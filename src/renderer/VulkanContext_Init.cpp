@@ -548,9 +548,9 @@ void VulkanContext::createObjectPipeline() {
 // ============================================================
 //  UI buffer
 // ============================================================
-// Capacity: hotbar (~66 verts) + inventory overlay (~120 verts) + margin
+// Capacity: hotbar + inventory overlay + number/digit quads (counts, day HUD) + margin
 void VulkanContext::createUIBuffer() {
-    VkDeviceSize size = sizeof(UIVertex) * 512;
+    VkDeviceSize size = sizeof(UIVertex) * 1024;
     m_uiBuffer.resize(MAX_FRAMES_IN_FLIGHT);
     m_uiMemory.resize(MAX_FRAMES_IN_FLIGHT);
     m_uiMapped.resize(MAX_FRAMES_IN_FLIGHT);

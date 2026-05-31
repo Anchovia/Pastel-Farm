@@ -74,11 +74,13 @@ src/
 4. terrain breakup (vertex color hue / dirt 패치)
 5. vegetation variation (HSV ±, 종 2~3개) / micro height / sky tint / wind
 
-### 오브젝트 시스템 일반화
-- `ObjectType → MeshRegistry` (2번째 프롭 추가 시)
-- `ObjectDefinition` 데이터 주도(collidable / castShadow / baseScale)
-- variant 시스템(울타리 등 연결 구조)
-- tree 전용 → generic **StaticProp** 시스템으로 승격
+### 스타듀식 오브젝트 경제 — **결정**(우선순위 ↑, 복셀 블록 편집은 은퇴)
+순서: ① 인벤토리 모델 + 숫자 렌더러 + 작물 경제(씨앗 소모/수확 획득) → ② 제네릭 오브젝트 시스템 → ③ 자원 오브젝트+채집 → ④ 지형 불변화(복셀 설치/파괴 제거) → ⑤ 작업대/제작 → ⑥ 오브젝트 설치/철거.
+- **인벤토리**: 슬롯+개수(스택) 모델 + add/remove API + 숫자 렌더러(비트맵 digit quad, 텍스처 없음). 모든 드롭/소모가 여기로.
+- `ObjectType → MeshRegistry` + `ObjectDefinition` 데이터 주도(mesh / collidable / castShadow / **harvestTool / dropItem / placeable**). tree 전용 → generic **StaticProp**으로 승격.
+- 채집: 도끼→나무, 곡괭이→돌 = 오브젝트 레이캐스트 → 제거 + 드롭 아이템 → 인벤토리.
+- **지형 불변**: 좌클릭 복셀 파괴 제거, 건축은 제작 오브젝트 설치/철거(플레이어 설치물만).
+- variant 시스템(울타리 등 연결 구조)은 그 이후.
 
 ### 월드 모델 — **결정: 고정맵 + 절차 레이어**
 - 핵심 통찰: **chunk = 스트리밍 단위(생성 방식이 아님)** → 절차/고정 둘 다 가능
