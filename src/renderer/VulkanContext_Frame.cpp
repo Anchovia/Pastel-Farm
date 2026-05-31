@@ -37,12 +37,20 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         // fragment shaders gate shadow sampling on dayFactor > 0.01 anyway.
         vkCmdBeginRenderPass(cmd, &shadowRp, VK_SUBPASS_CONTENTS_INLINE);
         if (m_dayFactor > 0.01f) {
+            // Cull chunks outside the light's ortho box — they aren't captured anyway
+            Frustum lightFrustum = Frustum::extractFrom(m_lightMVP);
+
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
             vkCmdPushConstants(cmd, m_shadowPipelineLayout,
                 VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
 
             for (auto& [coord, data] : m_chunkBuffers) {
                 if (data.vertexBuffer == VK_NULL_HANDLE || data.indexCount == 0) continue;
+
+                glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+                glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+                if (!lightFrustum.containsAABB(chunkMin, chunkMax)) continue;
+
                 VkBuffer     vBuf[] = {data.vertexBuffer};
                 VkDeviceSize offs[] = {0};
                 vkCmdBindVertexBuffers(cmd, 0, 1, vBuf, offs);

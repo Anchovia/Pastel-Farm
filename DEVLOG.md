@@ -450,6 +450,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `save.dat`에서 로드된 수정 청크는 오브젝트(나무)가 저장도 재생성도 되지 않아 나무가 사라지던 버그 수정.
 - `World::load()`에서 청크마다 `TerrainGen::generate`를 임시 청크에 돌려 `objects`만 가져와 적용. 저장된 타일/상태는 보존하고 나무만 좌표 기반 결정론으로 원래대로 복원. 시작 시 수정 청크 수만큼 1회.
 
+### shadow pass 라이트 프러스텀 컬링 (최적화)
+- shadow pass(주간)가 로드된 청크를 전부 그리던 것을, `m_lightMVP`에서 추출한 라이트 프러스텀으로 청크 AABB 컬링. 태양 직교 박스 밖 청크는 어차피 shadow map에 안 잡히므로 그림자 손실 없이 draw call만 감소.
+- 메인 패스 컬링과 동일한 `Frustum::extractFrom`/`containsAABB` 재사용. (4번 near 평면 수정 덕에 직교+[0,1] depth에도 정확)
+
 ---
 
 ## 게임 설계 메모
