@@ -194,10 +194,15 @@ void VulkanContext::rebuildDirtyChunks() {
         }
     }
 
-    // Rebuild dirty chunks
+    // Rebuild dirty chunks — capped per frame to avoid a spike when many turn dirty
+    // at once (chunk streaming on a boundary cross, or growthTick on a day change).
+    // Remaining dirty chunks keep their flag and are handled over the next frames.
+    static constexpr int MAX_CHUNK_BUILDS_PER_FRAME = 2;
+    int builtThisFrame = 0;
     for (auto& [coord, chunk] : m_world.chunks()) {
         if (!chunk.dirty) continue;
         buildChunkBuffer(coord, chunk);
         chunk.dirty = false;
+        if (++builtThisFrame >= MAX_CHUNK_BUILDS_PER_FRAME) break;
     }
 }

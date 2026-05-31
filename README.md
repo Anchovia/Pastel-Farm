@@ -85,6 +85,7 @@
 - Frustum near 평면 수정 — `GLM_FORCE_DEPTH_ZERO_TO_ONE`에 맞춰 near 평면을 `row(2)`로 (Vulkan [0,1] depth)
 - 밤 shadow pass 스킵 — 태양이 지평선 아래일 땐 shadow map 청크 렌더를 건너뛰어 야간 GPU 부하 감소 (clear·레이아웃 전환은 유지)
 - object 인스턴스 버퍼 1회 빌드 — 나무 인스턴스 버퍼를 청크 로드당 한 번만 생성, 메시 리빌드 때마다 재생성하던 비용 제거
+- 청크 리빌드 프레임 분할 — dirty 청크를 프레임당 N개로 제한해 청크 스트리밍·작물 성장 시 프레임 스파이크 완화
 ---
 
 ## 프로젝트 구조
