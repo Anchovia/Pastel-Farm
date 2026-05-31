@@ -481,6 +481,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 구조: 기존 main 렌더패스를 **씬 패스**(color finalLayout=`SHADER_READ_ONLY`)로 전환, **post 렌더패스**(스왑체인) 신설, 정점버퍼 없는 풀스크린 삼각형 파이프라인(`post.vert`/`post.frag`) + 오프스크린 샘플 디스크립터. `recreateSwapchain`·소멸자에 오프스크린/디스크립터 재생성·해제 추가. 오프스크린=스왑체인 sRGB라 패스스루(0a)가 픽셀 동일.
 - 그레이딩(`post.frag` 상수): exposure·contrast·saturation + split-tone(쿨 그림자/웜 하이라이트, 따뜻한 쪽으로 튜닝) + vignette. 이후 bloom 등 image-space 효과의 토대.
 
+### 물주기 (watering) — 물이 성장을 gate
+- `ItemType::TOOL_WATERINGCAN` + `TileState.watered`(일시 상태, 매일 리셋이라 미저장). 물뿌리개 우클릭 → FARMLAND `watered=true`, 짙은(촉촉) 색으로 렌더.
+- `growthTick` 재작성: **물 준 farmland 위 WHEAT만 하루 1단계 성장**, 처리 후 farmland 마름(매일 재급수 필요). 기존 날짜기반 catch-up 제거.
+- 인벤토리 그리드 `INV_ROWS 2→3`(아이템 전부 노출). 기본 핫바 도끼→물뿌리개로 교체(호미+물뿌리개+씨앗 = 농사 루프 즉시 사용, 도끼는 인벤토리에서).
+
 ---
 
 ## 게임 설계 메모

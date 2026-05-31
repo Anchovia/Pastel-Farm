@@ -26,6 +26,7 @@ enum class ItemType : uint8_t {
     TOOL_HOE,
     TOOL_AXE,
     SEED_WHEAT,
+    TOOL_WATERINGCAN,
     COUNT,
 };
 
@@ -33,7 +34,7 @@ inline bool isBlock(ItemType t) {
     return t >= ItemType::BLOCK_GRASS && t <= ItemType::BLOCK_WATER;
 }
 inline bool isTool(ItemType t) {
-    return t == ItemType::TOOL_HOE || t == ItemType::TOOL_AXE;
+    return t == ItemType::TOOL_HOE || t == ItemType::TOOL_AXE || t == ItemType::TOOL_WATERINGCAN;
 }
 inline TileType itemToTile(ItemType t) {
     switch (t) {
@@ -57,13 +58,14 @@ inline glm::vec3 itemColor(ItemType t) {
         case ItemType::TOOL_HOE:     return {0.80f, 0.70f, 0.50f};
         case ItemType::TOOL_AXE:     return {0.50f, 0.50f, 0.55f};
         case ItemType::SEED_WHEAT:   return {0.80f, 0.75f, 0.20f};
+        case ItemType::TOOL_WATERINGCAN: return {0.30f, 0.55f, 0.80f};
         default:                     return {0.0f,  0.0f,  0.0f};
     }
 }
 
 // Inventory grid layout (shared between GameState and VulkanContext)
 static constexpr int   INV_COLS      = 4;
-static constexpr int   INV_ROWS      = 2;
+static constexpr int   INV_ROWS      = 3;  // 4x3 grid fits all item types incl. tools/seeds
 static constexpr float INV_SLOT_SIZE = 64.0f;
 static constexpr float INV_GAP       = 8.0f;
 static constexpr float INV_PAD       = 16.0f;

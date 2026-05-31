@@ -114,6 +114,7 @@ void World::setTileState(int x, int y, int z, const TileState& s) {
     Chunk& chunk = getOrCreateChunk(cc.x, cc.y);
     auto lc = localCoord(x, y);
     chunk.states[z][lc.y][lc.x] = s;
+    chunk.dirty    = true;   // state can affect rendering (e.g. watered farmland tint)
     chunk.modified = true;
 }
 
@@ -212,25 +213,38 @@ bool World::load(const std::string& path, glm::vec3& outPlayerPos, float& outGam
 }
 
 // ---- Growth ----
-
-static constexpr int GROWTH_DAYS = 2;
+// Water gates growth: wheat advances one stage per in-game day only if the
+// farmland below it was watered. Farmland then dries out (must re-water daily).
 
 void World::growthTick(int currentDay) {
     for (auto& [coord, chunk] : m_chunks) {
         bool changed = false;
-        for (int z  = 0; z  < CHUNK_DEPTH; z++)
+
+        // Grow wheat sitting on watered farmland
+        for (int z  = 1; z  < CHUNK_DEPTH; z++)
         for (int ly = 0; ly < CHUNK_SIZE;  ly++)
         for (int lx = 0; lx < CHUNK_SIZE;  lx++) {
-            if (chunk.tiles[z][ly][lx] != TileType::WHEAT) continue;
+            if (chunk.tiles[z][ly][lx]   != TileType::WHEAT)    continue;
+            if (chunk.tiles[z-1][ly][lx] != TileType::FARMLAND) continue;
+            if (!chunk.states[z-1][ly][lx].watered)             continue;
             TileState& s = chunk.states[z][ly][lx];
-            if (s.growthStage >= 3) continue;
-
-            while (s.growthStage < 3 && currentDay - (int)s.lastUpdatedDay >= GROWTH_DAYS) {
+            if (s.growthStage < 3) {
                 s.growthStage++;
-                s.lastUpdatedDay += GROWTH_DAYS;
+                s.lastUpdatedDay = (uint32_t)currentDay;
                 changed = true;
             }
         }
+
+        // Farmland dries out each day — must be re-watered
+        for (int z  = 0; z  < CHUNK_DEPTH; z++)
+        for (int ly = 0; ly < CHUNK_SIZE;  ly++)
+        for (int lx = 0; lx < CHUNK_SIZE;  lx++) {
+            if (chunk.tiles[z][ly][lx] == TileType::FARMLAND && chunk.states[z][ly][lx].watered) {
+                chunk.states[z][ly][lx].watered = false;
+                changed = true; // wet -> dry visual change
+            }
+        }
+
         if (changed) chunk.dirty = true;
     }
 }

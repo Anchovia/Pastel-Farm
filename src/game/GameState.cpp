@@ -23,7 +23,7 @@ GameState::GameState() {
     m_palette = {
         ItemType::BLOCK_GRASS,  ItemType::BLOCK_DIRT,   ItemType::BLOCK_STONE,
         ItemType::BLOCK_WOOD,   ItemType::BLOCK_LEAVES,  ItemType::BLOCK_WATER,
-        ItemType::TOOL_HOE,     ItemType::TOOL_AXE,      ItemType::SEED_WHEAT,
+        ItemType::TOOL_HOE,     ItemType::TOOL_WATERINGCAN, ItemType::SEED_WHEAT,
     };
 }
 
@@ -172,6 +172,12 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                                     s.growthStage    = 0;
                                     s.lastUpdatedDay = (uint32_t)m_day;
                                     world.setTileState(tx, ty, tz + 1, s);
+                                }
+                            } else if (item == ItemType::TOOL_WATERINGCAN) {
+                                if (world.getTile(tx, ty, tz) == TileType::FARMLAND) {
+                                    TileState s = world.getTileState(tx, ty, tz);
+                                    s.watered = true;
+                                    world.setTileState(tx, ty, tz, s);
                                 }
                             }
                         }

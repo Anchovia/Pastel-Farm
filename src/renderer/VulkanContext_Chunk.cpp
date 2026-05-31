@@ -83,8 +83,13 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
         const int wx = baseX + lx;
         const int wy = baseY + ly;
         const uint8_t   growthStage = chunk.states[z][ly][lx].growthStage;
-        const glm::vec3 topColor    = World::tileColor(t, growthStage);
-        const glm::vec3 sideColor   = World::tileSideColor(t);
+        glm::vec3       topColor    = World::tileColor(t, growthStage);
+        glm::vec3       sideColor   = World::tileSideColor(t);
+        // Watered farmland renders darker (moist)
+        if (t == TileType::FARMLAND && chunk.states[z][ly][lx].watered) {
+            topColor  *= 0.6f;
+            sideColor *= 0.6f;
+        }
         const glm::vec3 center      = { (float)wx, (float)wy, (float)z };
 
         for (const auto& face : kFaces) {
