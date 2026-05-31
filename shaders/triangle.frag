@@ -29,7 +29,12 @@ void main() {
     if (dayFactor > 0.01 && projCoords.z >= 0.0 && projCoords.z <= 1.0) {
         float NdotL = max(dot(normalize(fragNormal), lightDir), 0.0);
         float bias  = mix(0.008, 0.001, NdotL);
-        shadow = texture(shadowMap, vec3(projCoords.xy, projCoords.z - bias));
+        float texel = 1.0 / 2048.0;
+        shadow = 0.0;
+        for (int x = -1; x <= 1; x++)
+            for (int y = -1; y <= 1; y++)
+                shadow += texture(shadowMap, vec3(projCoords.xy + vec2(x, y) * texel, projCoords.z - bias));
+        shadow /= 9.0;
     }
     float shadowFactor = max(shadow, 0.4);
 

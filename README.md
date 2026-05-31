@@ -78,6 +78,7 @@
 - Shadow 깊이 범위 수정 — `GLM_FORCE_DEPTH_ZERO_TO_ONE` 추가. GLM ortho가 Vulkan 기준 [0,1] 깊이로 매핑되도록 수정. 플레이어 이동 시 그림자가 잘리던 문제 해결
 - 태양 방향 수정 — azimuth 부호 반전(`-timeOfDay × 2π`). 그림자 회전 방향이 더 자연스러워짐
 - 안개 (Fog) — view-space 깊이 기반 선형 안개. `FOG_START=27, FOG_END=57`. 먼 거리 지형이 하늘색으로 자연스럽게 희미해지고 청크 경계가 가려짐. 안개 색은 UBO `fogColor`로 sky color와 동기화되어 시간대에 따라 자동 변화
+- Shadow PCF — `chunk.frag`/`triangle.frag`에 3×3 수동 PCF 추가. 하드웨어 2×2 bilinear PCF(LINEAR 샘플러)와 결합해 shadow map 샘플링 경계 개선
 ---
 
 ## 프로젝트 구조

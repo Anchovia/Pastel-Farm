@@ -395,6 +395,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `chunk.frag` / `triangle.frag`: `FOG_START=27, FOG_END=57` 선형 안개. `fogFactor = clamp((END - depth) / (END - START), 0, 1)` → `mix(fogColor, litColor, fogFactor)`. 안개 범위는 카메라 기준이므로 플레이어 기준 약 7~37 유닛 밖에서 적용.
 - 결과: 먼 지형이 하늘색으로 자연스럽게 희미해지고 청크 경계가 가려짐.
 
+### Shadow PCF (3×3)
+- `chunk.frag` / `triangle.frag`: 단일 `texture()` 호출 → 3×3 루프로 교체. `texel = 1.0 / 2048.0`, 각 샘플에 같은 bias 적용 후 9로 나눔.
+- `LINEAR` 샘플러가 이미 하드웨어 2×2 bilinear PCF를 수행하므로 수동 3×3과 결합하면 샘플링 부드러움 개선.
+- 참고: 지형의 계단 모양 그림자는 shadow map 문제가 아니라 블록 지형 자체의 기하학적 계단에서 기인. PCF로 해결 불가, 로우폴리 복셀 스타일에서 자연스러운 특성으로 수용.
+
 ---
 
 ## 게임 설계 메모
