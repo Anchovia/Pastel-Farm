@@ -241,8 +241,9 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
 
     // Sun direction + light space matrix — orthographic from sun, centered on player
     {
+        const float kSunAzimuth = glm::radians(225.0f); // rotate light direction in world (tune to taste)
         float elevation = sinf(timeOfDay * 3.14159265f);
-        float azimuth   = -timeOfDay * 6.28318530f;
+        float azimuth   = (timeOfDay - 0.5f) * 3.14159265f + kSunAzimuth; // π → 180° sweep (sunrise→noon→sunset)
         m_sunDir    = glm::normalize(glm::vec3(cosf(azimuth), sinf(azimuth), elevation));
         m_dayFactor = elevation; // 0 at midnight, 1 at noon
 
