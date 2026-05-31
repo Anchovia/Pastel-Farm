@@ -55,7 +55,7 @@ private:
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
-    void updateUniformBuffer(uint32_t currentFrame, const Camera& camera, float timeOfDay);
+    void updateUniformBuffer(uint32_t currentFrame, const Camera& camera);
     void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
     void updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile);
     void createDepthResources();
@@ -173,6 +173,8 @@ private:
     VkPipeline                   m_shadowPipeline       = VK_NULL_HANDLE;
     VkSampler                    m_shadowSampler        = VK_NULL_HANDLE;
     glm::mat4                    m_lightMVP             = glm::mat4(1.0f);
+    glm::vec3                    m_sunDir               = glm::vec3(0.0f, 0.0f, 1.0f);
+    float                        m_dayFactor            = 0.0f;
 
     VkDescriptorSetLayout        m_descriptorSetLayout = VK_NULL_HANDLE;
     std::vector<VkBuffer>        m_uniformBuffers;

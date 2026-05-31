@@ -422,6 +422,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 ### 죽은 코드 제거 (updateTargetTile)
 - 마우스 레이캐스팅으로 대체돼 호출처가 없던 `GameState::updateTargetTile` 선언/정의 제거. 동작 변화 없음.
 
+### 태양 방향 계산 중복 제거
+- `drawFrame`(lightMVP 계산)과 `updateUniformBuffer`(UBO `lightDir`)에서 중복 계산하던 `elevation`/`azimuth`/`sunDir`를 `drawFrame`에서 한 번만 계산해 `m_sunDir`/`m_dayFactor` 멤버에 저장.
+- `updateUniformBuffer`는 멤버를 읽기만 하고, 미사용이 된 `timeOfDay` 파라미터 제거. 렌더 결과는 동일.
+
 ---
 
 ## 게임 설계 메모
