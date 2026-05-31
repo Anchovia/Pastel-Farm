@@ -426,6 +426,10 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `drawFrame`(lightMVP 계산)과 `updateUniformBuffer`(UBO `lightDir`)에서 중복 계산하던 `elevation`/`azimuth`/`sunDir`를 `drawFrame`에서 한 번만 계산해 `m_sunDir`/`m_dayFactor` 멤버에 저장.
 - `updateUniformBuffer`는 멤버를 읽기만 하고, 미사용이 된 `timeOfDay` 파라미터 제거. 렌더 결과는 동일.
 
+### 밤 shadow pass 스킵 (최적화)
+- 프래그먼트 셰이더가 `dayFactor > 0.01`일 때만 그림자를 샘플링하므로, 밤(태양 지평선 아래)엔 shadow map 청크 렌더를 건너뜀 — 매 프레임 ~수십 개 청크를 태양 시점으로 다시 그리던 비용 절약.
+- 렌더패스 begin/end + clear(depth=1.0=전부 lit)는 유지해 이미지 레이아웃 전환과 시작 첫 프레임(밤) 안전성 보장. 무거운 청크 draw 루프만 `m_dayFactor > 0.01f`로 가드.
+
 ---
 
 ## 게임 설계 메모

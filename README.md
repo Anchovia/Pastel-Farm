@@ -83,6 +83,7 @@
 - 프레임별 동적 버퍼 분리 — player/selector/UI 인스턴스 버퍼를 frame-in-flight 수만큼 복제해, GPU가 읽는 도중 덮어쓰던 data race 제거
 - present semaphore 이미지별 분리 — `m_renderFinished`를 스왑체인 이미지별로 두고 `imagesInFlight` 추적 추가, present semaphore 재사용 위반 제거
 - Frustum near 평면 수정 — `GLM_FORCE_DEPTH_ZERO_TO_ONE`에 맞춰 near 평면을 `row(2)`로 (Vulkan [0,1] depth)
+- 밤 shadow pass 스킵 — 태양이 지평선 아래일 땐 shadow map 청크 렌더를 건너뛰어 야간 GPU 부하 감소 (clear·레이아웃 전환은 유지)
 ---
 
 ## 프로젝트 구조

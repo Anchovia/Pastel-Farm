@@ -32,20 +32,24 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         shadowRp.clearValueCount = 1;
         shadowRp.pClearValues    = &shadowClear;
 
+        // Always begin/end so the shadow image is cleared (depth=1.0 → fully lit) and
+        // transitioned to READ_ONLY_OPTIMAL. At night skip the chunk geometry: the
+        // fragment shaders gate shadow sampling on dayFactor > 0.01 anyway.
         vkCmdBeginRenderPass(cmd, &shadowRp, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
-        vkCmdPushConstants(cmd, m_shadowPipelineLayout,
-            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
+        if (m_dayFactor > 0.01f) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPipeline);
+            vkCmdPushConstants(cmd, m_shadowPipelineLayout,
+                VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
 
-        for (auto& [coord, data] : m_chunkBuffers) {
-            if (data.vertexBuffer == VK_NULL_HANDLE || data.indexCount == 0) continue;
-            VkBuffer     vBuf[] = {data.vertexBuffer};
-            VkDeviceSize offs[] = {0};
-            vkCmdBindVertexBuffers(cmd, 0, 1, vBuf, offs);
-            vkCmdBindIndexBuffer(cmd, data.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
+            for (auto& [coord, data] : m_chunkBuffers) {
+                if (data.vertexBuffer == VK_NULL_HANDLE || data.indexCount == 0) continue;
+                VkBuffer     vBuf[] = {data.vertexBuffer};
+                VkDeviceSize offs[] = {0};
+                vkCmdBindVertexBuffers(cmd, 0, 1, vBuf, offs);
+                vkCmdBindIndexBuffer(cmd, data.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
+            }
         }
-
         vkCmdEndRenderPass(cmd);
     }
 
