@@ -346,7 +346,7 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `UniformBufferObject`에 `vec4 lightDir` 추가 (xyz = 태양 방향, w = dayFactor 0..1). 기존 192 bytes → 208 bytes.
 - `updateUniformBuffer()`가 `timeOfDay`를 받아 매 프레임 태양 위치 계산: `elevation = sin(tod × π)` (자정=0, 정오=1), `azimuth = tod × 2π` (하루 동안 360° 회전). sunDir은 두 값으로 구성한 단위 벡터.
 - Descriptor set layout의 UBO stage flags: `VERTEX_BIT` → `VERTEX_BIT | FRAGMENT_BIT`. Fragment shader에서 UBO를 읽으려면 필수.
-- `chunk.frag` / `triangle.frag`에 UBO 바인딩 추가. Lambert diffuse에 `dayFactor` 곱해 낮엔 full lighting, 밤엔 diffuse=0. ambient는 `mix(0.15, 0.3, dayFactor)`로 보간 — 밤엔 0.15(달빛), 낮엔 0.3.
+- `chunk.frag` / `triangle.frag`에 UBO 바인딩 추가. Lambert diffuse에 `dayFactor` 곱해 낮엔 full lighting, 밤엔 diffuse=0. ambient는 당시 `mix(0.15, 0.3, dayFactor)`로 보간 — 이후 hemisphere ambient 튜닝에서 밤 바닥값을 0.10으로 낮춤.
 - `chunk.vert`, `object.vert`, `triangle.vert` UBO 구조체에 `vec4 lightDir` 선언 추가 (C++ 쪽 버퍼 크기와 일치).
 - 결과: 시간 흐름에 따라 태양 방향이 회전하고 밤이 되면 어두워짐. Shadow Map의 light matrix 기반이 되는 단계.
 
@@ -692,6 +692,31 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `RESUME` 클릭 프레임의 마우스 입력이 월드 클릭으로 새지 않도록 gameplay 입력을 비움. Settings 진입 클릭 프레임도 Settings row 클릭으로 이어지지 않도록 click edge 상태를 동기화.
 - 인벤토리가 열린 Gameplay에서 `ESC`를 누르면 Pause 진입보다 인벤토리 닫기를 우선하도록 `GameState::closeInventory`와 `AppFlow::consumeInventoryEscape`를 추가. 인벤토리 UI와 Pause 메뉴가 동시에 겹쳐 보이던 문제 해결.
 - 검증 결과: Pause `RESUME`/`SETTINGS`/`QUIT`, Pause → Settings → Pause 복귀, MainMenu → Settings → MainMenu 복귀, 인벤토리 열린 상태의 `ESC` 닫기 우선순위 정상 확인.
+
+### 카메라 follow 댐핑 (Tier 2 비주얼/감각 튜닝)
+- `Camera`가 플레이어 위치를 즉시 타겟으로 쓰지 않고 내부 `m_followTarget`을 지수 보간으로 따라가도록 변경. `main.cpp`는 `dt`를 넘겨 프레임레이트에 덜 의존하는 추적감을 사용.
+- `snapToTarget`을 추가해 첫 업데이트와 Loading 후 월드 세션 시작 시에는 저장 위치로 즉시 스냅. 메뉴 → Gameplay 진입 때 먼 위치에서 길게 미끄러지는 상황 방지.
+- 회전(`Q/E`)은 기존처럼 즉시 반응하고, follow 댐핑은 타겟 위치에만 적용. 마우스 피킹과 이동 방향 계산은 기존 `Camera` 행렬을 그대로 사용.
+- 검증 결과: 이동 시 카메라 추적감, 메뉴→Loading→Gameplay 진입 스냅, Pause/Settings 중 drift 없음, Q/E 회전 및 월드 클릭 정상 확인.
+
+### Hemisphere/colored ambient + 밤 밝기 조율 (Tier 2 비주얼 튜닝)
+- `chunk.frag`와 `triangle.frag`의 조명 계산에서 `fragNormal`을 한 번 normalize해 shadow bias, diffuse, ambient 방향 계산에 공유.
+- 기존 scalar ambient(`mix(0.15, 0.30, dayFactor)`)를 법선 방향 기반 hemisphere ambient로 변경. 윗면은 `SKY_AMBIENT`(cool), 아래/측면은 `GROUND_AMBIENT`(warm)를 섞어 로우폴리 면 방향이 더 읽히게 조율.
+- diffuse·shadow·fog 구조는 유지하고 ambient tint만 곱함. C++ UBO나 파이프라인 구조 변경 없이 셰이더 상수 튜닝으로 제한.
+- 검증 후 밤이 조금 밝다는 피드백에 따라 ambient 바닥값을 `0.15 → 0.10`으로 낮춤. 낮 최대값 `0.30`은 유지해 낮 장면 변화는 최소화.
+- 검증 결과: 셰이더 컴파일/실행 정상, 낮 색감 유지, 밤 장면 더 어둡게 조율, 플레이어/셀렉터 색 이상 없음.
+
+### Grid 규칙 vs Organic 표현 방향 정리 (Tier 2 비주얼 원칙)
+- terrain breakup을 타일별 deterministic vertex color tint로 시도했으나, 잔디 타일마다 색이 바뀌어 grid가 더 강하게 드러나는 문제가 확인됨. 변경은 즉시 되돌림.
+- 결정: **게임 규칙은 grid, 시각 경험은 organic**. 농사, 오브젝트 설치/철거, 충돌, 저장 좌표는 grid 기반을 유지하되 자연 바닥과 숲/풀/흙 표현은 100% grid처럼 보이면 안 됨.
+- 타일별 색 랜덤/강한 per-tile hue variation은 금지 방향. 이는 Minecraft식 블록 월드 느낌을 강화함.
+- 다음 breakup 방향은 비격자 dressing layer: 낮은 풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리, 덤불/꽃/forage. 좌표 기반 결정론은 유지하되 저장 대상이 아닌 재생 가능한 시각 레이어로 시작.
+
+### Vegetation alpha card 투자 판단 (Tier 2 비주얼 방향)
+- 현재 기하 기반 풀 clump는 풀밭의 방향성 검증에는 유용하지만, 얇은 삼각형 실루엣 때문에 멀리서 삐쭉한 바늘처럼 보이는 한계가 확인됨.
+- 참고 이미지에 가까운 풀은 alpha texture card가 더 적합. 목표는 낮고 풍성한 X자/부채꼴 card clump, 색/높이/회전 variation, 밀도 rule, 약한 wind sway.
+- GTX 1050 Ti 권장 목표라면 투자 가치가 있음. 조건은 shadow 제외, alpha test/clip 우선, 근거리 청크 중심, clump당 card 2장 정도, 거리/밀도 제한.
+- 새 텍스처와 alpha 파이프라인이 들어가므로 구현 전 설계안 필요. 텍스처 0개 원칙의 첫 예외가 될 수 있으나 vegetation은 ROI가 높은 예외로 판단.
 
 ---
 

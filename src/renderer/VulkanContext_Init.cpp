@@ -572,9 +572,7 @@ void VulkanContext::createUIBuffer() {
 // ============================================================
 // Shared low-poly pine tree: box trunk + 3 stacked cones, flat shaded.
 void VulkanContext::createObjectMeshes() {
-    // Uploads a flat-shaded mesh into the registry slot for the given object type.
-    auto upload = [&](ObjectType type, const std::vector<ChunkVertex>& verts) {
-        ObjectMesh& mesh = m_objectMeshes[(size_t)type];
+    auto uploadMesh = [&](ObjectMesh& mesh, const std::vector<ChunkVertex>& verts) {
         mesh.count = (uint32_t)verts.size();
         VkDeviceSize size = sizeof(ChunkVertex) * verts.size();
         mesh.vbuf = createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -583,6 +581,12 @@ void VulkanContext::createObjectMeshes() {
         vkMapMemory(m_device, mesh.vbuf.memory, 0, size, 0, &mapped);
         memcpy(mapped, verts.data(), size);
         vkUnmapMemory(m_device, mesh.vbuf.memory);
+    };
+
+    // Uploads a flat-shaded mesh into the registry slot for the given object type.
+    auto upload = [&](ObjectType type, const std::vector<ChunkVertex>& verts) {
+        ObjectMesh& mesh = m_objectMeshes[(size_t)type];
+        uploadMesh(mesh, verts);
     };
 
     // ---- TREE: box trunk + 3 stacked cones (pine) ----
@@ -703,6 +707,26 @@ void VulkanContext::createObjectMeshes() {
     std::vector<ChunkVertex> verts;
     pushBox(verts, {-0.42f, -0.14f, 0.0f}, {0.42f, 0.14f, 0.45f}, {0.56f, 0.56f, 0.60f});
     upload(ObjectType::STONE_FENCE, verts);
+    }
+
+    // ---- GRASS CLUMP: visual-only dressing mesh, instanced by the renderer ----
+    {
+    std::vector<ChunkVertex> verts;
+    auto blade = [&](float angle, float width, float height, glm::vec3 col) {
+        const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
+        const glm::vec3 side = {-dir.y, dir.x, 0.0f};
+        glm::vec3 a = side * -width;
+        glm::vec3 b = side *  width;
+        glm::vec3 c = dir * (width * 0.6f) + glm::vec3(0.0f, 0.0f, height);
+        glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
+        verts.push_back({a, n, col});
+        verts.push_back({b, n, col});
+        verts.push_back({c, n, col});
+    };
+    blade(0.0f,      0.055f, 0.30f, {0.22f, 0.42f, 0.17f});
+    blade(2.0944f,   0.050f, 0.24f, {0.27f, 0.50f, 0.20f});
+    blade(4.18879f,  0.045f, 0.20f, {0.19f, 0.36f, 0.16f});
+    uploadMesh(m_grassClumpMesh, verts);
     }
 }
 

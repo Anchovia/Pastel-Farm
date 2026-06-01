@@ -78,8 +78,10 @@ src/
 - App-state 머신(Boot/MainMenu/Settings/Loading/Gameplay/Pause) + 입력 컨텍스트 + 설정(해상도/vsync/볼륨/AA) + world load/unload. **MainMenu 클릭 UI + Settings 클릭 UI(+VSync 적용/AA 데이터) + Loading 1차 + Pause 클릭 메뉴 완료**: 시작 시 MainMenu 표시, `START` / `SETTINGS` row 클릭으로 Gameplay 시작 또는 Settings 진입(`Enter`/`S` 백업 입력 유지), 설정 row 클릭으로 VSync ON/OFF(swapchain present mode 재생성 적용)·AA OFF/FXAA/SMAA(데이터/UI) 변경, 시작 시 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글, Pause에서는 `RESUME` / `SETTINGS` / `QUIT` row 클릭 제공. Settings는 진입 위치(MainMenu/Pause)에 따라 `BACK`/`ESC` 복귀 위치가 달라짐. 인벤토리가 열린 Gameplay에서는 `ESC`가 Pause보다 인벤토리 닫기를 우선. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단. 입력 정책 helper와 로컬 `AppFlow`, Tiny UI Text 기반으로 DevUI 캡처/app mode 차단/edge-detect/기초 문구 표시 접합면을 정리. AA 실제 렌더 적용·해상도 등 추가 옵션은 예정
 
 **Tier 2 — 비주얼 정체성 (DevUI로 실시간 튜닝)**
-- height fog · hemisphere/colored ambient(조명단 warm/cool) · 카메라 follow 댐핑
-- vegetation/object variation(스케일/회전/tint) · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
+- ✅ 카메라 follow 댐핑 — `Camera` 내부 `m_followTarget` 지수 보간 + Loading 후 `snapToTarget`으로 저장 위치 스냅. 플레이어 추적감 개선, 회전은 기존 즉시 반응 유지
+- ✅ hemisphere/colored ambient — `chunk.frag`/`triangle.frag`에서 법선 방향 기반 warm/cool ambient tint 적용. 밤 ambient 바닥값은 0.10으로 낮춰 야간을 더 어둡게 조율
+- height fog
+- vegetation alpha card 1차(풀 clump, alpha test, shadow 제외, 거리/밀도 제한) · organic dressing layer(잔돌/흙 패치/길 가장자리) · vegetation/object variation(스케일/회전/tint) · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -91,8 +93,21 @@ src/
 - ✅ color grading / tone mapping (post 1패스: exposure/contrast/saturation/split-tone/vignette)
 - ✅ 그림자 접지 튜닝 (피터패닝 — bias 축소 + cull 조정 완료)
 - contact / blob shadow (접지감 추가, 거의 무료)
-- terrain breakup (vertex color hue / dirt 패치)
-- height fog / hemisphere ambient / vegetation variation / wind / sky tint
+- terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
+- height fog / vegetation variation / wind / sky tint
+
+### Vegetation Alpha Card — **방향**
+- 참고 이미지 수준의 자연스러운 풀밭은 단순 삼각형 기하 clump보다 alpha card 방식이 맞다. 기하 blade는 멀리서 삐쭉한 바늘처럼 보이기 쉽다.
+- 목표: 풀 텍스처 1장 + X자/부채꼴 card clump + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.
+- 성능 제약: GTX 1050 Ti 권장 기준을 목표로, 근거리 청크 중심, clump당 card 2장(quad 2개, 4 triangles), shadow caster 제외, alpha blend보다 alpha test/clip 우선, 거리/밀도 제한.
+- 이후 확장: DevUI density/거리/scale 튜닝, wind sway(vertex shader), LOD 또는 원거리 밀도 감소.
+- 새 텍스처와 alpha 파이프라인이 생기는 작업이므로 구현 전 짧은 설계안과 승인 필요.
+
+### Grid 규칙 vs Organic 표현 — **결정**
+- 농사·설치/철거·충돌·저장 좌표는 grid 기반으로 유지한다. 플레이어 규칙은 예측 가능해야 한다.
+- 자연 환경은 grid를 그대로 드러내지 않는다. 큰 잔디/흙 면을 타일별 색 랜덤으로 흔들면 격자감이 더 강해지므로 금지.
+- 자연스러운 breakup은 렌더/월드의 별도 dressing layer로 만든다. 후보: alpha card 풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리, 덤불/꽃/forage.
+- dressing layer는 좌표 기반 결정론을 유지하고, 가능하면 저장 대상이 아닌 재생 가능한 시각 레이어로 시작한다.
 
 ### 스타듀식 오브젝트 경제 — **결정**(우선순위 ↑, 복셀 블록 편집은 은퇴)
 순서: ✅① 인벤토리/작물 경제 → ✅② 제네릭 오브젝트 시스템 → ✅③ 자원 채집 → ✅④ 지형 불변화 → ⑤⑥ 제작·건축(아래 분할) → ⑦ 이후.
