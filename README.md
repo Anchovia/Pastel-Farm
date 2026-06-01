@@ -107,7 +107,7 @@
 - 그림자 접지 튜닝 — bias 축소 + chunk·player shadow cull NONE으로 그림자가 geometry에 딱 붙도록 교정(피터패닝 제거)
 - 포스트 프로세스 그레이딩 — 씬을 오프스크린에 렌더 후 풀스크린 패스로 톤/색 보정(노출·대비·채도·warm/cool split-tone·비네트) 적용
 - 물주기 — 물뿌리개로 경작지에 물을 주면 짙어지고, 물 준 날에만 작물이 성장(매일 재급수). 물이 성장을 gate
-- Day HUD / 숫자 렌더러 — 텍스처 없이 3×5 도트matrix 숫자를 UI quad로 그려 좌상단에 날짜 표시 (인벤토리 개수 표시에 재사용)
+- Day HUD / Tiny UI Text — 텍스처 없이 3×5 도트matrix 숫자·영문 glyph를 UI quad로 그림. 좌상단 날짜, 인벤토리 개수, pause 문구에 재사용
 - 인벤토리(스택+개수) — `ItemStack{type,count}` 27칸(핫바 9 + 보관함), 핫바/인벤토리 창에 개수 숫자 표시. 씨앗은 심으면 소모, 도구는 무한 (재배치는 추후)
 - 낫 수확 — 낫(`TOOL_SICKLE`)으로 완숙 밀 좌클릭 시 `ITEM_WHEAT` 획득(`addItem` 제네릭 API). 미성숙·낫 아님·인벤토리 가득이면 작물 보호. 작물 아래 흙도 물뿌리개로 급수 가능. 농사 루프(경작→심기→물주기→성장→수확) 완결
 - 드롭 아이템 + 줍기 — 수확물이 바닥에 작은 큐브로 떨어지고, 플레이어가 근처로 가면 자동으로 인벤토리에 들어옴. 플레이어 인스턴싱 파이프라인 재사용. ③ 자원 채집(나무/돌) 인프라 선행
@@ -122,7 +122,7 @@
 - `FrameRenderData` 스냅샷 — `drawFrame`의 프레임 입력을 구조체 1개로 묶어 렌더러 public 경계를 안정화
 - `GpuBuffer` RAII — `VkBuffer+VkDeviceMemory`(+mapped)를 move-only 래퍼로 통합하고 device 파괴 전 명시 정리
 - DevUI(ImGui) + GPU 프로파일링 — `PASTEL_DEV_BUILD` 전용 F3 패널. post pass 위에 렌더링하고 GPU timestamp로 total/shadow/scene/post/imgui 구간 시간 표시
-- Pause 1차 App-state — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 dim overlay + pause 아이콘 표시
+- Pause 1차 App-state — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 dim overlay + pause 아이콘 + `PAUSED` 문구 표시
 
 > **스타듀식 오브젝트 경제 아크 ①~⑥ 완료.** (인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작 → 설치/철거+영속성)
 

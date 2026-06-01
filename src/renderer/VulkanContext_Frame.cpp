@@ -535,10 +535,37 @@ void VulkanContext::updateHotbar() {
         verts.push_back({p3, color});
     };
 
-    // Digit renderer (3x5 dot-matrix -> quads; row bits 4=left, 2=mid, 1=right)
-    static const uint8_t DIGITS[10][5] = {
+    // Tiny 3x5 UI glyphs: digits first, then A-Z. Row bits 4=left, 2=mid, 1=right.
+    static const uint8_t GLYPHS[36][5] = {
         {7,5,5,5,7}, {2,2,2,2,2}, {7,1,7,4,7}, {7,1,7,1,7}, {5,5,7,1,1},
         {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,1,1}, {7,5,7,5,7}, {7,5,7,1,7},
+        {7,5,7,5,5}, {6,5,6,5,6}, {7,4,4,4,7}, {6,5,5,5,6}, {7,4,6,4,7},
+        {7,4,6,4,4}, {7,4,5,5,7}, {5,5,7,5,5}, {7,2,2,2,7}, {1,1,1,5,7},
+        {5,5,6,5,5}, {4,4,4,4,7}, {5,7,7,5,5}, {5,7,7,7,5}, {7,5,5,5,7},
+        {7,5,7,4,4}, {7,5,5,7,1}, {7,5,7,6,5}, {7,4,7,1,7}, {7,2,2,2,2},
+        {5,5,5,5,7}, {5,5,5,5,2}, {5,5,7,7,5}, {5,5,2,5,5}, {5,5,2,2,2},
+        {7,1,2,4,7},
+    };
+    auto glyphIndex = [](char ch) {
+        if (ch >= '0' && ch <= '9') return ch - '0';
+        if (ch >= 'a' && ch <= 'z') ch = char(ch - 'a' + 'A');
+        if (ch >= 'A' && ch <= 'Z') return 10 + (ch - 'A');
+        return -1;
+    };
+    auto pushGlyph = [&](char ch, float ox, float oy, float px, glm::vec4 col) {
+        int idx = glyphIndex(ch);
+        if (idx < 0) return;
+        for (int r = 0; r < 5; r++)
+            for (int c = 0; c < 3; c++)
+                if (GLYPHS[idx][r] & (1 << (2 - c)))
+                    pushQuad(ox + c * px, oy + r * px, px, px, col);
+    };
+    auto pushText = [&](const char* text, float ox, float oy, float px, glm::vec4 col) {
+        float cx = ox;
+        for (const char* p = text; *p; ++p) {
+            pushGlyph(*p, cx, oy, px, col);
+            cx += 4.0f * px;
+        }
     };
     auto pushNumber = [&](int value, float ox, float oy, float px, glm::vec4 col) {
         if (value < 0) value = 0;
@@ -547,10 +574,7 @@ void VulkanContext::updateHotbar() {
         else for (int v = value; v > 0 && n < 12; v /= 10) digs[n++] = v % 10;
         float cx = ox;
         for (int i = n - 1; i >= 0; i--) {        // most significant first
-            for (int r = 0; r < 5; r++)
-                for (int c = 0; c < 3; c++)
-                    if (DIGITS[digs[i]][r] & (1 << (2 - c)))
-                        pushQuad(cx + c * px, oy + r * px, px, px, col);
+            pushGlyph(char('0' + digs[i]), cx, oy, px, col);
             cx += 4.0f * px;
         }
     };
@@ -672,6 +696,11 @@ void VulkanContext::updateHotbar() {
         const glm::vec4 barColor = {0.95f, 0.92f, 0.82f, 0.95f};
         pushQuad(x0, y, barW, barH, barColor);
         pushQuad(x1, y, barW, barH, barColor);
+
+        const char* text = "PAUSED";
+        const float textPx = 8.0f;
+        const float textW = 6.0f * 4.0f * textPx - textPx;
+        pushText(text, W * 0.5f - textW * 0.5f, y - 64.0f, textPx, {0.95f, 0.92f, 0.82f, 0.95f});
     }
 
     if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow

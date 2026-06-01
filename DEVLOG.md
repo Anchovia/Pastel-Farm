@@ -625,6 +625,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 동작 불변: `ESC` pause/resume, pause overlay, F3 DevUI 토글, Ctrl+S 저장, pause 중 입력 차단 유지.
 - 검증 결과: pause/resume, DevUI 토글, 저장 edge-detect, pause overlay 정상 확인.
 
+### Tiny UI Text 기반 + Pause 문구 (Tier 1-D 슬라이스)
+- 기존 3×5 숫자 렌더러를 `0-9`/`A-Z` glyph 렌더러로 확장. 새 폰트·텍스처·의존성 없이 기존 UI quad 파이프라인만 재사용.
+- `pushNumber`는 새 glyph 경로를 재사용하도록 바꾸어 Day HUD, 핫바/인벤토리 개수 표시 동작을 유지.
+- pause overlay에 `PAUSED` 텍스트를 추가하고 중앙 pause 아이콘과 겹치지 않도록 위치를 조율. 메인메뉴/설정/로딩 화면에 필요한 최소 게임 UI 텍스트 기반 확보.
+- 검증 결과: pause/resume 시 `PAUSED` 문구와 pause 아이콘 표시, 기존 숫자 UI 정상 확인.
+
 ---
 
 ## 게임 설계 메모
