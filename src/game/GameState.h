@@ -60,6 +60,10 @@ private:
     // there is no room (item not added).
     bool addItem(ItemType type, int count);
 
+    int  countItem(ItemType type) const;          // total across all slots
+    bool removeItem(ItemType type, int count);     // remove across stacks; false if not enough
+    bool craft(int recipeIndex);                   // consume inputs, add result
+
     Player m_player;
     std::optional<glm::ivec3> m_targetTile;
 
@@ -68,6 +72,7 @@ private:
 
     bool m_inventoryOpen   = false;
     bool m_prevToggleInv   = false; // edge-detect for I key
+    bool m_prevCraftClick  = false; // edge-detect for crafting-row clicks
 
     std::vector<DroppedItem> m_drops; // items lying in the world awaiting pickup
 

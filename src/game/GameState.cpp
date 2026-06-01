@@ -99,7 +99,22 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
     }
 
     if (input.windowWidth > 0 && input.windowHeight > 0) {
-        // (Inventory is display-only for now — no click-to-assign / drag.)
+        // Crafting clicks (inventory open) — edge-detected so holding doesn't repeat-craft.
+        if (m_inventoryOpen && input.leftClick && !m_prevCraftClick) {
+            int n = 0;
+            const Recipe* table = craftingRecipes(n);
+            for (int i = 0; i < n; i++) {
+                if (table[i].requiresWorkbench) continue; // inventory shows basic recipes only
+                float rx, ry, rw, rh;
+                craftRowRect(i, (float)input.windowWidth, (float)input.windowHeight, rx, ry, rw, rh);
+                if (input.mouseX >= rx && input.mouseX <= rx + rw &&
+                    input.mouseY >= ry && input.mouseY <= ry + rh) {
+                    craft(i);
+                    break;
+                }
+            }
+        }
+        m_prevCraftClick = input.leftClick;
 
         // World interaction — suppressed while inventory is open
         if (!m_inventoryOpen) {
@@ -233,6 +248,51 @@ bool GameState::addItem(ItemType type, int count) {
         }
     }
     return false; // inventory full
+}
+
+int GameState::countItem(ItemType type) const {
+    int total = 0;
+    for (const ItemStack& s : m_inventory)
+        if (s.type == type) total += s.count;
+    return total;
+}
+
+bool GameState::removeItem(ItemType type, int count) {
+    if (countItem(type) < count) return false;
+    for (ItemStack& s : m_inventory) {
+        if (s.type != type) continue;
+        int take = std::min(s.count, count);
+        s.count -= take;
+        count   -= take;
+        if (s.count <= 0) s = ItemStack{};
+        if (count == 0) break;
+    }
+    return true;
+}
+
+bool GameState::craft(int recipeIndex) {
+    int n = 0;
+    const Recipe* table = craftingRecipes(n);
+    if (recipeIndex < 0 || recipeIndex >= n) return false;
+    const Recipe& r = table[recipeIndex];
+
+    // Need every input in stock
+    for (const RecipeInput& in : r.inputs) {
+        if (in.type == ItemType::NONE) continue;
+        if (countItem(in.type) < in.count) return false;
+    }
+    // Consume inputs
+    for (const RecipeInput& in : r.inputs) {
+        if (in.type == ItemType::NONE) continue;
+        removeItem(in.type, in.count);
+    }
+    // Produce result; roll back the inputs if there's no room
+    if (!addItem(r.result, r.resultCount)) {
+        for (const RecipeInput& in : r.inputs)
+            if (in.type != ItemType::NONE) addItem(in.type, in.count);
+        return false;
+    }
+    return true;
 }
 
 void GameState::setPlayerPosition(const glm::vec3& pos) {

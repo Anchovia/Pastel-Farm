@@ -488,11 +488,49 @@ void VulkanContext::updateHotbar() {
                     pushNumber(st.count, sx + 4.0f, sy + INV_SLOT_SIZE - 5 * 2.0f - 4.0f, 2.0f, {1.0f, 1.0f, 1.0f, 0.95f});
             }
         }
+
+        // --- Crafting panel (basic recipes; row = result + inputs, dim if unaffordable) ---
+        auto invCount = [&](ItemType t) {
+            int c = 0;
+            for (const ItemStack& s : m_invHud) if (s.type == t) c += s.count;
+            return c;
+        };
+        int rn = 0;
+        const Recipe* rtable = craftingRecipes(rn);
+        for (int i = 0; i < rn; i++) {
+            if (rtable[i].requiresWorkbench) continue;
+            const Recipe& rc = rtable[i];
+
+            bool ok = true;
+            for (const RecipeInput& in : rc.inputs) {
+                if (in.type == ItemType::NONE) continue;
+                if (invCount(in.type) < in.count) { ok = false; break; }
+            }
+            const float a = ok ? 1.0f : 0.4f;
+
+            float rx, ry, rw, rh;
+            craftRowRect(i, W, H, rx, ry, rw, rh);
+            pushQuad(rx, ry, rw, rh, {0.18f, 0.18f, 0.22f, ok ? 0.95f : 0.8f});
+
+            const float sw = rh - 12.0f;
+            pushQuad(rx + 6.0f, ry + 6.0f, sw, sw, glm::vec4(itemColor(rc.result), a));
+            if (rc.resultCount > 1)
+                pushNumber(rc.resultCount, rx + 8.0f, ry + rh - 5 * 2.0f - 6.0f, 2.0f, {1.0f, 1.0f, 1.0f, 0.95f});
+
+            float ix = rx + sw + 20.0f;
+            for (const RecipeInput& in : rc.inputs) {
+                if (in.type == ItemType::NONE) continue;
+                pushQuad(ix, ry + 6.0f, sw, sw, glm::vec4(itemColor(in.type), a));
+                pushNumber(in.count, ix + 2.0f, ry + rh - 5 * 2.0f - 6.0f, 2.0f, {1.0f, 1.0f, 1.0f, 0.95f});
+                ix += sw + 14.0f;
+            }
+        }
     }
 
     // Day counter HUD (top-left)
     pushNumber(m_dayHud, 16.0f, 16.0f, 4.0f, {1.0f, 1.0f, 1.0f, 0.9f});
 
+    if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
     m_uiVertexCount = (uint32_t)verts.size();
     memcpy(m_uiMapped[m_currentFrame], verts.data(), sizeof(UIVertex) * verts.size());
 }

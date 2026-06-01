@@ -192,6 +192,7 @@ private:
     uint32_t                    m_dropCount = 0;
 
     // UI / hotbar — one buffer per frame in flight (avoids overwrite while GPU still reads)
+    static constexpr uint32_t   UI_MAX_VERTS = 2048;
     std::vector<VkBuffer>       m_uiBuffer;
     std::vector<VkDeviceMemory> m_uiMemory;
     std::vector<void*>          m_uiMapped;

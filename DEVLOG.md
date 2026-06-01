@@ -540,6 +540,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `BLOCK_*` 아이템 타입은 유지(채집 드롭 + ⑤ 제작 재료). 동작만 제거. `isBlock`/`itemToTile` 인라인 헬퍼는 미사용 상태지만 ⑤⑥ 대비 Types.h에 보존.
 - DESIGN "지형 불변 / Minecraft식 복셀 설치·파괴 은퇴" 실현. 지형은 이제 authored·고정, 건축은 ⑥ 오브젝트 레이어 예정.
 
+### 인벤토리 제작 (⑤a, 스타듀식 클릭형 레시피)
+- `Recipe{result, resultCount, inputs[3], requiresWorkbench}` 테이블 + `craftingRecipes()`(Types.h, `ObjectDef`처럼 데이터 주도). 초기 레시피: 작업대 `WOOD×4`, 울타리 `WOOD×2`(둘 다 인벤 제작). 새 `ItemType` `ITEM_WORKBENCH`/`ITEM_FENCE`.
+- `GameState`: `countItem`/`removeItem`/`craft(idx)` — 재료 확인 → 소모 → 결과 `addItem`, 인벤 가득이면 입력 롤백. 인벤 열렸을 때 제작 행 클릭(엣지 감지 `m_prevCraftClick`)으로 `craft`. `requiresWorkbench` 레시피는 인벤에선 미노출(⑤b 작업대용).
+- UI: 인벤 창 아래 제작 패널(결과+입력 색 swatch+개수, 재료 부족 시 어둡게). 클릭 사각형은 공유 `craftRowRect`로 GameState와 동기화. UI 버퍼 1024→`UI_MAX_VERTS`(2048) + 오버플로 가드.
+- 제작 메커니즘은 **클릭형 레시피 목록**(마크식 격자 배치 아님). 제작물은 인벤에 쌓이고 설치는 ⑥. 본격 UI 리뉴얼은 별도 UI 패스로 미룸.
+- 마크식 2단계 계획: ⑤a 인벤 제작(기본) → ⑥ 설치(작업대를 바닥에) → ⑤b 작업대 근처에서 고급 레시피(`requiresWorkbench`) 해금.
+
 ---
 
 ## 게임 설계 메모
