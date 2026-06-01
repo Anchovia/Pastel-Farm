@@ -665,6 +665,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 실제 Vulkan swapchain present mode 재생성/적용은 의도적으로 보류. 이번 슬라이스는 설정 데이터 모델 + UI 표시 + 입력 토글까지만 완료.
 - 검증 결과: Settings에서 VSync ON/OFF 토글, Settings 재진입 시 값 유지, MainMenu/Loading/Gameplay/Pause 흐름 정상 확인.
 
+### VSync present mode 적용 (Tier 1-D 슬라이스)
+- 렌더러에 `m_vsyncEnabled` 상태 추가. `FrameRenderData::vsyncEnabled`와 값이 달라지면 프레임 초반에 swapchain을 재생성.
+- `createSwapchain` present mode 선택을 설정값에 연결. VSync ON이면 `VK_PRESENT_MODE_FIFO_KHR`, OFF이면 기존처럼 `MAILBOX` 우선 + `FIFO` fallback.
+- DevUI 프레임이 시작된 상태에서 재생성할 수 있어, 기존 out-of-date 처리와 동일하게 `ImGui::EndFrame()` 후 swapchain을 재생성하도록 처리.
+- 검증 결과: Settings에서 VSync ON/OFF 토글 시 swapchain 재생성, 표시 유지, 리사이즈·MainMenu/Loading/Gameplay/Pause/DevUI 흐름 정상 확인.
+
 ---
 
 ## 게임 설계 메모

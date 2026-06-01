@@ -196,6 +196,7 @@ private:
     VkFormat                 m_swapchainFormat  = VK_FORMAT_UNDEFINED;
     VkExtent2D               m_swapchainExtent  = {};
     std::vector<VkImageView> m_swapchainImageViews;
+    bool                     m_vsyncEnabled     = true;
     std::vector<VkFramebuffer> m_sceneFramebuffers;  // offscreen color + depth (per frame in flight)
     std::vector<VkFramebuffer> m_postFramebuffers;   // swapchain (per image)
 

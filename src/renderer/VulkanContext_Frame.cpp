@@ -355,6 +355,17 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
     m_nearWorkbenchHud = frame.nearWorkbench;
     m_dayHud           = frame.day;
 
+    if (frame.vsyncEnabled != m_vsyncEnabled) {
+        m_vsyncEnabled = frame.vsyncEnabled;
+#ifdef PASTEL_DEV_BUILD
+        if (m_devFrameStarted && ImGui::GetCurrentContext()) {
+            ImGui::EndFrame();
+            m_devFrameStarted = false;
+        }
+#endif
+        recreateSwapchain();
+    }
+
     // Advance frame counter and free buffers that are no longer in flight
     m_frameCount++;
     // Erase entries the GPU has finished with; GpuBuffer RAII frees them on erase.

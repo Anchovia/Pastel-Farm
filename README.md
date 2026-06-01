@@ -123,7 +123,7 @@
 - `GpuBuffer` RAII — `VkBuffer+VkDeviceMemory`(+mapped)를 move-only 래퍼로 통합하고 device 파괴 전 명시 정리
 - DevUI(ImGui) + GPU 프로파일링 — `PASTEL_DEV_BUILD` 전용 F3 패널. post pass 위에 렌더링하고 GPU timestamp로 total/shadow/scene/post/imgui 구간 시간 표시
 - MainMenu 1차 App-state — 실행 직후 `PASTEL FARM` / `PRESS ENTER` 메뉴 표시, `Enter`로 save 로드 + 초기 청크 로드 후 Gameplay 진입. 메뉴 중 게임 입력·시간 진행·청크 스트리밍 차단
-- Settings 1차 App-state — MainMenu에서 `S`로 Settings 화면 진입, `ESC`로 MainMenu 복귀. `V`로 VSync 설정값 ON/OFF 토글(데이터/표시만, 실제 swapchain 적용은 추후)
+- Settings 1차 App-state — MainMenu에서 `S`로 Settings 화면 진입, `ESC`로 MainMenu 복귀. `V`로 VSync ON/OFF 토글, swapchain present mode에 적용
 - Loading 1차 App-state — MainMenu에서 `Enter` 입력 후 한 프레임 `LOADING` 화면을 표시하고, 그 다음 save 로드 + 초기 청크 로드 + Gameplay 진입
 - Pause 1차 App-state — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 dim overlay + pause 아이콘 + `PAUSED` 문구 표시
 
@@ -132,7 +132,7 @@
 ---
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
-- **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 1차 · ✅ Settings 1차(+VSync 데이터 토글) · ✅ Loading 1차 · ✅ Pause 1차 / 실제 옵션 적용 예정)
+- **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 1차 · ✅ Settings 1차(+VSync 적용) · ✅ Loading 1차 · ✅ Pause 1차 / 추가 옵션 예정)
 - **Tier 2 (비주얼)**: height fog · hemisphere ambient(warm/cool) · 카메라 댐핑 · vegetation/object variation · wind · **AA(SMAA + FXAA fallback)** · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless
