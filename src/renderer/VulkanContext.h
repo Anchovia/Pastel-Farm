@@ -63,6 +63,7 @@ struct FrameRenderData {
     const std::vector<DroppedItem>&          drops;
     bool                                     nearWorkbench;
     bool                                     mainMenu;
+    bool                                     settings;
     bool                                     loading;
     bool                                     paused;
 };
@@ -256,6 +257,7 @@ private:
     std::array<ItemStack, INV_SLOTS> m_invHud{};
     bool                     m_inventoryOpen   = false;
     bool                     m_mainMenuHud      = false;
+    bool                     m_settingsHud      = false;
     bool                     m_loadingHud       = false;
     bool                     m_pausedHud       = false;
     bool                     m_nearWorkbenchHud = false;

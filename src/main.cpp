@@ -12,6 +12,7 @@ static constexpr int UNLOAD_RADIUS = 4;
 
 enum class AppMode {
     MainMenu,
+    Settings,
     Loading,
     Gameplay,
     Paused,
@@ -21,6 +22,7 @@ struct AppFlow {
     AppMode mode = AppMode::MainMenu;
     bool prevEsc = false;
     bool prevStart = false;
+    bool prevSettings = false;
     bool prevCtrlS = false;
 #ifdef PASTEL_DEV_BUILD
     bool prevDevUiToggle = false;
@@ -38,6 +40,10 @@ struct AppFlow {
         return mode == AppMode::MainMenu;
     }
 
+    bool settings() const {
+        return mode == AppMode::Settings;
+    }
+
     bool loading() const {
         return mode == AppMode::Loading;
     }
@@ -46,6 +52,12 @@ struct AppFlow {
         const bool pressed = mode == AppMode::MainMenu && startPressed && !prevStart;
         prevStart = startPressed;
         return pressed;
+    }
+
+    void updateMainMenuSettings(bool settingsPressed) {
+        if (mode == AppMode::MainMenu && settingsPressed && !prevSettings)
+            mode = AppMode::Settings;
+        prevSettings = settingsPressed;
     }
 
     void enterLoading() {
@@ -58,12 +70,14 @@ struct AppFlow {
             mode = AppMode::Gameplay;
     }
 
-    void updatePauseToggle(bool escPressed) {
+    void updateEscape(bool escPressed) {
         if (escPressed && !prevEsc) {
             if (mode == AppMode::Gameplay)
                 mode = AppMode::Paused;
             else if (mode == AppMode::Paused)
                 mode = AppMode::Gameplay;
+            else if (mode == AppMode::Settings)
+                mode = AppMode::MainMenu;
         }
         prevEsc = escPressed;
     }
@@ -116,6 +130,7 @@ static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx)
         input.saveKey         = false;
         input.quit            = false;
         input.startKey        = false;
+        input.settingsKey     = false;
     }
 }
 #endif
@@ -170,7 +185,8 @@ int main() {
             applyDevUiInputCapture(input, ctx);
 #endif
 
-            app.updatePauseToggle(input.quit);
+            app.updateEscape(input.quit);
+            app.updateMainMenuSettings(input.settingsKey);
             if (app.consumeMainMenuStart(input.startKey)) {
                 app.enterLoading();
                 pendingWorldStart = true;
@@ -211,7 +227,7 @@ int main() {
                 camera, gameState.player().position(), gameState.targetTile(),
                 gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
                 gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench(),
-                app.mainMenu(), app.loading(), app.paused()
+                app.mainMenu(), app.settings(), app.loading(), app.paused()
             });
 
             if (pendingWorldStart && app.loading()) {

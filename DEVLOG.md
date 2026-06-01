@@ -651,6 +651,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - loading 중에는 기존 app mode 입력 정책으로 게임플레이 입력과 저장이 차단됨. save 로드 + 초기 청크 로드가 끝나면 Gameplay로 진입.
 - 검증 결과: MainMenu → `LOADING` 표시 → save/월드 로드 → Gameplay 진입, 진입 후 저장·pause/resume·DevUI 정상 확인.
 
+### Settings 1차 App-state (Tier 1-D 슬라이스)
+- `AppMode::Settings` 추가. MainMenu에서 `S` edge-detect로 Settings 화면에 진입하고, Settings에서 `ESC` edge-detect로 MainMenu에 복귀.
+- `PlayerInput`에 `settingsKey`를 추가하고 `InputManager`에서 S 키를 읽음. AppFlow에서 MainMenu 상태일 때만 settings 진입에 사용해 Gameplay의 S 이동 입력과 분리.
+- `FrameRenderData`에 `settings` bool 추가. Tiny UI Text로 MainMenu 보조 문구 `S SETTINGS`, Settings 화면 `SETTINGS` / `PRESS ESC`를 표시.
+- Settings 중에는 기존 app mode 입력 정책으로 게임플레이 입력과 저장이 차단됨. 실제 설정값(해상도/vsync/AA 등) 변경은 다음 슬라이스로 보류.
+- 검증 결과: MainMenu → Settings 진입, Settings → MainMenu 복귀, Settings 중 Enter 무시, Gameplay 진입 후 S 이동·저장·pause/resume·DevUI 정상 확인.
+
 ---
 
 ## 게임 설계 메모
