@@ -21,11 +21,13 @@ struct PlayerInput {
     bool leftClick       = false;
     bool rightClick      = false;
     bool toggleInventory = false;
-    bool quit            = false;  // ESC
+    bool quit            = false;  // ESC (app-level pause toggle)
     bool rotateLeft      = false;  // Q
     bool rotateRight     = false;  // E
     bool saveKey         = false;  // Ctrl+S (raw; main edge-detects)
     bool toggleDevUi     = false;  // F3 (dev builds; main edge-detects)
+    bool startKey        = false;  // Enter (app-level confirm/start)
+    bool settingsKey     = false;  // S (main-menu settings)
     int  selectSlot  = -1;  // 0..HOTBAR_SLOTS-1 if a number key was pressed, else -1
     int  scrollDelta = 0;   // slots to move from scroll wheel
     int windowWidth = 1280;
@@ -45,6 +47,7 @@ public:
     const std::array<ItemStack, INV_SLOTS>& inventory() const { return m_inventory; }
 
     bool inventoryOpen() const { return m_inventoryOpen; }
+    void closeInventory() { m_inventoryOpen = false; }
     bool nearWorkbench() const { return m_nearWorkbench; }
 
     const std::vector<DroppedItem>& drops() const { return m_drops; }

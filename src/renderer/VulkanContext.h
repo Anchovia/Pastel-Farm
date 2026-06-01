@@ -62,6 +62,12 @@ struct FrameRenderData {
     int                                      day;
     const std::vector<DroppedItem>&          drops;
     bool                                     nearWorkbench;
+    bool                                     mainMenu;
+    bool                                     settings;
+    bool                                     loading;
+    bool                                     paused;
+    bool                                     vsyncEnabled;
+    int                                      aaMode;
 };
 
 class VulkanContext {
@@ -191,6 +197,7 @@ private:
     VkFormat                 m_swapchainFormat  = VK_FORMAT_UNDEFINED;
     VkExtent2D               m_swapchainExtent  = {};
     std::vector<VkImageView> m_swapchainImageViews;
+    bool                     m_vsyncEnabled     = true;
     std::vector<VkFramebuffer> m_sceneFramebuffers;  // offscreen color + depth (per frame in flight)
     std::vector<VkFramebuffer> m_postFramebuffers;   // swapchain (per image)
 
@@ -252,6 +259,12 @@ private:
     int                      m_dayHud          = 0;
     std::array<ItemStack, INV_SLOTS> m_invHud{};
     bool                     m_inventoryOpen   = false;
+    bool                     m_mainMenuHud      = false;
+    bool                     m_settingsHud      = false;
+    bool                     m_loadingHud       = false;
+    bool                     m_pausedHud       = false;
+    bool                     m_vsyncHud        = true;
+    int                      m_aaModeHud       = 0;
     bool                     m_nearWorkbenchHud = false;
     std::array<float, 4>     m_skyColor        = {0.08f, 0.08f, 0.12f, 1.0f};
     std::vector<GpuBuffer>      m_playerInstBuffer;

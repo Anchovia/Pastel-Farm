@@ -198,10 +198,12 @@ void VulkanContext::createSwapchain() {
             f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             chosenFormat = f;
 
-    // Present mode: prefer mailbox (triple buffer, low latency), fallback to FIFO (vsync)
+    // Present mode: FIFO for VSync, otherwise prefer mailbox (low latency) and fall back to FIFO.
     VkPresentModeKHR chosenMode = VK_PRESENT_MODE_FIFO_KHR;
-    for (auto& m : modes)
-        if (m == VK_PRESENT_MODE_MAILBOX_KHR) { chosenMode = m; break; }
+    if (!m_vsyncEnabled) {
+        for (auto& m : modes)
+            if (m == VK_PRESENT_MODE_MAILBOX_KHR) { chosenMode = m; break; }
+    }
 
     VkExtent2D extent;
     if (caps.currentExtent.width != UINT32_MAX) {

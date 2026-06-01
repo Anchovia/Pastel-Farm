@@ -347,8 +347,25 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
     m_hotbarSelected   = frame.hotbarSelected;
     m_invHud           = frame.inventory;
     m_inventoryOpen    = frame.inventoryOpen;
+    m_mainMenuHud      = frame.mainMenu;
+    m_settingsHud      = frame.settings;
+    m_loadingHud       = frame.loading;
+    m_pausedHud        = frame.paused;
+    m_vsyncHud         = frame.vsyncEnabled;
+    m_aaModeHud        = frame.aaMode;
     m_nearWorkbenchHud = frame.nearWorkbench;
     m_dayHud           = frame.day;
+
+    if (frame.vsyncEnabled != m_vsyncEnabled) {
+        m_vsyncEnabled = frame.vsyncEnabled;
+#ifdef PASTEL_DEV_BUILD
+        if (m_devFrameStarted && ImGui::GetCurrentContext()) {
+            ImGui::EndFrame();
+            m_devFrameStarted = false;
+        }
+#endif
+        recreateSwapchain();
+    }
 
     // Advance frame counter and free buffers that are no longer in flight
     m_frameCount++;
@@ -534,10 +551,45 @@ void VulkanContext::updateHotbar() {
         verts.push_back({p3, color});
     };
 
-    // Digit renderer (3x5 dot-matrix -> quads; row bits 4=left, 2=mid, 1=right)
-    static const uint8_t DIGITS[10][5] = {
+    // Tiny 3x5 UI glyphs: digits first, then A-Z. Row bits 4=left, 2=mid, 1=right.
+    static const uint8_t GLYPHS[36][5] = {
         {7,5,5,5,7}, {2,2,2,2,2}, {7,1,7,4,7}, {7,1,7,1,7}, {5,5,7,1,1},
         {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,1,1}, {7,5,7,5,7}, {7,5,7,1,7},
+        {7,5,7,5,5}, {6,5,6,5,6}, {7,4,4,4,7}, {6,5,5,5,6}, {7,4,6,4,7},
+        {7,4,6,4,4}, {7,4,5,5,7}, {5,5,7,5,5}, {7,2,2,2,7}, {1,1,1,5,7},
+        {5,5,6,5,5}, {4,4,4,4,7}, {5,7,7,5,5}, {5,7,7,7,5}, {7,5,5,5,7},
+        {7,5,7,4,4}, {7,5,5,7,1}, {7,5,7,6,5}, {7,4,7,1,7}, {7,2,2,2,2},
+        {5,5,5,5,7}, {5,5,5,5,2}, {5,5,7,7,5}, {5,5,2,5,5}, {5,5,2,2,2},
+        {7,1,2,4,7},
+    };
+    auto glyphIndex = [](char ch) {
+        if (ch >= '0' && ch <= '9') return ch - '0';
+        if (ch >= 'a' && ch <= 'z') ch = char(ch - 'a' + 'A');
+        if (ch >= 'A' && ch <= 'Z') return 10 + (ch - 'A');
+        return -1;
+    };
+    auto pushGlyph = [&](char ch, float ox, float oy, float px, glm::vec4 col) {
+        int idx = glyphIndex(ch);
+        if (idx < 0) return;
+        for (int r = 0; r < 5; r++)
+            for (int c = 0; c < 3; c++)
+                if (GLYPHS[idx][r] & (1 << (2 - c)))
+                    pushQuad(ox + c * px, oy + r * px, px, px, col);
+    };
+    auto pushText = [&](const char* text, float ox, float oy, float px, glm::vec4 col) {
+        float cx = ox;
+        for (const char* p = text; *p; ++p) {
+            pushGlyph(*p, cx, oy, px, col);
+            cx += 4.0f * px;
+        }
+    };
+    auto textWidth = [](const char* text, float px) {
+        int n = 0;
+        for (const char* p = text; *p; ++p) ++n;
+        return n > 0 ? n * 4.0f * px - px : 0.0f;
+    };
+    auto pushCenteredText = [&](const char* text, float y, float px, glm::vec4 col) {
+        pushText(text, W * 0.5f - textWidth(text, px) * 0.5f, y, px, col);
     };
     auto pushNumber = [&](int value, float ox, float oy, float px, glm::vec4 col) {
         if (value < 0) value = 0;
@@ -546,13 +598,58 @@ void VulkanContext::updateHotbar() {
         else for (int v = value; v > 0 && n < 12; v /= 10) digs[n++] = v % 10;
         float cx = ox;
         for (int i = n - 1; i >= 0; i--) {        // most significant first
-            for (int r = 0; r < 5; r++)
-                for (int c = 0; c < 3; c++)
-                    if (DIGITS[digs[i]][r] & (1 << (2 - c)))
-                        pushQuad(cx + c * px, oy + r * px, px, px, col);
+            pushGlyph(char('0' + digs[i]), cx, oy, px, col);
             cx += 4.0f * px;
         }
     };
+
+    if (m_mainMenuHud) {
+        pushQuad(0.0f, 0.0f, W, H, {0.06f, 0.08f, 0.07f, 0.72f});
+        pushCenteredText("PASTEL FARM", H * 0.5f - 76.0f, 10.0f, {0.95f, 0.92f, 0.82f, 1.0f});
+        const char* rows[] = { "START", "SETTINGS" };
+        for (int i = 0; i < 2; ++i) {
+            float rx, ry, rw, rh;
+            mainMenuRowRect(i, W, H, rx, ry, rw, rh);
+            pushQuad(rx, ry, rw, rh, {0.12f, 0.14f, 0.13f, 0.85f});
+            pushCenteredText(rows[i], ry + 9.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.92f});
+        }
+
+        if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
+        m_uiVertexCount = (uint32_t)verts.size();
+        memcpy(m_uiBuffer[m_currentFrame].mapped, verts.data(), sizeof(UIVertex) * verts.size());
+        return;
+    }
+
+    if (m_settingsHud) {
+        pushQuad(0.0f, 0.0f, W, H, {0.06f, 0.08f, 0.07f, 0.72f});
+        const char* aaText = "AA OFF";
+        if (m_aaModeHud == 1) aaText = "AA FXAA";
+        else if (m_aaModeHud == 2) aaText = "AA SMAA";
+
+        pushCenteredText("SETTINGS", H * 0.5f - 72.0f, 8.0f, {0.95f, 0.92f, 0.82f, 1.0f});
+        const char* rows[] = { m_vsyncHud ? "VSYNC ON" : "VSYNC OFF", aaText, "BACK" };
+        for (int i = 0; i < 3; ++i) {
+            float rx, ry, rw, rh;
+            settingsRowRect(i, W, H, rx, ry, rw, rh);
+            pushQuad(rx, ry, rw, rh, {0.12f, 0.14f, 0.13f, 0.85f});
+            pushCenteredText(rows[i], ry + 9.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.92f});
+        }
+
+        if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
+        m_uiVertexCount = (uint32_t)verts.size();
+        memcpy(m_uiBuffer[m_currentFrame].mapped, verts.data(), sizeof(UIVertex) * verts.size());
+        return;
+    }
+
+    if (m_loadingHud) {
+        pushQuad(0.0f, 0.0f, W, H, {0.06f, 0.08f, 0.07f, 0.72f});
+        pushCenteredText("LOADING", H * 0.5f - 18.0f, 8.0f, {0.95f, 0.92f, 0.82f, 1.0f});
+
+        if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
+        m_uiVertexCount = (uint32_t)verts.size();
+        memcpy(m_uiBuffer[m_currentFrame].mapped, verts.data(), sizeof(UIVertex) * verts.size());
+        return;
+    }
 
     // --- Hotbar ---
     const float slot = 56.0f, gap = 6.0f, pad = 6.0f;
@@ -658,6 +755,18 @@ void VulkanContext::updateHotbar() {
 
     // Day counter HUD (top-left)
     pushNumber(m_dayHud, 16.0f, 16.0f, 4.0f, {1.0f, 1.0f, 1.0f, 0.9f});
+
+    if (m_pausedHud) {
+        pushQuad(0.0f, 0.0f, W, H, {0.0f, 0.0f, 0.0f, 0.42f});
+        pushCenteredText("PAUSED", H * 0.5f - 72.0f, 8.0f, {0.95f, 0.92f, 0.82f, 0.95f});
+        const char* rows[] = { "RESUME", "SETTINGS", "QUIT" };
+        for (int i = 0; i < 3; ++i) {
+            float rx, ry, rw, rh;
+            pauseMenuRowRect(i, W, H, rx, ry, rw, rh);
+            pushQuad(rx, ry, rw, rh, {0.12f, 0.14f, 0.13f, 0.88f});
+            pushCenteredText(rows[i], ry + 9.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.92f});
+        }
+    }
 
     if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
     m_uiVertexCount = (uint32_t)verts.size();

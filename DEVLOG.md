@@ -600,6 +600,99 @@ Vulkan 공부 겸 엔진 개발 기록.
 - GPU timing: frame-in-flight별 timestamp query를 기록하고, 같은 슬롯 fence 대기 뒤 이전 결과만 읽어 GPU 강제 wait 없이 표시. 패널에 total/shadow/scene/post/imgui 구간 시간을 보여줌. timestamp 미지원 GPU는 `unavailable`로 표시하고 게임은 계속 실행.
 - 검증 결과: CMake 재구성 후 ImGui FetchContent, 실행, F3 패널, 입력 캡처, GPU timing 표시 정상 확인.
 
+### Pause 1차 App-state (Tier 1-D 슬라이스)
+- `main.cpp`에 최소 `AppMode { Gameplay, Paused }` 추가. 전체 메인메뉴/로딩/설정까지 확장하지 않고, 현재 가장 거친 앱 흐름인 `ESC=즉시 종료`만 먼저 제거.
+- `ESC`는 edge-detect로 Gameplay/Paused를 토글. DevUI가 키보드를 캡처 중일 때는 pause 토글이 새지 않도록 `applyDevUiInputCapture`에서 `quit` 입력도 차단.
+- pause 중에는 카메라 Q/E 회전과 `GameState::update()`를 건너뜀. 결과적으로 시간 진행, 작물 성장, 월드 클릭, 인벤토리/핫바 입력, 드롭 줍기, 플레이어 이동이 멈추고 렌더는 마지막 상태를 계속 그림.
+- 창 종료는 OS 창 닫기 버튼으로 유지. pause overlay, 메인메뉴, 설정, 명시적 quit 버튼은 다음 App-state 슬라이스로 보류.
+- 검증 결과: `ESC` pause/resume, pause 중 입력 차단, DevUI 조작, 창 닫기 종료 정상 확인.
+
+### 입력 컨텍스트 정리 (Tier 1-D 슬라이스)
+- `main.cpp` 로컬 helper `clearGameplayInput` / `applyAppModeInputPolicy` 추가. pause 중 막아야 하는 이동·클릭·핫바·인벤토리·카메라 회전 입력 목록을 한 곳으로 모음.
+- DevUI 키보드 캡처도 같은 `clearGameplayInput`을 재사용하도록 정리. 입력 차단 우선순위가 DevUI 캡처 → app mode 정책 → 게임 업데이트 순서로 읽히게 됨.
+- 동작은 기존 pause와 동일: `ESC` pause/resume, F3 DevUI, Ctrl+S 저장 정책 유지. 추후 MainMenu/Settings 입력 컨텍스트를 추가할 접합면 확보.
+- 검증 결과: pause 중 게임플레이 입력 차단, DevUI 입력 캡처, F3 토글 정상 확인.
+
+### Pause 시각 피드백 (Tier 1-D 슬라이스)
+- `FrameRenderData`에 `paused` bool 추가. 렌더러는 AppMode 자체가 아니라 프레임 스냅샷 값만 소비해 기존 레이어 분리를 유지.
+- `main.cpp`가 `appMode == AppMode::Paused`를 `drawFrame`에 전달. 게임 업데이트 차단 로직은 기존 pause 슬라이스와 동일.
+- 기존 UI quad 파이프라인으로 화면 전체 dim + 중앙 pause 아이콘(두 막대)을 렌더. 새 폰트/텍스처/의존성 없이 pause 상태를 시각적으로 확인 가능.
+- 검증 결과: `ESC` pause/resume 시 overlay 표시/해제, DevUI 조작, 리사이즈 중앙 정렬 정상 확인.
+
+### AppFlow 상태 묶기 (Tier 1-D 슬라이스, 순수 리팩토링)
+- `main.cpp`의 app-flow 상태(`AppMode`, ESC/Ctrl+S/F3 edge-detect)를 로컬 `AppFlow` 구조체로 묶음. 전역 시스템이나 새 파일로 키우지 않고, 다음 app-state 확장을 위한 접합면만 정리.
+- `updatePauseToggle`, `consumeSavePress`, `consumeDevUiToggle`, `gameplayActive`, `paused`로 main 루프의 상태 조회/edge-detect 의도를 명시.
+- 동작 불변: `ESC` pause/resume, pause overlay, F3 DevUI 토글, Ctrl+S 저장, pause 중 입력 차단 유지.
+- 검증 결과: pause/resume, DevUI 토글, 저장 edge-detect, pause overlay 정상 확인.
+
+### Tiny UI Text 기반 + Pause 문구 (Tier 1-D 슬라이스)
+- 기존 3×5 숫자 렌더러를 `0-9`/`A-Z` glyph 렌더러로 확장. 새 폰트·텍스처·의존성 없이 기존 UI quad 파이프라인만 재사용.
+- `pushNumber`는 새 glyph 경로를 재사용하도록 바꾸어 Day HUD, 핫바/인벤토리 개수 표시 동작을 유지.
+- pause overlay에 `PAUSED` 텍스트를 추가하고 중앙 pause 아이콘과 겹치지 않도록 위치를 조율. 메인메뉴/설정/로딩 화면에 필요한 최소 게임 UI 텍스트 기반 확보.
+- 검증 결과: pause/resume 시 `PAUSED` 문구와 pause 아이콘 표시, 기존 숫자 UI 정상 확인.
+
+### MainMenu 1차 App-state (Tier 1-D 슬라이스)
+- `AppMode`에 `MainMenu`를 추가하고 앱 시작 상태를 메뉴로 변경. `Enter` edge-detect로 Gameplay에 진입하며, `ESC` pause/resume은 Gameplay/Paused 사이에서만 동작하도록 제한.
+- `PlayerInput`에 `startKey`를 추가하고 `InputManager`에서 Enter를 읽음. MainMenu에서는 이동·카메라·마우스·인벤토리·핫바·Ctrl+S 저장 입력을 차단해 게임 시간이 시작 전 흘러가지 않도록 유지.
+- `FrameRenderData`에 `mainMenu` bool을 추가. 렌더러는 AppMode를 직접 알지 않고 스냅샷 값만 소비해 기존 레이어 분리를 유지.
+- Tiny UI Text로 `PASTEL FARM` / `PRESS ENTER` 메뉴 화면을 표시. 새 폰트·텍스처·의존성 없이 기존 UI quad 파이프라인 재사용.
+- 검증 결과: 실행 직후 메뉴 표시, Enter 게임 진입, 메뉴 중 입력 차단, 진입 후 pause/resume 및 DevUI 정상 확인.
+
+### 월드 세션 시작 지연 (Tier 1-D 슬라이스)
+- 앱 시작 시 즉시 실행하던 `save.dat` 로드와 초기 청크 로드를 `startWorldSession` 람다로 이동. MainMenu는 더 이상 이미 준비된 게임 위에 덮이는 화면이 아니라, Gameplay 진입 전 대기 상태가 됨.
+- `Enter` 입력을 consume할 때 save 로드 → 플레이어 위치/시간 복원 → 해당 위치 주변 청크 로드 → Gameplay 진입 순서로 실행. 시작 입력 프레임의 게임플레이 입력은 `clearGameplayInput`으로 비워 첫 프레임 누수 방지.
+- `worldSessionStarted` 플래그로 메뉴 중 Ctrl+S 저장과 청크 스트리밍을 차단. 메뉴에서 기다려도 게임 시간·작물 성장·월드 로드가 진행되지 않음.
+- 검증 결과: 메뉴 대기 중 시간 정지, Enter 후 save 위치/시간 복원, 월드 표시, 저장·pause/resume·DevUI 정상 확인.
+
+### Loading 1차 App-state (Tier 1-D 슬라이스)
+- `AppMode::Loading` 추가. MainMenu에서 `Enter`를 누르면 바로 Gameplay로 가지 않고 Loading 상태로 먼저 전환.
+- `pendingWorldStart` 플래그로 `LOADING` 화면을 한 프레임 렌더한 뒤 `drawFrame` 이후 `startWorldSession()`을 실행. 현재 로드는 동기 방식이지만, 이후 비동기 로딩/세이브 선택/진행률 표시로 확장할 접합면 확보.
+- `FrameRenderData`에 `loading` bool 추가. 렌더러는 AppMode를 직접 알지 않고 스냅샷 값만 소비해 `LOADING` Tiny UI Text 화면을 표시.
+- loading 중에는 기존 app mode 입력 정책으로 게임플레이 입력과 저장이 차단됨. save 로드 + 초기 청크 로드가 끝나면 Gameplay로 진입.
+- 검증 결과: MainMenu → `LOADING` 표시 → save/월드 로드 → Gameplay 진입, 진입 후 저장·pause/resume·DevUI 정상 확인.
+
+### Settings 1차 App-state (Tier 1-D 슬라이스)
+- `AppMode::Settings` 추가. MainMenu에서 `S` edge-detect로 Settings 화면에 진입하고, Settings에서 `ESC` edge-detect로 MainMenu에 복귀.
+- `PlayerInput`에 `settingsKey`를 추가하고 `InputManager`에서 S 키를 읽음. AppFlow에서 MainMenu 상태일 때만 settings 진입에 사용해 Gameplay의 S 이동 입력과 분리.
+- `FrameRenderData`에 `settings` bool 추가. Tiny UI Text로 MainMenu 보조 문구 `S SETTINGS`, Settings 화면 `SETTINGS` / `PRESS ESC`를 표시.
+- Settings 중에는 기존 app mode 입력 정책으로 게임플레이 입력과 저장이 차단됨. 실제 설정값(해상도/vsync/AA 등) 변경은 다음 슬라이스로 보류.
+- 검증 결과: MainMenu → Settings 진입, Settings → MainMenu 복귀, Settings 중 Enter 무시, Gameplay 진입 후 S 이동·저장·pause/resume·DevUI 정상 확인.
+
+### Settings VSync 데이터 토글 (Tier 1-D 슬라이스)
+- `main.cpp`에 로컬 `AppSettings` 구조체 추가. 현재는 `vsync` bool과 V 키 edge-detect만 보관하며, 전역 설정 파일/새 시스템으로 키우지 않음.
+- `PlayerInput`에 `toggleVsyncKey`를 추가하고 `InputManager`에서 V 키를 읽음. `AppSettings::update`는 `AppMode::Settings`에서만 V 입력을 소비해 Gameplay 입력과 분리.
+- `FrameRenderData`에 `vsyncEnabled` bool 추가. Settings 화면에 `VSYNC ON` / `VSYNC OFF`, `V TOGGLE`, `PRESS ESC`를 표시.
+- 실제 Vulkan swapchain present mode 재생성/적용은 의도적으로 보류. 이번 슬라이스는 설정 데이터 모델 + UI 표시 + 입력 토글까지만 완료.
+- 검증 결과: Settings에서 VSync ON/OFF 토글, Settings 재진입 시 값 유지, MainMenu/Loading/Gameplay/Pause 흐름 정상 확인.
+
+### VSync present mode 적용 (Tier 1-D 슬라이스)
+- 렌더러에 `m_vsyncEnabled` 상태 추가. `FrameRenderData::vsyncEnabled`와 값이 달라지면 프레임 초반에 swapchain을 재생성.
+- `createSwapchain` present mode 선택을 설정값에 연결. VSync ON이면 `VK_PRESENT_MODE_FIFO_KHR`, OFF이면 기존처럼 `MAILBOX` 우선 + `FIFO` fallback.
+- DevUI 프레임이 시작된 상태에서 재생성할 수 있어, 기존 out-of-date 처리와 동일하게 `ImGui::EndFrame()` 후 swapchain을 재생성하도록 처리.
+- 검증 결과: Settings에서 VSync ON/OFF 토글 시 swapchain 재생성, 표시 유지, 리사이즈·MainMenu/Loading/Gameplay/Pause/DevUI 흐름 정상 확인.
+
+### Settings 클릭형 row UI 전환 + AA 데이터 토글 (Tier 1-D 슬라이스)
+- Settings 내부의 V/A 키보드 토글을 제거하고, 실제 게임 설정창에 가까운 클릭형 row UI로 전환. row는 `VSYNC ON/OFF`, `AA OFF/FXAA/SMAA`, `BACK`.
+- `settingsRowRect`를 `Types.h`에 추가해 렌더링과 클릭 판정이 같은 screen-space rect를 공유하도록 정리. 기존 제작 UI의 `craftRowRect`와 같은 패턴.
+- `AppSettings`는 Settings 상태에서 마우스 좌클릭 edge-detect로 row를 판정. VSync row는 설정값 토글 + 기존 present mode 적용 경로 사용, AA row는 `OFF → FXAA → SMAA` 데이터 순환, BACK row는 MainMenu 복귀.
+- AA는 아직 실제 렌더링에 적용하지 않고 설정 데이터/UI만 제공. 이전 임시 `TOGGLE` 안내 문구를 제거해 AA 모드 변경 시 글자가 겹쳐 깨지던 문제도 함께 해소.
+- 검증 결과: Settings row 클릭, VSync 적용, AA 데이터 순환, BACK/ESC 복귀, Gameplay의 A 이동 입력 정상 확인.
+
+### MainMenu 클릭형 row UI 전환 (Tier 1-D 슬라이스)
+- MainMenu의 `PRESS ENTER` / `S SETTINGS` 안내 문구를 제거하고, 클릭 가능한 `START` / `SETTINGS` row UI로 전환.
+- `mainMenuRowRect`를 `Types.h`에 추가해 렌더링과 클릭 판정이 같은 screen-space rect를 공유하도록 정리. Settings row와 같은 폭/높이 규칙을 재사용.
+- `AppFlow::consumeMainMenuClick`에서 마우스 좌클릭 edge-detect로 `START`와 `SETTINGS`를 판정. `START`는 기존 Loading → world session 시작 경로를 사용하고, `SETTINGS`는 Settings AppMode로 진입.
+- `Enter` / `S`는 백업 입력으로 유지하되, 화면 노출은 클릭형 메뉴 중심으로 정리. Settings 진입 클릭 프레임이 Settings row 클릭으로도 소비되지 않도록 업데이트 순서를 분리.
+- 검증 결과: MainMenu `START` 클릭, `SETTINGS` 클릭, Settings row 조작, BACK/ESC 복귀, Loading/Gameplay/Pause 흐름 정상 확인.
+
+### Pause 클릭형 row 메뉴 + 인벤토리 ESC 우선순위 (Tier 1-D 슬라이스)
+- Pause overlay를 단순 pause 아이콘에서 클릭형 `RESUME` / `SETTINGS` / `QUIT` row 메뉴로 전환. `pauseMenuRowRect`를 `Types.h`에 추가해 렌더링과 클릭 판정이 같은 screen-space rect를 공유.
+- `AppFlow::consumePauseClick`에서 마우스 좌클릭 edge-detect로 pause 메뉴 row를 판정. `RESUME`은 Gameplay 복귀, `SETTINGS`는 Settings 진입, `QUIT`은 `Window::close()`로 창 종료 요청.
+- Settings 진입 위치를 `settingsReturnMode`로 보관해 MainMenu에서 들어온 Settings는 MainMenu로, Pause에서 들어온 Settings는 Pause로 `BACK`/`ESC` 복귀.
+- `RESUME` 클릭 프레임의 마우스 입력이 월드 클릭으로 새지 않도록 gameplay 입력을 비움. Settings 진입 클릭 프레임도 Settings row 클릭으로 이어지지 않도록 click edge 상태를 동기화.
+- 인벤토리가 열린 Gameplay에서 `ESC`를 누르면 Pause 진입보다 인벤토리 닫기를 우선하도록 `GameState::closeInventory`와 `AppFlow::consumeInventoryEscape`를 추가. 인벤토리 UI와 Pause 메뉴가 동시에 겹쳐 보이던 문제 해결.
+- 검증 결과: Pause `RESUME`/`SETTINGS`/`QUIT`, Pause → Settings → Pause 복귀, MainMenu → Settings → MainMenu 복귀, 인벤토리 열린 상태의 `ESC` 닫기 우선순위 정상 확인.
+
 ---
 
 ## 게임 설계 메모

@@ -83,7 +83,7 @@
 - 인게임 시간 시스템 — 하루 120초 주기(`DAY_DURATION`), `timeOfDay`(0→1, 자정→정오→자정) + `day` 카운터. 하늘 배경색이 자정/새벽/낮/노을 4 키프레임 선형 보간으로 변화
 - 아이템/도구 시스템 — `ItemType` enum(블록 6종 + 도구 2종)으로 핫바 통합. 도구 선택 시 블록 미설치(동작은 이후 단계). `I`키로 인벤토리 창 토글, 슬롯 클릭으로 핫바에 아이템 할당
 - 농사 시스템 — 호미로 GRASS/DIRT → FARMLAND 경작. SEED_WHEAT로 씨앗 심기 → WHEAT 성장(단계별 색상 변화: 연초록→황금). `m_day` 기반 2일마다 1단계 성장. 완숙(stage 3) 좌클릭 수확
-- 세계 저장/로드 — 플레이어가 수정한 청크만 `save.dat`에 바이너리로 저장(타일 + TileState). Ctrl+S 저장, 시작 시 자동 로드. 언로드된 수정 청크는 메모리에 보관했다가 재방문 시 복원
+- 세계 저장/로드 — 플레이어가 수정한 청크만 `save.dat`에 바이너리로 저장(타일 + TileState). Ctrl+S 저장, Gameplay 진입 시 자동 로드. 언로드된 수정 청크는 메모리에 보관했다가 재방문 시 복원
 - 동적 태양 조명 — UBO에 `lightDir(xyz) + dayFactor(w)` 추가. `timeOfDay` 기반으로 태양 고도/방위각 계산, 낮엔 Lambert diffuse 최대, 밤엔 ambient 0.15(달빛)만 남도록 셰이더 전체 적용
 - Shadow Map 인프라 — 1024×1024 depth-only `VkImage` + shadow 전용 `VkRenderPass` / `VkFramebuffer` 생성. 스왑체인과 독립적으로 한 번만 생성. Shadow pass 실행 및 셰이더 샘플링은 다음 단계
 - Shadow Pass 파이프라인 — depth-only 파이프라인 + `shadow.vert`(push constant lightMVP). `drawFrame`에서 태양 방향 기반 orthographic light matrix 계산, main pass 이전에 청크 메시를 태양 시점으로 렌더링해 shadow map을 채움
@@ -107,7 +107,7 @@
 - 그림자 접지 튜닝 — bias 축소 + chunk·player shadow cull NONE으로 그림자가 geometry에 딱 붙도록 교정(피터패닝 제거)
 - 포스트 프로세스 그레이딩 — 씬을 오프스크린에 렌더 후 풀스크린 패스로 톤/색 보정(노출·대비·채도·warm/cool split-tone·비네트) 적용
 - 물주기 — 물뿌리개로 경작지에 물을 주면 짙어지고, 물 준 날에만 작물이 성장(매일 재급수). 물이 성장을 gate
-- Day HUD / 숫자 렌더러 — 텍스처 없이 3×5 도트matrix 숫자를 UI quad로 그려 좌상단에 날짜 표시 (인벤토리 개수 표시에 재사용)
+- Day HUD / Tiny UI Text — 텍스처 없이 3×5 도트matrix 숫자·영문 glyph를 UI quad로 그림. 좌상단 날짜, 인벤토리 개수, pause 문구에 재사용
 - 인벤토리(스택+개수) — `ItemStack{type,count}` 27칸(핫바 9 + 보관함), 핫바/인벤토리 창에 개수 숫자 표시. 씨앗은 심으면 소모, 도구는 무한 (재배치는 추후)
 - 낫 수확 — 낫(`TOOL_SICKLE`)으로 완숙 밀 좌클릭 시 `ITEM_WHEAT` 획득(`addItem` 제네릭 API). 미성숙·낫 아님·인벤토리 가득이면 작물 보호. 작물 아래 흙도 물뿌리개로 급수 가능. 농사 루프(경작→심기→물주기→성장→수확) 완결
 - 드롭 아이템 + 줍기 — 수확물이 바닥에 작은 큐브로 떨어지고, 플레이어가 근처로 가면 자동으로 인벤토리에 들어옴. 플레이어 인스턴싱 파이프라인 재사용. ③ 자원 채집(나무/돌) 인프라 선행
@@ -122,13 +122,17 @@
 - `FrameRenderData` 스냅샷 — `drawFrame`의 프레임 입력을 구조체 1개로 묶어 렌더러 public 경계를 안정화
 - `GpuBuffer` RAII — `VkBuffer+VkDeviceMemory`(+mapped)를 move-only 래퍼로 통합하고 device 파괴 전 명시 정리
 - DevUI(ImGui) + GPU 프로파일링 — `PASTEL_DEV_BUILD` 전용 F3 패널. post pass 위에 렌더링하고 GPU timestamp로 total/shadow/scene/post/imgui 구간 시간 표시
+- MainMenu 1차 App-state — 실행 직후 `PASTEL FARM`과 클릭형 `START` / `SETTINGS` row 표시. `START` 클릭(또는 `Enter`)으로 save 로드 + 초기 청크 로드 후 Gameplay 진입, `SETTINGS` 클릭(또는 `S`)으로 Settings 진입. 메뉴 중 게임 입력·시간 진행·청크 스트리밍 차단
+- Settings 1차 App-state — MainMenu에서 Settings 화면 진입, `ESC`/`BACK`으로 MainMenu 복귀. 설정 row 클릭으로 VSync ON/OFF(실제 present mode 적용), AA OFF/FXAA/SMAA(데이터/UI) 변경
+- Loading 1차 App-state — MainMenu에서 `START` 후 한 프레임 `LOADING` 화면을 표시하고, 그 다음 save 로드 + 초기 청크 로드 + Gameplay 진입
+- Pause 클릭 메뉴 — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 `PAUSED` + `RESUME` / `SETTINGS` / `QUIT` row 표시. Pause에서 Settings 진입 시 `BACK`/`ESC`는 Pause로 복귀. 인벤토리가 열린 Gameplay에서는 `ESC`가 먼저 인벤토리만 닫음
 
 > **스타듀식 오브젝트 경제 아크 ①~⑥ 완료.** (인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작 → 설치/철거+영속성)
 
 ---
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
-- **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(메인메뉴/일시정지/로딩) + 설정
+- **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
 - **Tier 2 (비주얼)**: height fog · hemisphere ambient(warm/cool) · 카메라 댐핑 · vegetation/object variation · wind · **AA(SMAA + FXAA fallback)** · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless
