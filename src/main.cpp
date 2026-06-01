@@ -330,7 +330,7 @@ int main() {
             if (input.windowWidth > 0 && input.windowHeight > 0)
                 camera.setAspectRatio((float)input.windowWidth / input.windowHeight);
 
-            camera.update(gameState.player().position(), orbitAngle);
+            camera.update(gameState.player().position(), orbitAngle, dt);
             if (app.gameplayActive())
                 gameState.update(dt, input, camera, world);
 
@@ -356,6 +356,7 @@ int main() {
 
             if (pendingWorldStart && app.loading()) {
                 startWorldSession();
+                camera.snapToTarget(gameState.player().position(), orbitAngle);
                 app.enterGameplay();
                 pendingWorldStart = false;
             }

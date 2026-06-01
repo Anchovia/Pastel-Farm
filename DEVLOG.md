@@ -693,6 +693,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 인벤토리가 열린 Gameplay에서 `ESC`를 누르면 Pause 진입보다 인벤토리 닫기를 우선하도록 `GameState::closeInventory`와 `AppFlow::consumeInventoryEscape`를 추가. 인벤토리 UI와 Pause 메뉴가 동시에 겹쳐 보이던 문제 해결.
 - 검증 결과: Pause `RESUME`/`SETTINGS`/`QUIT`, Pause → Settings → Pause 복귀, MainMenu → Settings → MainMenu 복귀, 인벤토리 열린 상태의 `ESC` 닫기 우선순위 정상 확인.
 
+### 카메라 follow 댐핑 (Tier 2 비주얼/감각 튜닝)
+- `Camera`가 플레이어 위치를 즉시 타겟으로 쓰지 않고 내부 `m_followTarget`을 지수 보간으로 따라가도록 변경. `main.cpp`는 `dt`를 넘겨 프레임레이트에 덜 의존하는 추적감을 사용.
+- `snapToTarget`을 추가해 첫 업데이트와 Loading 후 월드 세션 시작 시에는 저장 위치로 즉시 스냅. 메뉴 → Gameplay 진입 때 먼 위치에서 길게 미끄러지는 상황 방지.
+- 회전(`Q/E`)은 기존처럼 즉시 반응하고, follow 댐핑은 타겟 위치에만 적용. 마우스 피킹과 이동 방향 계산은 기존 `Camera` 행렬을 그대로 사용.
+- 검증 결과: 이동 시 카메라 추적감, 메뉴→Loading→Gameplay 진입 스냅, Pause/Settings 중 drift 없음, Q/E 회전 및 월드 클릭 정상 확인.
+
 ---
 
 ## 게임 설계 메모
