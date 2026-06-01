@@ -4,6 +4,8 @@ project(GameEngine CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(PASTEL_DEV_BUILD "Enable developer UI and GPU profiling tools" ON)
+
 find_package(Vulkan REQUIRED)
 
 # ---- GLFW + GLM: FetchContent (vcpkg 불필요) ----
@@ -26,6 +28,18 @@ FetchContent_Declare(glm
 )
 FetchContent_MakeAvailable(glm)
 
+if(PASTEL_DEV_BUILD)
+    FetchContent_Declare(imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG        v1.89.9
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_GetProperties(imgui)
+    if(NOT imgui_POPULATED)
+        FetchContent_Populate(imgui)
+    endif()
+endif()
+
 add_executable(engine
     src/main.cpp
     src/game/GameState.cpp
@@ -41,6 +55,22 @@ add_executable(engine
 target_include_directories(engine PRIVATE src ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(engine PRIVATE Vulkan::Vulkan glfw glm::glm)
 target_compile_definitions(engine PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE)
+
+if(PASTEL_DEV_BUILD)
+    target_sources(engine PRIVATE
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+    )
+    target_include_directories(engine PRIVATE
+        ${imgui_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}/backends
+    )
+    target_compile_definitions(engine PRIVATE PASTEL_DEV_BUILD=1)
+endif()
 
 # VS 디버거 작업 디렉토리를 exe 위치로 고정 (셰이더 경로 문제 해결)
 set_target_properties(engine PROPERTIES

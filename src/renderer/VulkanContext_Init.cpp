@@ -18,6 +18,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#ifdef PASTEL_DEV_BUILD
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
+#endif
+
 // ============================================================
 //  Instance
 // ============================================================
@@ -974,6 +980,120 @@ void VulkanContext::createCommandPool() {
     if (vkCreateCommandPool(m_device, &info, nullptr, &m_commandPool) != VK_SUCCESS)
         throw std::runtime_error("Failed to create command pool");
 }
+
+#ifdef PASTEL_DEV_BUILD
+void VulkanContext::createDevTools() {
+    VkDescriptorPoolSize poolSizes[] = {
+        { VK_DESCRIPTOR_TYPE_SAMPLER,                1000 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+        { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,       1000 },
+    };
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.maxSets       = 1000 * (uint32_t)(sizeof(poolSizes) / sizeof(poolSizes[0]));
+    poolInfo.poolSizeCount = (uint32_t)(sizeof(poolSizes) / sizeof(poolSizes[0]));
+    poolInfo.pPoolSizes    = poolSizes;
+    if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_devDescriptorPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create dev descriptor pool");
+
+    std::vector<VkQueueFamilyProperties> queueProps;
+    uint32_t queueCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, nullptr);
+    queueProps.resize(queueCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, queueProps.data());
+    auto indices = findQueueFamilies(m_physicalDevice);
+    if (indices.graphics && queueProps[*indices.graphics].timestampValidBits > 0) {
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
+        m_devTimestampPeriod  = props.limits.timestampPeriod;
+        m_devTimingSupported  = true;
+
+        VkQueryPoolCreateInfo queryInfo{};
+        queryInfo.sType      = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        queryInfo.queryType  = VK_QUERY_TYPE_TIMESTAMP;
+        queryInfo.queryCount = MAX_FRAMES_IN_FLIGHT * DEV_TIMESTAMP_COUNT;
+        if (vkCreateQueryPool(m_device, &queryInfo, nullptr, &m_devQueryPool) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create dev query pool");
+    }
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForVulkan(m_window.handle(), false);
+
+    ImGui_ImplVulkan_InitInfo initInfo{};
+    initInfo.Instance        = m_instance;
+    initInfo.PhysicalDevice  = m_physicalDevice;
+    initInfo.Device          = m_device;
+    initInfo.QueueFamily     = *indices.graphics;
+    initInfo.Queue           = m_graphicsQueue;
+    initInfo.PipelineCache   = VK_NULL_HANDLE;
+    initInfo.DescriptorPool  = m_devDescriptorPool;
+    initInfo.Allocator       = nullptr;
+    initInfo.MinImageCount   = 2;
+    initInfo.ImageCount      = (uint32_t)m_swapchainImages.size();
+    initInfo.MSAASamples     = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.CheckVkResultFn = nullptr;
+    if (!ImGui_ImplVulkan_Init(&initInfo, m_postRenderPass))
+        throw std::runtime_error("Failed to initialize ImGui Vulkan backend");
+
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool        = m_commandPool;
+    allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmd;
+    vkAllocateCommandBuffers(m_device, &allocInfo, &cmd);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &beginInfo);
+    ImGui_ImplVulkan_CreateFontsTexture(cmd);
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers    = &cmd;
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VkFence fence;
+    vkCreateFence(m_device, &fenceInfo, nullptr, &fence);
+    vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, fence);
+    vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(m_device, fence, nullptr);
+    vkFreeCommandBuffers(m_device, m_commandPool, 1, &cmd);
+    ImGui_ImplVulkan_DestroyFontUploadObjects();
+}
+
+void VulkanContext::destroyDevTools() {
+    if (ImGui::GetCurrentContext()) {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
+    if (m_devQueryPool) {
+        vkDestroyQueryPool(m_device, m_devQueryPool, nullptr);
+        m_devQueryPool = VK_NULL_HANDLE;
+    }
+    if (m_devDescriptorPool) {
+        vkDestroyDescriptorPool(m_device, m_devDescriptorPool, nullptr);
+        m_devDescriptorPool = VK_NULL_HANDLE;
+    }
+}
+#endif
 
 void VulkanContext::createCommandBuffers() {
     m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);

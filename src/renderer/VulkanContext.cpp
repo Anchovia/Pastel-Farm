@@ -46,6 +46,9 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createShadowPlayerPipeline();
     createFramebuffers();
     createCommandPool();
+#ifdef PASTEL_DEV_BUILD
+    createDevTools();
+#endif
     createVertexBuffer();
     createIndexBuffer();
     createSelectorBuffers();
@@ -67,6 +70,10 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
 
 VulkanContext::~VulkanContext() {
     waitIdle();
+
+#ifdef PASTEL_DEV_BUILD
+    destroyDevTools();
+#endif
 
     // Free all GpuBuffers here (device still alive). Their dtors run again after this
     // body when members destruct, but destroy() is idempotent so those are no-ops.

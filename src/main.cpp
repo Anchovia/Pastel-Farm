@@ -10,6 +10,27 @@
 static constexpr int LOAD_RADIUS   = 3;
 static constexpr int UNLOAD_RADIUS = 4;
 
+#ifdef PASTEL_DEV_BUILD
+static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx) {
+    if (ctx.devWantsMouse()) {
+        input.leftClick   = false;
+        input.rightClick  = false;
+        input.scrollDelta = 0;
+    }
+    if (ctx.devWantsKeyboard()) {
+        input.moveForward     = false;
+        input.moveBackward    = false;
+        input.moveLeft        = false;
+        input.moveRight       = false;
+        input.toggleInventory = false;
+        input.rotateLeft      = false;
+        input.rotateRight     = false;
+        input.saveKey         = false;
+        input.selectSlot      = -1;
+    }
+}
+#endif
+
 int main() {
     try {
         Window        window(1280, 720, "Pastel Farm");
@@ -38,18 +59,30 @@ int main() {
         glm::ivec2 lastPlayerChunk = spawnChunk;
 
         bool prevCtrlS = false;
+#ifdef PASTEL_DEV_BUILD
+        bool prevDevUiToggle = false;
+#endif
 
         float  orbitAngle = 45.0f;
         double lastTime   = glfwGetTime();
 
         while (!window.shouldClose()) {
             window.pollEvents();
+#ifdef PASTEL_DEV_BUILD
+            ctx.beginDevFrame();
+#endif
 
             double now = glfwGetTime();
             float  dt  = static_cast<float>(now - lastTime);
             lastTime = now;
 
             PlayerInput input = inputManager.pollInput();
+#ifdef PASTEL_DEV_BUILD
+            if (input.toggleDevUi && !prevDevUiToggle)
+                ctx.toggleDevUi();
+            prevDevUiToggle = input.toggleDevUi;
+            applyDevUiInputCapture(input, ctx);
+#endif
 
             if (input.quit)
                 window.close();

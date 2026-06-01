@@ -592,6 +592,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 스테이징 버퍼는 로컬 `GpuBuffer`로 두어 scope-exit 자동 해제(수동 destroy 제거). deferred-deletion 큐는 `{GpuBuffer, frame}`로, flush는 erase-remove의 move/소멸이 해제를 담당.
 - 동작·렌더링 불변. 청크 스트리밍/종료 시 validation 클린 확인.
 
+### DevUI(ImGui) + GPU timestamp 프로파일링 (Tier 1-C)
+- `PASTEL_DEV_BUILD` CMake 옵션 추가(기본 ON). 개발 빌드에서만 Dear ImGui `v1.89.9`를 FetchContent로 받아 GLFW/Vulkan backend 소스를 컴파일. 비개발 빌드에서는 의존성과 코드 경로가 빠짐.
+- Vulkan 통합: ImGui 전용 descriptor pool 생성, command pool 생성 뒤 폰트 텍스처를 one-shot command buffer로 업로드. 종료 시 device가 살아있는 동안 ImGui backend/query/descriptor pool을 먼저 정리.
+- 렌더 위치: 기존 `shadow pass → scene offscreen pass → post pass` 구조 유지. ImGui는 post fullscreen triangle 직후 같은 post render pass 안에서 스왑체인에 직접 렌더링 → 개발 UI는 color grading 영향을 받지 않아 읽기 좋음.
+- 입력: F3로 Dev 패널 토글. `Window`가 기존 scroll callback을 유지하면서 ImGui GLFW callback도 전달하고, ImGui가 마우스/키보드를 캡처한 프레임에는 main에서 월드 클릭·핫바 스크롤·이동/단축키 입력을 차단.
+- GPU timing: frame-in-flight별 timestamp query를 기록하고, 같은 슬롯 fence 대기 뒤 이전 결과만 읽어 GPU 강제 wait 없이 표시. 패널에 total/shadow/scene/post/imgui 구간 시간을 보여줌. timestamp 미지원 GPU는 `unavailable`로 표시하고 게임은 계속 실행.
+- 검증 결과: CMake 재구성 후 ImGui FetchContent, 실행, F3 패널, 입력 캡처, GPU timing 표시 정상 확인.
+
 ---
 
 ## 게임 설계 메모

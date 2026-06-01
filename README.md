@@ -36,10 +36,11 @@
 | 그래픽 API | Vulkan |
 | 윈도우/입력 | GLFW 3.4 |
 | 수학 | GLM 1.0.1 |
+| 개발 UI | Dear ImGui 1.89.9 (`PASTEL_DEV_BUILD` 전용) |
 | 셰이더 | GLSL → SPIR-V (`glslc`) |
 | 의존성 관리 | CMake FetchContent (vcpkg 불필요) |
 
-> GLFW와 GLM은 빌드 시 자동으로 받아옵니다. Vulkan SDK만 미리 설치하면 됩니다.
+> GLFW와 GLM은 빌드 시 자동으로 받아옵니다. 개발 빌드에서는 ImGui도 FetchContent로 받아옵니다. Vulkan SDK만 미리 설치하면 됩니다.
 
 ---
 
@@ -118,13 +119,16 @@
 - 오브젝트 영속성(save v2) — 청크별 오브젝트 직렬화. 설치물 재시작 유지 + 채집 자연물 respawn 해소
 - 작업대 제작(2단계) — 기본 레시피는 인벤 어디서나, 고급 레시피(`requiresWorkbench`)는 설치된 작업대 근처에서만 해금. `isObjectTypeNear` 판정. 데모: 돌담(STONE×2, 작업대 필요)
 - 오브젝트 충돌 — `ObjectDef.collidable` 플래그를 이동 차단에 배선. `World::isCollidableAt(x,y)` + `canOccupy` 한 줄로 나무·돌·울타리·작업대를 통과 못 함(건축이 장식→기능). 작물 타일은 영향 없음
+- `FrameRenderData` 스냅샷 — `drawFrame`의 프레임 입력을 구조체 1개로 묶어 렌더러 public 경계를 안정화
+- `GpuBuffer` RAII — `VkBuffer+VkDeviceMemory`(+mapped)를 move-only 래퍼로 통합하고 device 파괴 전 명시 정리
+- DevUI(ImGui) + GPU 프로파일링 — `PASTEL_DEV_BUILD` 전용 F3 패널. post pass 위에 렌더링하고 GPU timestamp로 total/shadow/scene/post/imgui 구간 시간 표시
 
 > **스타듀식 오브젝트 경제 아크 ①~⑥ 완료.** (인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작 → 설치/철거+영속성)
 
 ---
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
-- **Tier 1**: DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(메인메뉴/일시정지/로딩) + 설정
+- **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(메인메뉴/일시정지/로딩) + 설정
 - **Tier 2 (비주얼)**: height fog · hemisphere ambient(warm/cool) · 카메라 댐핑 · vegetation/object variation · wind · **AA(SMAA + FXAA fallback)** · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless

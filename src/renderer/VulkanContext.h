@@ -72,6 +72,13 @@ public:
     void drawFrame(const FrameRenderData& frame);
     void waitIdle();
 
+#ifdef PASTEL_DEV_BUILD
+    void beginDevFrame();
+    bool devWantsMouse() const;
+    bool devWantsKeyboard() const;
+    void toggleDevUi();
+#endif
+
 private:
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     void createInstance();
@@ -145,6 +152,14 @@ private:
     void recreateSwapchain();
 
     void deferDestroy(GpuBuffer&& buf);
+
+#ifdef PASTEL_DEV_BUILD
+    void createDevTools();
+    void destroyDevTools();
+    void buildDevUi(const FrameRenderData& frame);
+    void readDevGpuTimings(uint32_t frameIndex);
+    void writeDevTimestamp(VkCommandBuffer cmd, uint32_t index);
+#endif
 
     VkShaderModule          createShaderModule(const std::vector<char>& code);
     std::vector<char>       readFile(const std::string& path);
@@ -278,6 +293,28 @@ private:
     std::vector<VkFence>     m_inFlight;          // per frame in flight
     std::vector<VkFence>     m_imagesInFlight;    // per swapchain image; non-owning fence refs
     uint32_t                 m_currentFrame     = 0;
+
+#ifdef PASTEL_DEV_BUILD
+    static constexpr uint32_t DEV_TIMESTAMP_COUNT = 5; // start, shadow, scene, post, imgui/end
+
+    struct DevGpuTiming {
+        bool  valid    = false;
+        float totalMs  = 0.0f;
+        float shadowMs = 0.0f;
+        float sceneMs  = 0.0f;
+        float postMs   = 0.0f;
+        float imguiMs  = 0.0f;
+    };
+
+    VkDescriptorPool m_devDescriptorPool = VK_NULL_HANDLE;
+    VkQueryPool      m_devQueryPool      = VK_NULL_HANDLE;
+    float            m_devTimestampPeriod = 0.0f;
+    bool             m_devTimingSupported = false;
+    bool             m_devUiVisible       = true;
+    bool             m_devFrameStarted    = false;
+    DevGpuTiming     m_devGpuTiming;
+    std::array<bool, MAX_FRAMES_IN_FLIGHT> m_devQueriesWritten{};
+#endif
 
     struct DeferredDelete {
         GpuBuffer      buffer;

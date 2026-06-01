@@ -25,6 +25,9 @@ public:
 private:
     static void resizeCallback(GLFWwindow* window, int w, int h);
     static void scrollCallback(GLFWwindow* window, double xoff, double yoff);
+    static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void charCallback(GLFWwindow* window, unsigned int codepoint);
 
     GLFWwindow* m_window = nullptr;
     int    m_width, m_height;
