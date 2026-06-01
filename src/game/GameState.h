@@ -21,7 +21,7 @@ struct PlayerInput {
     bool leftClick       = false;
     bool rightClick      = false;
     bool toggleInventory = false;
-    bool quit            = false;  // ESC
+    bool quit            = false;  // ESC (app-level pause toggle)
     bool rotateLeft      = false;  // Q
     bool rotateRight     = false;  // E
     bool saveKey         = false;  // Ctrl+S (raw; main edge-detects)

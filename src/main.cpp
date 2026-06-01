@@ -10,6 +10,11 @@
 static constexpr int LOAD_RADIUS   = 3;
 static constexpr int UNLOAD_RADIUS = 4;
 
+enum class AppMode {
+    Gameplay,
+    Paused,
+};
+
 #ifdef PASTEL_DEV_BUILD
 static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx) {
     if (ctx.devWantsMouse()) {
@@ -26,6 +31,7 @@ static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx)
         input.rotateLeft      = false;
         input.rotateRight     = false;
         input.saveKey         = false;
+        input.quit            = false;
         input.selectSlot      = -1;
     }
 }
@@ -59,6 +65,8 @@ int main() {
         glm::ivec2 lastPlayerChunk = spawnChunk;
 
         bool prevCtrlS = false;
+        bool prevEsc = false;
+        AppMode appMode = AppMode::Gameplay;
 #ifdef PASTEL_DEV_BUILD
         bool prevDevUiToggle = false;
 #endif
@@ -84,12 +92,18 @@ int main() {
             applyDevUiInputCapture(input, ctx);
 #endif
 
-            if (input.quit)
-                window.close();
+            if (input.quit && !prevEsc) {
+                appMode = (appMode == AppMode::Gameplay)
+                    ? AppMode::Paused
+                    : AppMode::Gameplay;
+            }
+            prevEsc = input.quit;
+
+            const bool gameplayActive = appMode == AppMode::Gameplay;
 
             const float rotSpeed = 90.0f * dt;
-            if (input.rotateLeft)  orbitAngle -= rotSpeed;
-            if (input.rotateRight) orbitAngle += rotSpeed;
+            if (gameplayActive && input.rotateLeft)  orbitAngle -= rotSpeed;
+            if (gameplayActive && input.rotateRight) orbitAngle += rotSpeed;
 
             // Ctrl+S save (edge-detect)
             if (input.saveKey && !prevCtrlS)
@@ -100,7 +114,8 @@ int main() {
                 camera.setAspectRatio((float)input.windowWidth / input.windowHeight);
 
             camera.update(gameState.player().position(), orbitAngle);
-            gameState.update(dt, input, camera, world);
+            if (gameplayActive)
+                gameState.update(dt, input, camera, world);
 
             // Load/unload chunks when player crosses a chunk boundary
             glm::ivec2 playerChunk = World::chunkCoord(

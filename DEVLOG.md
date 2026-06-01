@@ -600,6 +600,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - GPU timing: frame-in-flight별 timestamp query를 기록하고, 같은 슬롯 fence 대기 뒤 이전 결과만 읽어 GPU 강제 wait 없이 표시. 패널에 total/shadow/scene/post/imgui 구간 시간을 보여줌. timestamp 미지원 GPU는 `unavailable`로 표시하고 게임은 계속 실행.
 - 검증 결과: CMake 재구성 후 ImGui FetchContent, 실행, F3 패널, 입력 캡처, GPU timing 표시 정상 확인.
 
+### Pause 1차 App-state (Tier 1-D 슬라이스)
+- `main.cpp`에 최소 `AppMode { Gameplay, Paused }` 추가. 전체 메인메뉴/로딩/설정까지 확장하지 않고, 현재 가장 거친 앱 흐름인 `ESC=즉시 종료`만 먼저 제거.
+- `ESC`는 edge-detect로 Gameplay/Paused를 토글. DevUI가 키보드를 캡처 중일 때는 pause 토글이 새지 않도록 `applyDevUiInputCapture`에서 `quit` 입력도 차단.
+- pause 중에는 카메라 Q/E 회전과 `GameState::update()`를 건너뜀. 결과적으로 시간 진행, 작물 성장, 월드 클릭, 인벤토리/핫바 입력, 드롭 줍기, 플레이어 이동이 멈추고 렌더는 마지막 상태를 계속 그림.
+- 창 종료는 OS 창 닫기 버튼으로 유지. pause overlay, 메인메뉴, 설정, 명시적 quit 버튼은 다음 App-state 슬라이스로 보류.
+- 검증 결과: `ESC` pause/resume, pause 중 입력 차단, DevUI 조작, 창 닫기 종료 정상 확인.
+
 ---
 
 ## 게임 설계 메모
