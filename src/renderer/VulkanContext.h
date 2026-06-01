@@ -63,6 +63,7 @@ struct FrameRenderData {
     const std::vector<DroppedItem>&          drops;
     bool                                     nearWorkbench;
     bool                                     mainMenu;
+    bool                                     loading;
     bool                                     paused;
 };
 
@@ -255,6 +256,7 @@ private:
     std::array<ItemStack, INV_SLOTS> m_invHud{};
     bool                     m_inventoryOpen   = false;
     bool                     m_mainMenuHud      = false;
+    bool                     m_loadingHud       = false;
     bool                     m_pausedHud       = false;
     bool                     m_nearWorkbenchHud = false;
     std::array<float, 4>     m_skyColor        = {0.08f, 0.08f, 0.12f, 1.0f};

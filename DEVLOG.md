@@ -644,6 +644,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `worldSessionStarted` 플래그로 메뉴 중 Ctrl+S 저장과 청크 스트리밍을 차단. 메뉴에서 기다려도 게임 시간·작물 성장·월드 로드가 진행되지 않음.
 - 검증 결과: 메뉴 대기 중 시간 정지, Enter 후 save 위치/시간 복원, 월드 표시, 저장·pause/resume·DevUI 정상 확인.
 
+### Loading 1차 App-state (Tier 1-D 슬라이스)
+- `AppMode::Loading` 추가. MainMenu에서 `Enter`를 누르면 바로 Gameplay로 가지 않고 Loading 상태로 먼저 전환.
+- `pendingWorldStart` 플래그로 `LOADING` 화면을 한 프레임 렌더한 뒤 `drawFrame` 이후 `startWorldSession()`을 실행. 현재 로드는 동기 방식이지만, 이후 비동기 로딩/세이브 선택/진행률 표시로 확장할 접합면 확보.
+- `FrameRenderData`에 `loading` bool 추가. 렌더러는 AppMode를 직접 알지 않고 스냅샷 값만 소비해 `LOADING` Tiny UI Text 화면을 표시.
+- loading 중에는 기존 app mode 입력 정책으로 게임플레이 입력과 저장이 차단됨. save 로드 + 초기 청크 로드가 끝나면 Gameplay로 진입.
+- 검증 결과: MainMenu → `LOADING` 표시 → save/월드 로드 → Gameplay 진입, 진입 후 저장·pause/resume·DevUI 정상 확인.
+
 ---
 
 ## 게임 설계 메모

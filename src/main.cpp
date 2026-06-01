@@ -12,6 +12,7 @@ static constexpr int UNLOAD_RADIUS = 4;
 
 enum class AppMode {
     MainMenu,
+    Loading,
     Gameplay,
     Paused,
 };
@@ -37,14 +38,23 @@ struct AppFlow {
         return mode == AppMode::MainMenu;
     }
 
+    bool loading() const {
+        return mode == AppMode::Loading;
+    }
+
     bool consumeMainMenuStart(bool startPressed) {
         const bool pressed = mode == AppMode::MainMenu && startPressed && !prevStart;
         prevStart = startPressed;
         return pressed;
     }
 
-    void enterGameplay() {
+    void enterLoading() {
         if (mode == AppMode::MainMenu)
+            mode = AppMode::Loading;
+    }
+
+    void enterGameplay() {
+        if (mode == AppMode::Loading)
             mode = AppMode::Gameplay;
     }
 
@@ -88,10 +98,10 @@ static void clearGameplayInput(PlayerInput& input) {
 }
 
 static void applyAppModeInputPolicy(PlayerInput& input, AppMode mode) {
-    if (mode != AppMode::Gameplay)
+    if (mode != AppMode::Gameplay) {
         clearGameplayInput(input);
-    if (mode == AppMode::MainMenu)
         input.saveKey = false;
+    }
 }
 
 #ifdef PASTEL_DEV_BUILD
@@ -121,6 +131,7 @@ int main() {
 
         AppFlow app;
         bool worldSessionStarted = false;
+        bool pendingWorldStart = false;
         glm::ivec2 lastPlayerChunk{0, 0};
 
         auto startWorldSession = [&]() {
@@ -161,8 +172,8 @@ int main() {
 
             app.updatePauseToggle(input.quit);
             if (app.consumeMainMenuStart(input.startKey)) {
-                startWorldSession();
-                app.enterGameplay();
+                app.enterLoading();
+                pendingWorldStart = true;
                 clearGameplayInput(input);
             }
 
@@ -200,8 +211,14 @@ int main() {
                 camera, gameState.player().position(), gameState.targetTile(),
                 gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
                 gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench(),
-                app.mainMenu(), app.paused()
+                app.mainMenu(), app.loading(), app.paused()
             });
+
+            if (pendingWorldStart && app.loading()) {
+                startWorldSession();
+                app.enterGameplay();
+                pendingWorldStart = false;
+            }
         }
         ctx.waitIdle();
     } catch (const std::exception& e) {

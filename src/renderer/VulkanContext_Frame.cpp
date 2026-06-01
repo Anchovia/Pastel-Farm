@@ -348,6 +348,7 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
     m_invHud           = frame.inventory;
     m_inventoryOpen    = frame.inventoryOpen;
     m_mainMenuHud      = frame.mainMenu;
+    m_loadingHud       = frame.loading;
     m_pausedHud        = frame.paused;
     m_nearWorkbenchHud = frame.nearWorkbench;
     m_dayHud           = frame.day;
@@ -592,6 +593,16 @@ void VulkanContext::updateHotbar() {
         pushQuad(0.0f, 0.0f, W, H, {0.06f, 0.08f, 0.07f, 0.72f});
         pushCenteredText("PASTEL FARM", H * 0.5f - 70.0f, 10.0f, {0.95f, 0.92f, 0.82f, 1.0f});
         pushCenteredText("PRESS ENTER", H * 0.5f + 20.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.85f});
+
+        if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
+        m_uiVertexCount = (uint32_t)verts.size();
+        memcpy(m_uiBuffer[m_currentFrame].mapped, verts.data(), sizeof(UIVertex) * verts.size());
+        return;
+    }
+
+    if (m_loadingHud) {
+        pushQuad(0.0f, 0.0f, W, H, {0.06f, 0.08f, 0.07f, 0.72f});
+        pushCenteredText("LOADING", H * 0.5f - 18.0f, 8.0f, {0.95f, 0.92f, 0.82f, 1.0f});
 
         if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
         m_uiVertexCount = (uint32_t)verts.size();
