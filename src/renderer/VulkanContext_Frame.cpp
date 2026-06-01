@@ -233,15 +233,11 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
 
     // Advance frame counter and free buffers that are no longer in flight
     m_frameCount++;
+    // Erase entries the GPU has finished with; GpuBuffer RAII frees them on erase.
     m_deletionQueue.erase(
         std::remove_if(m_deletionQueue.begin(), m_deletionQueue.end(),
             [&](const DeferredDelete& d) {
-                if (m_frameCount - d.frame > (uint64_t)MAX_FRAMES_IN_FLIGHT) {
-                    vkDestroyBuffer(m_device, d.buffer, nullptr);
-                    vkFreeMemory(m_device, d.memory, nullptr);
-                    return true;
-                }
-                return false;
+                return m_frameCount - d.frame > (uint64_t)MAX_FRAMES_IN_FLIGHT;
             }),
         m_deletionQueue.end()
     );
@@ -350,18 +346,18 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& cam
     ubo.lightDir = glm::vec4(m_sunDir, m_dayFactor); // w = dayFactor (0=night, 1=noon)
     ubo.lightMVP = m_lightMVP;
     ubo.fogColor = glm::vec4(m_skyColor[0], m_skyColor[1], m_skyColor[2], 1.0f);
-    memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+    memcpy(m_uniformBuffers[currentFrame].mapped, &ubo, sizeof(ubo));
 }
 
 void VulkanContext::updatePlayerInstanceBuffer(const glm::vec3& playerPosition) {
     static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
     InstanceData inst{playerPosition, kPlayerColor, kPlayerColor};
-    memcpy(m_playerInstMapped[m_currentFrame], &inst, sizeof(inst));
+    memcpy(m_playerInstBuffer[m_currentFrame].mapped, &inst, sizeof(inst));
 }
 
 void VulkanContext::updateDropInstanceBuffer(const std::vector<DroppedItem>& drops) {
     m_dropCount = std::min((uint32_t)drops.size(), MAX_DROPS);
-    InstanceData* dst = reinterpret_cast<InstanceData*>(m_dropInstMapped[m_currentFrame]);
+    InstanceData* dst = reinterpret_cast<InstanceData*>(m_dropInstBuffer[m_currentFrame].mapped);
     for (uint32_t i = 0; i < m_dropCount; i++) {
         const glm::vec3 c = itemColor(drops[i].type);
         dst[i] = InstanceData{ drops[i].pos, c, c };
@@ -375,7 +371,7 @@ void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec3>
     static const glm::vec3 kSelectorColor = {1.0f, 0.9f, 0.1f};
     const glm::ivec3 tile = *targetTile;
     InstanceData inst{m_world.tileCenter(tile.x, tile.y, tile.z), kSelectorColor, kSelectorColor};
-    memcpy(m_selectorInstMapped[m_currentFrame], &inst, sizeof(inst));
+    memcpy(m_selectorInstBuffer[m_currentFrame].mapped, &inst, sizeof(inst));
 }
 
 // ============================================================
@@ -531,5 +527,5 @@ void VulkanContext::updateHotbar() {
 
     if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
     m_uiVertexCount = (uint32_t)verts.size();
-    memcpy(m_uiMapped[m_currentFrame], verts.data(), sizeof(UIVertex) * verts.size());
+    memcpy(m_uiBuffer[m_currentFrame].mapped, verts.data(), sizeof(UIVertex) * verts.size());
 }

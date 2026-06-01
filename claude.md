@@ -9,6 +9,7 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
 
 Before implementing:
+
 - State your assumptions explicitly. If uncertain, ask.
 - If multiple interpretations exist, present them - don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
@@ -31,12 +32,14 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
 **Touch only what you must. Clean up only your own mess.**
 
 When editing existing code:
+
 - Don't "improve" adjacent code, comments, or formatting.
 - Don't refactor things that aren't broken.
 - Match existing style, even if you'd do it differently.
 - If you notice unrelated dead code, mention it - don't delete it.
 
 When your changes create orphans:
+
 - Remove imports/variables/functions that YOUR changes made unused.
 - Don't remove pre-existing dead code unless asked.
 
@@ -47,11 +50,13 @@ The test: Every changed line should trace directly to the user's request.
 **Define success criteria. Loop until verified.**
 
 Transform tasks into verifiable goals:
+
 - "Add validation" → "Write tests for invalid inputs, then make them pass"
 - "Fix the bug" → "Write a test that reproduces it, then make it pass"
 - "Refactor X" → "Ensure tests pass before and after"
 
 For multi-step tasks, state a brief plan:
+
 ```
 1. [Step] → verify: [check]
 2. [Step] → verify: [check]
@@ -65,6 +70,12 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ## 5. Code Style
 
 - All comments must be written in **English**.
+
+## 5.1 Language Rules
+
+- Git commit messages must be written in **Korean**.
+- Markdown documentation files (e.g. `README`, `DEVLOG`, `DESIGN`, `ARCHITECTURE`, and other `.md` files) must be written in **Korean** unless explicitly requested otherwise.
+- Code comments and documentation language are separate rules: comments remain **English**, documentation remains **Korean**.
 
 ## 6. Before You Start
 
@@ -88,6 +99,85 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 - Do not mix refactoring with feature implementation.
 - If refactoring is needed, **propose it as a separate task** after the current task is complete.
+
+## 9. Multi-LLM Handoff
+
+**LLM handoff is a continuity tool, not a trust chain.**
+
+When multiple LLMs are used sequentially (e.g. Claude → Codex → Claude), treat previous LLM output as context, not authority.
+
+### Verify Before Continuing
+
+Before continuing work started by another LLM:
+
+1. Review the handoff summary
+2. Inspect the relevant source files directly
+3. Confirm the implementation matches the user's request
+4. Check for conflicts with `CLAUDE.md`, `ARCHITECTURE.md`, `README.md` and `DESIGN.md`
+5. Only then continue implementation
+
+Do not continue blindly from previous conclusions or summaries.
+
+### Previous LLM Output Is Not Source of Truth
+
+A previous LLM may be:
+
+- incomplete
+- mistaken
+- overengineered
+- inconsistent with project architecture
+- missing important assumptions or risks
+
+Verify reasoning against:
+
+- source code
+- project documents
+- current user request
+
+The codebase and project documents are the source of truth.
+
+### Surface Problems Before Proceeding
+
+If previous work appears problematic:
+
+- state the concern explicitly
+- explain the tradeoff or risk
+- ask for clarification when needed
+- do not silently inherit flawed assumptions
+
+Examples:
+
+- unnecessary abstraction
+- scope creep
+- risky Vulkan lifetime or synchronization logic
+- architecture mismatch
+- excessive diff size
+
+### Session Handoff Before Context Limit
+
+When approaching context or token limits, prepare a concise handoff summary for the next LLM.
+
+The handoff should include:
+
+- original task
+- completed work
+- key implementation decisions
+- assumptions and tradeoffs
+- open issues or risks
+- suggested next steps
+- user verification items
+
+A handoff summary supports continuity but does not replace direct code verification.
+
+### Human Ownership
+
+The user remains:
+
+- build owner
+- test owner
+- final reviewer
+
+LLMs assist with continuity and implementation, but do not delegate responsibility to previous LLM decisions.
 
 ---
 

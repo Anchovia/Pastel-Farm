@@ -585,6 +585,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - by-ref/by-value를 기존 시그니처 그대로 미러링(camera/inventory/drops=참조, 나머지=값) → **동작·성능 불변**. 본문은 `frame.*` 기계적 치환, 호출처(`main.cpp`)는 중괄호 초기화.
 - 내부 헬퍼(`updateUniformBuffer` 등)는 좁은 인자 유지 — 스냅샷을 더 깊이 배선하지 않음(수술적 변경, 스코프 크리프 방지). DevUI(Tier 1-C)가 읽고 쓸 접합면 확보.
 
+### GpuBuffer RAII (Tier 1-B, 순수 리팩토링·전체 스윗)
+- `VkBuffer`+`VkDeviceMemory` 수동 쌍 ~13종(스칼라/청크/오브젝트/프레임별 vector)을 move-only RAII 타입 `GpuBuffer`로 통합. `mapped`를 흡수해 평행 `m_*Mapped` vector 5개 제거. `createBuffer`는 out-param → **반환형**으로.
+- **리스크 최소화 설계**: `operator VkBuffer()` 암시적 변환 + 멤버명 유지 → 바인딩/드로우 등 읽기 ~30곳 무변경 컴파일. move-only라 실수 복사는 컴파일 에러로 차단.
+- **device 파괴 순서 함정 해결**: 소멸자 본문에서 `vkDestroyDevice` 전에 GpuBuffer 컨테이너를 명시적 `clear()`/`destroy()`(device 살아있을 때). 멤버 자동 소멸자는 이후 idempotent no-op. 수동 파괴 ~50줄 → ~15줄.
+- 스테이징 버퍼는 로컬 `GpuBuffer`로 두어 scope-exit 자동 해제(수동 destroy 제거). deferred-deletion 큐는 `{GpuBuffer, frame}`로, flush는 erase-remove의 move/소멸이 해제를 담당.
+- 동작·렌더링 불변. 청크 스트리밍/종료 시 validation 클린 확인.
+
 ---
 
 ## 게임 설계 메모
