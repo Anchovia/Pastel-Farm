@@ -607,6 +607,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 창 종료는 OS 창 닫기 버튼으로 유지. pause overlay, 메인메뉴, 설정, 명시적 quit 버튼은 다음 App-state 슬라이스로 보류.
 - 검증 결과: `ESC` pause/resume, pause 중 입력 차단, DevUI 조작, 창 닫기 종료 정상 확인.
 
+### 입력 컨텍스트 정리 (Tier 1-D 슬라이스)
+- `main.cpp` 로컬 helper `clearGameplayInput` / `applyAppModeInputPolicy` 추가. pause 중 막아야 하는 이동·클릭·핫바·인벤토리·카메라 회전 입력 목록을 한 곳으로 모음.
+- DevUI 키보드 캡처도 같은 `clearGameplayInput`을 재사용하도록 정리. 입력 차단 우선순위가 DevUI 캡처 → app mode 정책 → 게임 업데이트 순서로 읽히게 됨.
+- 동작은 기존 pause와 동일: `ESC` pause/resume, F3 DevUI, Ctrl+S 저장 정책 유지. 추후 MainMenu/Settings 입력 컨텍스트를 추가할 접합면 확보.
+- 검증 결과: pause 중 게임플레이 입력 차단, DevUI 입력 캡처, F3 토글 정상 확인.
+
 ---
 
 ## 게임 설계 메모
