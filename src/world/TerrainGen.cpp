@@ -72,6 +72,7 @@ void TerrainGen::generate(int cx, int cy, Chunk& chunk) {
     }
 
     placeTrees(cx, cy, chunk);
+    placeRocks(cx, cy, chunk);
     chunk.dirty = true;
 }
 
@@ -97,6 +98,32 @@ void TerrainGen::placeTrees(int cx, int cy, Chunk& chunk) {
             tree.rot   = hash(wx + 13000, wy + 13000) * 6.2831853f;   // 0 .. 2pi
             tree.type  = ObjectType::TREE;
             chunk.objects.push_back(tree);
+        }
+    }
+}
+
+void TerrainGen::placeRocks(int cx, int cy, Chunk& chunk) {
+    for (int ly = 0; ly < CHUNK_SIZE; ly++) {
+        for (int lx = 0; lx < CHUNK_SIZE; lx++) {
+            // Only on flat ground with open sky above
+            const TileType ground = chunk.tiles[0][ly][lx];
+            if (ground != TileType::GRASS && ground != TileType::DIRT) continue;
+            if (chunk.tiles[1][ly][lx] != TileType::AIR) continue;
+
+            const int wx = cx * CHUNK_SIZE + lx;
+            const int wy = cy * CHUNK_SIZE + ly;
+
+            const float b = fbm(wx * BIOME_SCALE + 100.0f, wy * BIOME_SCALE + 100.0f);
+            if (b > 0.45f) continue; // open / dry areas, away from the forest biome
+
+            if (hash(wx + 21000, wy + 21000) < 0.94f) continue; // sparse
+
+            Object rock;
+            rock.pos   = { (float)wx, (float)wy, 0.5f };
+            rock.scale = 0.6f + hash(wx + 23000, wy + 23000) * 0.5f; // 0.6 .. 1.1
+            rock.rot   = hash(wx + 25000, wy + 25000) * 6.2831853f;  // 0 .. 2pi
+            rock.type  = ObjectType::ROCK;
+            chunk.objects.push_back(rock);
         }
     }
 }

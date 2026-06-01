@@ -631,6 +631,34 @@ void VulkanContext::createObjectMeshes() {
 
     upload(ObjectType::TREE, verts);
     }
+
+    // ---- ROCK: squished octahedron (low-poly boulder) ----
+    {
+    std::vector<ChunkVertex> verts;
+    const glm::vec3 rockColor = {0.52f, 0.52f, 0.56f};
+    const float r = 0.40f, mz = 0.22f, topZ = 0.50f;
+    const glm::vec3 apex   = {0.0f, 0.0f, topZ};
+    const glm::vec3 bottom = {0.0f, 0.0f, 0.0f};
+    const glm::vec3 ring[4] = {
+        { r, 0.0f, mz}, {0.0f,  r, mz}, {-r, 0.0f, mz}, {0.0f, -r, mz}
+    };
+    const glm::vec3 center = {0.0f, 0.0f, mz};
+    // Flat-shaded triangle; normal forced to point away from the rock center
+    auto tri = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
+        glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
+        if (glm::dot(n, (a + b + c) / 3.0f - center) < 0.0f) n = -n;
+        verts.push_back({a, n, rockColor});
+        verts.push_back({b, n, rockColor});
+        verts.push_back({c, n, rockColor});
+    };
+    for (int i = 0; i < 4; i++) {
+        const glm::vec3& p0 = ring[i];
+        const glm::vec3& p1 = ring[(i + 1) % 4];
+        tri(apex,   p0, p1); // upper face
+        tri(bottom, p0, p1); // lower face
+    }
+    upload(ObjectType::ROCK, verts);
+    }
 }
 
 // ============================================================

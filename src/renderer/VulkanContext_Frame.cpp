@@ -71,6 +71,7 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
                     if (!lightFrustum.containsAABB(chunkMin, chunkMax)) continue;
 
                     for (auto& g : data.objGroups) {
+                        if (!objectDef(g.type).castShadow) continue;
                         const ObjectMesh& mesh = m_objectMeshes[(size_t)g.type];
                         if (mesh.count == 0 || g.count == 0) continue;
                         VkBuffer     bufs[] = { mesh.vbuf, g.buffer };

@@ -15,8 +15,28 @@ struct TileState {
 
 enum class ObjectType : uint8_t {
     TREE = 0,
+    ROCK,
     COUNT,
 };
+
+// Data-driven properties per object type (mesh is built separately in the renderer).
+// harvestTool / dropItem / placeable are consumed by the gathering & building systems.
+struct ObjectDef {
+    bool     castShadow  = true;
+    bool     collidable  = false;          // stored; movement enforcement is a later pass
+    bool     placeable   = false;          // player-buildable (used by the building system)
+    ItemType harvestTool = ItemType::NONE; // tool required to harvest (NONE = not harvestable)
+    ItemType dropItem    = ItemType::NONE; // item produced on harvest
+    int      dropCount   = 0;
+};
+
+inline const ObjectDef& objectDef(ObjectType type) {
+    static const ObjectDef defs[(size_t)ObjectType::COUNT] = {
+        /* TREE */ { true, true, false, ItemType::TOOL_AXE,     ItemType::BLOCK_WOOD,  1 },
+        /* ROCK */ { true, true, false, ItemType::TOOL_PICKAXE, ItemType::BLOCK_STONE, 1 },
+    };
+    return defs[(size_t)type];
+}
 
 // World prop placed on top of the tile grid (rendered as a low-poly model, not a voxel)
 struct Object {

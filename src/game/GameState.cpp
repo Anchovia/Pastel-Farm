@@ -26,6 +26,7 @@ GameState::GameState() {
     m_inventory[2] = { ItemType::SEED_WHEAT,       10 };
     m_inventory[3] = { ItemType::TOOL_AXE,         1  };
     m_inventory[4] = { ItemType::TOOL_SICKLE,      1  };
+    m_inventory[5] = { ItemType::TOOL_PICKAXE,     1  };
 }
 
 void GameState::update(float dt, const PlayerInput& input, const Camera& camera, World& world) {

@@ -518,6 +518,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - main/shadow 오브젝트 draw 루프가 그룹을 순회하며 `m_objectMeshes[type]` 메시 + 그룹 버퍼 바인딩. 소멸자·`rebuildDirtyChunks` 정리도 그룹 단위.
 - 타입은 여전히 TREE 하나뿐 — **화면·동작 변화 0**(회귀 없음 확인). ②b에서 ROCK + ObjectDef를 얹을 토대.
 
+### ObjectDef 테이블 + ROCK 타입 (②b)
+- `ObjectType::ROCK` 추가 + **데이터 주도 `ObjectDef` 테이블**(`objectDef(type)` lookup, Chunk.h): `castShadow/collidable/placeable/harvestTool/dropItem/dropCount`. TREE→도끼/WOOD, ROCK→곡괭이/STONE. `harvestTool/dropItem`은 ③ 채집에서, `placeable`은 ⑥ 건축에서 사용.
+- `TOOL_PICKAXE` 아이템(enum+색) 추가, 시작 핫바 슬롯 6에 배치(③ 대비).
+- ROCK 로우폴리 메시(눌린 8면체, 법선 중심 기준 바깥쪽 강제)를 `createObjectMeshes`에 추가 → 레지스트리가 실제로 2타입을 다룸을 검증.
+- `TerrainGen::placeRocks` — 비숲(건조/개활, b<0.45) 평지에 sparse 배치. 나무(b>0.58)와 바이옴 분리라 겹치지 않음.
+- shadow pass에 `objectDef(type).castShadow` 게이트 추가(현재 둘 다 true라 화면 변화 없음, ③/이후 타입 대비).
+- `collidable=true`는 저장만, 이동 차단 미적용(나무·돌 통과). 채집 상호작용은 ③.
+
 ---
 
 ## 게임 설계 메모
