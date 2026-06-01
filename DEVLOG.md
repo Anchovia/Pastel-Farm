@@ -678,6 +678,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - AA는 아직 실제 렌더링에 적용하지 않고 설정 데이터/UI만 제공. 이전 임시 `TOGGLE` 안내 문구를 제거해 AA 모드 변경 시 글자가 겹쳐 깨지던 문제도 함께 해소.
 - 검증 결과: Settings row 클릭, VSync 적용, AA 데이터 순환, BACK/ESC 복귀, Gameplay의 A 이동 입력 정상 확인.
 
+### MainMenu 클릭형 row UI 전환 (Tier 1-D 슬라이스)
+- MainMenu의 `PRESS ENTER` / `S SETTINGS` 안내 문구를 제거하고, 클릭 가능한 `START` / `SETTINGS` row UI로 전환.
+- `mainMenuRowRect`를 `Types.h`에 추가해 렌더링과 클릭 판정이 같은 screen-space rect를 공유하도록 정리. Settings row와 같은 폭/높이 규칙을 재사용.
+- `AppFlow::consumeMainMenuClick`에서 마우스 좌클릭 edge-detect로 `START`와 `SETTINGS`를 판정. `START`는 기존 Loading → world session 시작 경로를 사용하고, `SETTINGS`는 Settings AppMode로 진입.
+- `Enter` / `S`는 백업 입력으로 유지하되, 화면 노출은 클릭형 메뉴 중심으로 정리. Settings 진입 클릭 프레임이 Settings row 클릭으로도 소비되지 않도록 업데이트 순서를 분리.
+- 검증 결과: MainMenu `START` 클릭, `SETTINGS` 클릭, Settings row 조작, BACK/ESC 복귀, Loading/Gameplay/Pause 흐름 정상 확인.
+
 ---
 
 ## 게임 설계 메모

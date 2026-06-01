@@ -23,6 +23,7 @@ struct AppFlow {
     bool prevEsc = false;
     bool prevStart = false;
     bool prevSettings = false;
+    bool prevMenuClick = false;
     bool prevCtrlS = false;
 #ifdef PASTEL_DEV_BUILD
     bool prevDevUiToggle = false;
@@ -54,10 +55,35 @@ struct AppFlow {
         return pressed;
     }
 
+    int consumeMainMenuClick(const PlayerInput& input) {
+        int action = 0; // 0=none, 1=start, 2=settings
+        if (mode == AppMode::MainMenu && input.leftClick && !prevMenuClick) {
+            float x, y, w, h;
+            mainMenuRowRect(0, (float)input.windowWidth, (float)input.windowHeight, x, y, w, h);
+            if (input.mouseX >= x && input.mouseX <= x + w &&
+                input.mouseY >= y && input.mouseY <= y + h) {
+                action = 1;
+            }
+
+            mainMenuRowRect(1, (float)input.windowWidth, (float)input.windowHeight, x, y, w, h);
+            if (input.mouseX >= x && input.mouseX <= x + w &&
+                input.mouseY >= y && input.mouseY <= y + h) {
+                action = 2;
+            }
+        }
+        prevMenuClick = input.leftClick;
+        return action;
+    }
+
     void updateMainMenuSettings(bool settingsPressed) {
         if (mode == AppMode::MainMenu && settingsPressed && !prevSettings)
             mode = AppMode::Settings;
         prevSettings = settingsPressed;
+    }
+
+    void enterSettings() {
+        if (mode == AppMode::MainMenu)
+            mode = AppMode::Settings;
     }
 
     void enterLoading() {
@@ -224,10 +250,14 @@ int main() {
 #endif
 
             app.updateEscape(input.quit);
+            const bool wasSettings = app.settings();
+            const int menuClickAction = app.consumeMainMenuClick(input);
             app.updateMainMenuSettings(input.settingsKey);
-            if (settings.update(input, app.mode))
+            if (menuClickAction == 2)
+                app.enterSettings();
+            if (wasSettings && settings.update(input, app.mode))
                 app.leaveSettings();
-            if (app.consumeMainMenuStart(input.startKey)) {
+            if (app.consumeMainMenuStart(input.startKey) || menuClickAction == 1) {
                 app.enterLoading();
                 pendingWorldStart = true;
                 clearGameplayInput(input);

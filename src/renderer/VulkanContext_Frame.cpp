@@ -605,9 +605,14 @@ void VulkanContext::updateHotbar() {
 
     if (m_mainMenuHud) {
         pushQuad(0.0f, 0.0f, W, H, {0.06f, 0.08f, 0.07f, 0.72f});
-        pushCenteredText("PASTEL FARM", H * 0.5f - 70.0f, 10.0f, {0.95f, 0.92f, 0.82f, 1.0f});
-        pushCenteredText("PRESS ENTER", H * 0.5f + 20.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.85f});
-        pushCenteredText("S SETTINGS", H * 0.5f + 58.0f, 4.0f, {0.95f, 0.92f, 0.82f, 0.70f});
+        pushCenteredText("PASTEL FARM", H * 0.5f - 76.0f, 10.0f, {0.95f, 0.92f, 0.82f, 1.0f});
+        const char* rows[] = { "START", "SETTINGS" };
+        for (int i = 0; i < 2; ++i) {
+            float rx, ry, rw, rh;
+            mainMenuRowRect(i, W, H, rx, ry, rw, rh);
+            pushQuad(rx, ry, rw, rh, {0.12f, 0.14f, 0.13f, 0.85f});
+            pushCenteredText(rows[i], ry + 9.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.92f});
+        }
 
         if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
         m_uiVertexCount = (uint32_t)verts.size();
