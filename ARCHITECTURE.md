@@ -75,7 +75,7 @@ src/
 - ✅ DevUI(ImGui, `PASTEL_DEV_BUILD` 게이트) + Dev 빌드 구성 + GPU timestamp 프로파일링 — 비주얼 튜닝의 전제조건. **완료**
 - ✅ `FrameRenderData` 스냅샷 — `drawFrame` 인자 10개 → 구조체 1개(`VulkanContext.h`). 렌더러는 public 경계에서 스냅샷만 소비. **완료**
 - ✅ `GpuBuffer` RAII 래퍼 — `VkBuffer+VkDeviceMemory`(+mapped) move-only RAII로 통합, `createBuffer` 반환형화. `operator VkBuffer()`로 읽기 무변경. **완료**
-- App-state 머신(Boot/MainMenu/Loading/Gameplay/Pause) + 입력 컨텍스트 + 설정(해상도/vsync/볼륨/AA) + world load/unload. **Pause 1차 완료**: `ESC`로 Gameplay/Paused 토글, pause 중 게임 업데이트·카메라 회전 차단, dim overlay + pause 아이콘 표시. 입력 정책 helper로 DevUI 캡처와 app mode 차단 순서를 정리. 메인메뉴/로딩/설정은 예정
+- App-state 머신(Boot/MainMenu/Loading/Gameplay/Pause) + 입력 컨텍스트 + 설정(해상도/vsync/볼륨/AA) + world load/unload. **Pause 1차 완료**: `ESC`로 Gameplay/Paused 토글, pause 중 게임 업데이트·카메라 회전 차단, dim overlay + pause 아이콘 표시. 입력 정책 helper와 로컬 `AppFlow`로 DevUI 캡처/app mode 차단/edge-detect 순서를 정리. 메인메뉴/로딩/설정은 예정
 
 **Tier 2 — 비주얼 정체성 (DevUI로 실시간 튜닝)**
 - height fog · hemisphere/colored ambient(조명단 warm/cool) · 카메라 follow 댐핑

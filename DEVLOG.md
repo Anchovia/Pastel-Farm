@@ -619,6 +619,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 기존 UI quad 파이프라인으로 화면 전체 dim + 중앙 pause 아이콘(두 막대)을 렌더. 새 폰트/텍스처/의존성 없이 pause 상태를 시각적으로 확인 가능.
 - 검증 결과: `ESC` pause/resume 시 overlay 표시/해제, DevUI 조작, 리사이즈 중앙 정렬 정상 확인.
 
+### AppFlow 상태 묶기 (Tier 1-D 슬라이스, 순수 리팩토링)
+- `main.cpp`의 app-flow 상태(`AppMode`, ESC/Ctrl+S/F3 edge-detect)를 로컬 `AppFlow` 구조체로 묶음. 전역 시스템이나 새 파일로 키우지 않고, 다음 app-state 확장을 위한 접합면만 정리.
+- `updatePauseToggle`, `consumeSavePress`, `consumeDevUiToggle`, `gameplayActive`, `paused`로 main 루프의 상태 조회/edge-detect 의도를 명시.
+- 동작 불변: `ESC` pause/resume, pause overlay, F3 DevUI 토글, Ctrl+S 저장, pause 중 입력 차단 유지.
+- 검증 결과: pause/resume, DevUI 토글, 저장 edge-detect, pause overlay 정상 확인.
+
 ---
 
 ## 게임 설계 메모

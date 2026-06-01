@@ -15,6 +15,46 @@ enum class AppMode {
     Paused,
 };
 
+struct AppFlow {
+    AppMode mode = AppMode::Gameplay;
+    bool prevEsc = false;
+    bool prevCtrlS = false;
+#ifdef PASTEL_DEV_BUILD
+    bool prevDevUiToggle = false;
+#endif
+
+    bool gameplayActive() const {
+        return mode == AppMode::Gameplay;
+    }
+
+    bool paused() const {
+        return mode == AppMode::Paused;
+    }
+
+    void updatePauseToggle(bool escPressed) {
+        if (escPressed && !prevEsc) {
+            mode = (mode == AppMode::Gameplay)
+                ? AppMode::Paused
+                : AppMode::Gameplay;
+        }
+        prevEsc = escPressed;
+    }
+
+    bool consumeSavePress(bool savePressed) {
+        const bool pressed = savePressed && !prevCtrlS;
+        prevCtrlS = savePressed;
+        return pressed;
+    }
+
+#ifdef PASTEL_DEV_BUILD
+    bool consumeDevUiToggle(bool togglePressed) {
+        const bool pressed = togglePressed && !prevDevUiToggle;
+        prevDevUiToggle = togglePressed;
+        return pressed;
+    }
+#endif
+};
+
 static void clearGameplayInput(PlayerInput& input) {
     input.moveForward     = false;
     input.moveBackward    = false;
@@ -76,12 +116,7 @@ int main() {
         world.loadChunksAround(spawnChunk.x, spawnChunk.y, LOAD_RADIUS);
         glm::ivec2 lastPlayerChunk = spawnChunk;
 
-        bool prevCtrlS = false;
-        bool prevEsc = false;
-        AppMode appMode = AppMode::Gameplay;
-#ifdef PASTEL_DEV_BUILD
-        bool prevDevUiToggle = false;
-#endif
+        AppFlow app;
 
         float  orbitAngle = 45.0f;
         double lastTime   = glfwGetTime();
@@ -98,35 +133,28 @@ int main() {
 
             PlayerInput input = inputManager.pollInput();
 #ifdef PASTEL_DEV_BUILD
-            if (input.toggleDevUi && !prevDevUiToggle)
+            if (app.consumeDevUiToggle(input.toggleDevUi))
                 ctx.toggleDevUi();
-            prevDevUiToggle = input.toggleDevUi;
             applyDevUiInputCapture(input, ctx);
 #endif
 
-            if (input.quit && !prevEsc) {
-                appMode = (appMode == AppMode::Gameplay)
-                    ? AppMode::Paused
-                    : AppMode::Gameplay;
-            }
-            prevEsc = input.quit;
+            app.updatePauseToggle(input.quit);
 
-            applyAppModeInputPolicy(input, appMode);
+            applyAppModeInputPolicy(input, app.mode);
 
             const float rotSpeed = 90.0f * dt;
             if (input.rotateLeft)  orbitAngle -= rotSpeed;
             if (input.rotateRight) orbitAngle += rotSpeed;
 
             // Ctrl+S save (edge-detect)
-            if (input.saveKey && !prevCtrlS)
+            if (app.consumeSavePress(input.saveKey))
                 world.save("save.dat", gameState.player().position(), gameState.time());
-            prevCtrlS = input.saveKey;
 
             if (input.windowWidth > 0 && input.windowHeight > 0)
                 camera.setAspectRatio((float)input.windowWidth / input.windowHeight);
 
             camera.update(gameState.player().position(), orbitAngle);
-            if (appMode == AppMode::Gameplay)
+            if (app.gameplayActive())
                 gameState.update(dt, input, camera, world);
 
             // Load/unload chunks when player crosses a chunk boundary
@@ -144,7 +172,7 @@ int main() {
                 camera, gameState.player().position(), gameState.targetTile(),
                 gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
                 gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench(),
-                appMode == AppMode::Paused
+                app.paused()
             });
         }
         ctx.waitIdle();
