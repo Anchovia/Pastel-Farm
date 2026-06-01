@@ -148,8 +148,9 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                             glm::vec3 objPos; ItemType objDrop; int objCount;
                             World::HarvestResult hr = world.tryHarvestObject(tx, ty, sel, objPos, objDrop, objCount);
                             if (hr == World::HarvestResult::Harvested) {
+                                // objPos.z is the ground surface — lift the drop so the cube rests on top.
                                 for (int i = 0; i < objCount; i++) {
-                                    glm::vec3 dropPos = glm::vec3(objPos.x + 0.15f * i, objPos.y, objPos.z - 0.2f);
+                                    glm::vec3 dropPos = glm::vec3(objPos.x + 0.15f * i, objPos.y, objPos.z + 0.2f);
                                     m_drops.push_back({ dropPos, objDrop, 1 });
                                 }
                             }
@@ -157,7 +158,8 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                             else if (hr == World::HarvestResult::WrongTool) {
                                 // no-op
                             }
-                            // 3) No object — crop harvest / tile destruction
+                            // 3) No object — crop harvest only. Terrain is immutable
+                            //    (voxel destruction retired; see DESIGN "지형 불변").
                             else if (world.getTile(tx, ty, tz) == TileType::WHEAT) {
                                 // Crops are protected: only a sickle can harvest, and only when ripe.
                                 TileState s = world.getTileState(tx, ty, tz);
@@ -166,8 +168,6 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                                     glm::vec3 dropPos = glm::vec3(finalTargetTile) + glm::vec3(0.0f, 0.0f, -0.25f);
                                     m_drops.push_back({ dropPos, ItemType::ITEM_WHEAT, 1 });
                                 }
-                            } else {
-                                world.setTile(tx, ty, tz, TileType::AIR);
                             }
                         }
 
@@ -178,11 +178,9 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                             const int ty = finalTargetTile.y;
                             const int tz = finalTargetTile.z;
 
-                            if (isBlock(item)) {
-                                TileType block = itemToTile(item);
-                                if (world.getTile(tx, ty, tz + 1) == TileType::AIR)
-                                    world.setTile(tx, ty, tz + 1, block);
-                            } else if (item == ItemType::TOOL_HOE) {
+                            // Voxel block placement retired (DESIGN "지형 불변"); building is the
+                            // crafted-object layer. Right-click now only drives farming tools.
+                            if (item == ItemType::TOOL_HOE) {
                                 TileType cur = world.getTile(tx, ty, tz);
                                 if (cur == TileType::GRASS || cur == TileType::DIRT)
                                     world.setTile(tx, ty, tz, TileType::FARMLAND);
