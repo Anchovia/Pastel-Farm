@@ -139,18 +139,35 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                         m_targetTile = finalTargetTile;
 
                         if (input.leftClick) {
-                            if (world.getTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z) == TileType::WHEAT) {
+                            const int tx = finalTargetTile.x;
+                            const int ty = finalTargetTile.y;
+                            const int tz = finalTargetTile.z;
+                            const ItemType sel = m_inventory[m_selectedSlot].type;
+
+                            // 1) World object (tree/rock) takes priority — harvest with matching tool
+                            glm::vec3 objPos; ItemType objDrop; int objCount;
+                            World::HarvestResult hr = world.tryHarvestObject(tx, ty, sel, objPos, objDrop, objCount);
+                            if (hr == World::HarvestResult::Harvested) {
+                                for (int i = 0; i < objCount; i++) {
+                                    glm::vec3 dropPos = glm::vec3(objPos.x + 0.15f * i, objPos.y, objPos.z - 0.2f);
+                                    m_drops.push_back({ dropPos, objDrop, 1 });
+                                }
+                            }
+                            // 2) Object present but wrong tool → blocked (don't destroy ground beneath it)
+                            else if (hr == World::HarvestResult::WrongTool) {
+                                // no-op
+                            }
+                            // 3) No object — crop harvest / tile destruction
+                            else if (world.getTile(tx, ty, tz) == TileType::WHEAT) {
                                 // Crops are protected: only a sickle can harvest, and only when ripe.
-                                ItemType sel = m_inventory[m_selectedSlot].type;
-                                TileState s  = world.getTileState(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z);
+                                TileState s = world.getTileState(tx, ty, tz);
                                 if (sel == ItemType::TOOL_SICKLE && s.growthStage == 3) {
-                                    world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
-                                    // Drop the harvested wheat on the ground; the player picks it up by walking over it.
+                                    world.setTile(tx, ty, tz, TileType::AIR);
                                     glm::vec3 dropPos = glm::vec3(finalTargetTile) + glm::vec3(0.0f, 0.0f, -0.25f);
                                     m_drops.push_back({ dropPos, ItemType::ITEM_WHEAT, 1 });
                                 }
                             } else {
-                                world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
+                                world.setTile(tx, ty, tz, TileType::AIR);
                             }
                         }
 

@@ -146,10 +146,10 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     memcpy(iMapped, indices.data(), iSize);
     vkUnmapMemory(m_device, data.indexMemory);
 
-    // Tree instances don't change after generation — build once per chunk load
-    if (!data.objInstBuilt) {
+    // Object instances change only when objects are added/removed (generation, harvest)
+    if (chunk.objectsDirty) {
         buildChunkObjectBuffer(coord, chunk);
-        data.objInstBuilt = true;
+        chunk.objectsDirty = false;
     }
 }
 

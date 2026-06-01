@@ -526,6 +526,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - shadow pass에 `objectDef(type).castShadow` 게이트 추가(현재 둘 다 true라 화면 변화 없음, ③/이후 타입 대비).
 - `collidable=true`는 저장만, 이동 차단 미적용(나무·돌 통과). 채집 상호작용은 ③.
 
+### 자원 채집 (③)
+- `World::tryHarvestObject(x,y,tool,...)` — 타일 위 오브젝트를 찾아 `objectDef().harvestTool`과 도구가 맞으면 제거 + 드롭정보(`dropItem`×`dropCount`) 반환. 결과 `HarvestResult{NoObject, WrongTool, Harvested}`.
+- 좌클릭 우선순위: **① 오브젝트 채집(도끼→나무/곡괭이→돌)** → ② 도구 안 맞으면 막힘(아래 지형 보호) → ③ 오브젝트 없으면 기존 작물 수확/타일 파괴. 채집물은 드롭/줍기 레이어로 바닥에 떨어져 줍기.
+- `Chunk::objectsDirty` 플래그 신설 — 오브젝트 추가/제거 시에만 렌더러가 인스턴스 버퍼 재빌드(성장·타일변경 땐 스킵 유지). 기존 `ChunkRenderData::objInstBuilt` 대체.
+- 채집 시 `chunk.modified=true`로 세션 내 언로드/재방문 시 유지. **한계: 디스크 save→재시작 시 오브젝트 결정론 재생성으로 respawn**(DESIGN 자원 재생 방향과 일치, 영구 채집은 추후 제거-기록 저장).
+- 이로써 스타듀 오브젝트 경제 아크 ①②③ 완료(인벤토리/작물 경제 → 제네릭 오브젝트 → 채집).
+
 ---
 
 ## 게임 설계 메모

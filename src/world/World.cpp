@@ -249,6 +249,33 @@ void World::growthTick(int currentDay) {
     }
 }
 
+World::HarvestResult World::tryHarvestObject(int x, int y, ItemType tool,
+                                             glm::vec3& outPos, ItemType& outDrop, int& outCount) {
+    auto cc = chunkCoord(x, y);
+    auto it = m_chunks.find(cc);
+    if (it == m_chunks.end()) return HarvestResult::NoObject;
+    Chunk& chunk = it->second;
+
+    // Object positions are exact integer tile coords stored as floats.
+    for (size_t i = 0; i < chunk.objects.size(); i++) {
+        const Object& o = chunk.objects[i];
+        if ((int)o.pos.x != x || (int)o.pos.y != y) continue;
+
+        const ObjectDef& def = objectDef(o.type);
+        if (def.harvestTool != tool) return HarvestResult::WrongTool;
+
+        outPos   = o.pos;
+        outDrop  = def.dropItem;
+        outCount = def.dropCount;
+        chunk.objects.erase(chunk.objects.begin() + i);
+        chunk.dirty        = true;
+        chunk.objectsDirty = true;
+        chunk.modified     = true; // keep the harvest across in-session unload/reload
+        return HarvestResult::Harvested;
+    }
+    return HarvestResult::NoObject;
+}
+
 bool World::inBounds(int x, int y, int z) const {
     return z >= 0 && z < CHUNK_DEPTH;
 }

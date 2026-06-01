@@ -16,6 +16,12 @@ public:
 
     void growthTick(int currentDay);
 
+    enum class HarvestResult { NoObject, WrongTool, Harvested };
+    // Tries to harvest a world object (tree/rock) standing on tile (x,y).
+    // On Harvested, fills the drop info and removes the object.
+    HarvestResult tryHarvestObject(int x, int y, ItemType tool,
+                                   glm::vec3& outPos, ItemType& outDrop, int& outCount);
+
     bool       inBounds(int x, int y, int z) const;
     bool       isWalkable(int x, int y, int z) const;
     glm::ivec3 worldToTile(const glm::vec3& position) const;

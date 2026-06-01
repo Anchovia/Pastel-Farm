@@ -170,7 +170,6 @@ private:
             uint32_t       count  = 0;
         };
         std::vector<ObjGroup> objGroups;
-        bool           objInstBuilt = false;            // objects don't change after generation
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;
