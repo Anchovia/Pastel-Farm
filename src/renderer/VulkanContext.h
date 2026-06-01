@@ -20,7 +20,8 @@ public:
     ~VulkanContext();
 
     void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                   int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day);
+                   int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day,
+                   const std::vector<DroppedItem>& drops);
     void waitIdle();
 
 private:
@@ -67,7 +68,10 @@ private:
     void createPostSampler();
     void createPostDescriptors();
     void updatePostDescriptors();
-    void createTreeMesh();
+    void createObjectMeshes();
+    void createItemMesh();
+    void createDropInstanceBuffer();
+    void updateDropInstanceBuffer(const std::vector<DroppedItem>& drops);
     void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
     void createUniformBuffers();
     void createDescriptorPool();
@@ -158,18 +162,35 @@ private:
         VkBuffer       indexBuffer  = VK_NULL_HANDLE;
         VkDeviceMemory indexMemory  = VK_NULL_HANDLE;
         uint32_t       indexCount   = 0;
-        VkBuffer       objInstBuffer = VK_NULL_HANDLE;  // per-chunk tree instances
-        VkDeviceMemory objInstMemory = VK_NULL_HANDLE;
-        uint32_t       objInstCount  = 0;
-        bool           objInstBuilt  = false;           // objects don't change after generation
+        // Per-chunk object instances, one buffer group per ObjectType present
+        struct ObjGroup {
+            ObjectType     type   = ObjectType::TREE;
+            VkBuffer       buffer = VK_NULL_HANDLE;
+            VkDeviceMemory memory = VK_NULL_HANDLE;
+            uint32_t       count  = 0;
+        };
+        std::vector<ObjGroup> objGroups;
+        bool           objInstBuilt = false;            // objects don't change after generation
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;
 
-    // Shared low-poly tree mesh (instanced per Object)
-    VkBuffer                 m_treeVertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory           m_treeVertexMemory = VK_NULL_HANDLE;
-    uint32_t                 m_treeVertexCount  = 0;
+    // Shared low-poly object meshes, indexed by ObjectType (instanced per Object)
+    struct ObjectMesh {
+        VkBuffer       vbuf  = VK_NULL_HANDLE;
+        VkDeviceMemory vmem  = VK_NULL_HANDLE;
+        uint32_t       count = 0;
+    };
+    std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
+
+    // Dropped items — shared small cube mesh + per-frame instance buffer (reuses m_indexBuffer + m_pipeline)
+    static constexpr uint32_t   MAX_DROPS = 256;
+    VkBuffer                    m_itemVertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory              m_itemVertexMemory = VK_NULL_HANDLE;
+    std::vector<VkBuffer>       m_dropInstBuffer;
+    std::vector<VkDeviceMemory> m_dropInstMemory;
+    std::vector<void*>          m_dropInstMapped;
+    uint32_t                    m_dropCount = 0;
 
     // UI / hotbar — one buffer per frame in flight (avoids overwrite while GPU still reads)
     std::vector<VkBuffer>       m_uiBuffer;

@@ -83,6 +83,20 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
         }
     }
 
+    // Pick up nearby dropped items (horizontal distance, so vertical offset never blocks it)
+    {
+        constexpr float kPickupRadius = 0.9f;
+        const glm::vec3 p = m_player.position();
+        for (auto it = m_drops.begin(); it != m_drops.end();) {
+            const float dx = it->pos.x - p.x;
+            const float dy = it->pos.y - p.y;
+            if (dx * dx + dy * dy <= kPickupRadius * kPickupRadius && addItem(it->type, it->count))
+                it = m_drops.erase(it);
+            else
+                ++it;
+        }
+    }
+
     if (input.windowWidth > 0 && input.windowHeight > 0) {
         // (Inventory is display-only for now — no click-to-assign / drag.)
 
@@ -128,9 +142,11 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                                 // Crops are protected: only a sickle can harvest, and only when ripe.
                                 ItemType sel = m_inventory[m_selectedSlot].type;
                                 TileState s  = world.getTileState(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z);
-                                if (sel == ItemType::TOOL_SICKLE && s.growthStage == 3 &&
-                                    addItem(ItemType::ITEM_WHEAT, 1)) {
+                                if (sel == ItemType::TOOL_SICKLE && s.growthStage == 3) {
                                     world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
+                                    // Drop the harvested wheat on the ground; the player picks it up by walking over it.
+                                    glm::vec3 dropPos = glm::vec3(finalTargetTile) + glm::vec3(0.0f, 0.0f, -0.25f);
+                                    m_drops.push_back({ dropPos, ItemType::ITEM_WHEAT, 1 });
                                 }
                             } else {
                                 world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);

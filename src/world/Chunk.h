@@ -15,6 +15,7 @@ struct TileState {
 
 enum class ObjectType : uint8_t {
     TREE = 0,
+    COUNT,
 };
 
 // World prop placed on top of the tile grid (rendered as a low-poly model, not a voxel)

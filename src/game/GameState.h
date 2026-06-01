@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <array>
+#include <vector>
 
 class World;
 class Camera;
@@ -44,6 +45,8 @@ public:
 
     bool inventoryOpen() const { return m_inventoryOpen; }
 
+    const std::vector<DroppedItem>& drops() const { return m_drops; }
+
     int   day()       const { return m_day; }
     float timeOfDay() const { return m_timeOfDay; } // 0.0=midnight, 0.5=noon, 1.0=midnight
     float time()      const { return m_time; }
@@ -65,6 +68,8 @@ private:
 
     bool m_inventoryOpen   = false;
     bool m_prevToggleInv   = false; // edge-detect for I key
+
+    std::vector<DroppedItem> m_drops; // items lying in the world awaiting pickup
 
     float m_time      = 0.0f;
     int   m_day       = 0;

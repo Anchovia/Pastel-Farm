@@ -506,6 +506,18 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 작물(WHEAT)이 흙(FARMLAND) 위 칸에 심기는데 타겟 선택이 "가장 위 non-AIR"라 작물이 항상 잡혀, 심은 뒤엔 흙에 재급수가 불가능 → 물-성장 게이트가 사실상 막히던 버그.
 - 물뿌리개 분기: 타겟이 WHEAT면 한 칸 아래(`fz = tz-1`)를 보고 FARMLAND면 거기에 급수. 작물 없는 빈 흙은 기존대로 그 자리 급수.
 
+### 드롭 아이템 + 줍기 (③ 채집 인프라 선행)
+- `DroppedItem{pos, type, count}`(Types.h) + `GameState::m_drops` 벡터. 수확이 `addItem` 직행 → **바닥에 드롭 스폰**으로 변경(낫으로 완숙 밀 좌클릭 시 작은 큐브가 그 자리에 떨어짐).
+- 줍기: `update()`에서 매 프레임 플레이어-드롭 **수평 거리**(반경 0.9) 검사 → 근접 시 `addItem` 성공하면 제거. 인벤토리 가득이면 바닥에 남아 대기.
+- 렌더: `kVertices` 0.3배 작은 큐브(`createItemMesh`, DEVICE_LOCAL 1회) + 프레임별 드롭 인스턴스 버퍼(`InstanceData`, `itemColor` 색). **기존 플레이어 인스턴싱 파이프라인·인덱스 버퍼 재사용**, 플레이어 draw 직후 드롭 전체 1 draw call(`MAX_DROPS=256`). 이 드롭/줍기 레이어는 ③ 자원 채집(나무/돌)에서 그대로 재사용.
+- 미결: 드롭은 save 대상 아님(바닥에 둔 채 재시작하면 소실). 필요 시 ③에서 저장 검토.
+
+### 오브젝트 렌더링 일반화 (②a, 순수 리팩토링)
+- 나무 전용 단일 메시(`m_treeVertex*`) → **타입 인덱싱 메시 레지스트리** `m_objectMeshes[ObjectType::COUNT]`(`ObjectMesh{vbuf,vmem,count}`). `createTreeMesh` → `createObjectMeshes`(타입별 `upload()` 헬퍼).
+- 청크 단일 오브젝트 인스턴스 버퍼 → **타입별 그룹** `ChunkRenderData::objGroups`(`{type,buffer,memory,count}`). `buildChunkObjectBuffer`가 `chunk.objects`를 타입별로 묶어 그룹마다 버퍼 생성.
+- main/shadow 오브젝트 draw 루프가 그룹을 순회하며 `m_objectMeshes[type]` 메시 + 그룹 버퍼 바인딩. 소멸자·`rebuildDirtyChunks` 정리도 그룹 단위.
+- 타입은 여전히 TREE 하나뿐 — **화면·동작 변화 0**(회귀 없음 확인). ②b에서 ROCK + ObjectDef를 얹을 토대.
+
 ---
 
 ## 게임 설계 메모

@@ -49,7 +49,9 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createIndexBuffer();
     createSelectorBuffers();
     createUIBuffer();
-    createTreeMesh();
+    createObjectMeshes();
+    createItemMesh();
+    createDropInstanceBuffer();
     rebuildDirtyChunks();
     createPlayerInstanceBuffer({15.0f, 15.0f, 1.0f});
     createUniformBuffers();
@@ -98,13 +100,25 @@ VulkanContext::~VulkanContext() {
             vkDestroyBuffer(m_device, data.indexBuffer, nullptr);
             vkFreeMemory(m_device, data.indexMemory, nullptr);
         }
-        if (data.objInstBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(m_device, data.objInstBuffer, nullptr);
-            vkFreeMemory(m_device, data.objInstMemory, nullptr);
+        for (auto& g : data.objGroups) {
+            if (g.buffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(m_device, g.buffer, nullptr);
+                vkFreeMemory(m_device, g.memory, nullptr);
+            }
         }
     }
-    vkDestroyBuffer(m_device, m_treeVertexBuffer, nullptr);
-    vkFreeMemory(m_device, m_treeVertexMemory, nullptr);
+    for (auto& mesh : m_objectMeshes) {
+        if (mesh.vbuf != VK_NULL_HANDLE) {
+            vkDestroyBuffer(m_device, mesh.vbuf, nullptr);
+            vkFreeMemory(m_device, mesh.vmem, nullptr);
+        }
+    }
+    vkDestroyBuffer(m_device, m_itemVertexBuffer, nullptr);
+    vkFreeMemory(m_device, m_itemVertexMemory, nullptr);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyBuffer(m_device, m_dropInstBuffer[i], nullptr);
+        vkFreeMemory(m_device, m_dropInstMemory[i], nullptr);
+    }
     vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
     vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
     vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);

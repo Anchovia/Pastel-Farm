@@ -74,6 +74,13 @@ struct ItemStack {
     int      count = 0;
 };
 
+// An item lying in the world: spawned on harvest, picked up on player proximity
+struct DroppedItem {
+    glm::vec3 pos   = {0.0f, 0.0f, 0.0f};
+    ItemType  type  = ItemType::NONE;
+    int       count = 0;
+};
+
 // Inventory grid layout (shared between GameState and VulkanContext)
 static constexpr int   INV_COLS      = 9;   // first row == hotbar
 static constexpr int   INV_ROWS      = 3;

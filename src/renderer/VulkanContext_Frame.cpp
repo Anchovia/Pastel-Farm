@@ -58,22 +58,26 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
                 vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
             }
 
-            // Trees cast shadows too — instanced, reuse the same light frustum cull
-            if (m_treeVertexCount > 0) {
+            // Objects cast shadows too — per-type mesh, instanced, reuse the light frustum cull
+            {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowObjectPipeline);
                 vkCmdPushConstants(cmd, m_shadowPipelineLayout,
                     VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
                 for (auto& [coord, data] : m_chunkBuffers) {
-                    if (data.objInstBuffer == VK_NULL_HANDLE || data.objInstCount == 0) continue;
+                    if (data.objGroups.empty()) continue;
 
                     glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
                     glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
                     if (!lightFrustum.containsAABB(chunkMin, chunkMax)) continue;
 
-                    VkBuffer     bufs[] = { m_treeVertexBuffer, data.objInstBuffer };
-                    VkDeviceSize offs[] = { 0, 0 };
-                    vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
-                    vkCmdDraw(cmd, m_treeVertexCount, data.objInstCount, 0, 0);
+                    for (auto& g : data.objGroups) {
+                        const ObjectMesh& mesh = m_objectMeshes[(size_t)g.type];
+                        if (mesh.count == 0 || g.count == 0) continue;
+                        VkBuffer     bufs[] = { mesh.vbuf, g.buffer };
+                        VkDeviceSize offs[] = { 0, 0 };
+                        vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+                        vkCmdDraw(cmd, mesh.count, g.count, 0, 0);
+                    }
                 }
             }
 
@@ -130,20 +134,24 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
     }
 
-    // Objects (trees) — shared mesh instanced per chunk
-    if (m_treeVertexCount > 0) {
+    // Objects — per-type mesh, instanced per chunk
+    {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_objectPipeline);
         for (auto& [coord, data] : m_chunkBuffers) {
-            if (data.objInstBuffer == VK_NULL_HANDLE || data.objInstCount == 0) continue;
+            if (data.objGroups.empty()) continue;
 
             glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
             glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
             if (!m_frustum.containsAABB(chunkMin, chunkMax)) continue;
 
-            VkBuffer     bufs[] = { m_treeVertexBuffer, data.objInstBuffer };
-            VkDeviceSize offs[] = { 0, 0 };
-            vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
-            vkCmdDraw(cmd, m_treeVertexCount, data.objInstCount, 0, 0);
+            for (auto& g : data.objGroups) {
+                const ObjectMesh& mesh = m_objectMeshes[(size_t)g.type];
+                if (mesh.count == 0 || g.count == 0) continue;
+                VkBuffer     bufs[] = { mesh.vbuf, g.buffer };
+                VkDeviceSize offs[] = { 0, 0 };
+                vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+                vkCmdDraw(cmd, mesh.count, g.count, 0, 0);
+            }
         }
     }
 
@@ -165,6 +173,15 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
+
+    // Dropped items (small cubes, same instanced pipeline as the player)
+    if (m_dropCount > 0) {
+        VkBuffer     dBufs[] = {m_itemVertexBuffer, m_dropInstBuffer[m_currentFrame]};
+        VkDeviceSize dOffs[] = {0, 0};
+        vkCmdBindVertexBuffers(cmd, 0, 2, dBufs, dOffs);
+        vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), m_dropCount, 0, 0, 0);
+    }
 
     // UI overlay (screen-space, on top of everything)
     if (m_uiVertexCount > 0) {
@@ -207,7 +224,8 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
 //  drawFrame
 // ============================================================
 void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                              int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day) {
+                              int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day,
+                              const std::vector<DroppedItem>& drops) {
     m_hotbarSelected = hotbarSelected;
     m_invHud         = inventory;
     m_inventoryOpen  = inventoryOpen;
@@ -284,6 +302,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
 
     updateUniformBuffer(m_currentFrame, camera);
     updatePlayerInstanceBuffer(playerPosition);
+    updateDropInstanceBuffer(drops);
     updateSelectorInstanceBuffer(targetTile);
     updateHotbar();
     rebuildDirtyChunks();
@@ -338,6 +357,15 @@ void VulkanContext::updatePlayerInstanceBuffer(const glm::vec3& playerPosition) 
     static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
     InstanceData inst{playerPosition, kPlayerColor, kPlayerColor};
     memcpy(m_playerInstMapped[m_currentFrame], &inst, sizeof(inst));
+}
+
+void VulkanContext::updateDropInstanceBuffer(const std::vector<DroppedItem>& drops) {
+    m_dropCount = std::min((uint32_t)drops.size(), MAX_DROPS);
+    InstanceData* dst = reinterpret_cast<InstanceData*>(m_dropInstMapped[m_currentFrame]);
+    for (uint32_t i = 0; i < m_dropCount; i++) {
+        const glm::vec3 c = itemColor(drops[i].type);
+        dst[i] = InstanceData{ drops[i].pos, c, c };
+    }
 }
 
 void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile) {

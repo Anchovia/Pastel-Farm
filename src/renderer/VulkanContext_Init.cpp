@@ -566,7 +566,23 @@ void VulkanContext::createUIBuffer() {
 //  Tree mesh
 // ============================================================
 // Shared low-poly pine tree: box trunk + 3 stacked cones, flat shaded.
-void VulkanContext::createTreeMesh() {
+void VulkanContext::createObjectMeshes() {
+    // Uploads a flat-shaded mesh into the registry slot for the given object type.
+    auto upload = [&](ObjectType type, const std::vector<ChunkVertex>& verts) {
+        ObjectMesh& mesh = m_objectMeshes[(size_t)type];
+        mesh.count = (uint32_t)verts.size();
+        VkDeviceSize size = sizeof(ChunkVertex) * verts.size();
+        createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            mesh.vbuf, mesh.vmem);
+        void* mapped;
+        vkMapMemory(m_device, mesh.vmem, 0, size, 0, &mapped);
+        memcpy(mapped, verts.data(), size);
+        vkUnmapMemory(m_device, mesh.vmem);
+    };
+
+    // ---- TREE: box trunk + 3 stacked cones (pine) ----
+    {
     std::vector<ChunkVertex> verts;
 
     const glm::vec3 trunkColor = {0.40f, 0.26f, 0.13f};
@@ -613,15 +629,8 @@ void VulkanContext::createTreeMesh() {
         }
     }
 
-    m_treeVertexCount = (uint32_t)verts.size();
-    VkDeviceSize size = sizeof(ChunkVertex) * verts.size();
-    createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        m_treeVertexBuffer, m_treeVertexMemory);
-    void* mapped;
-    vkMapMemory(m_device, m_treeVertexMemory, 0, size, 0, &mapped);
-    memcpy(mapped, verts.data(), size);
-    vkUnmapMemory(m_device, m_treeVertexMemory);
+    upload(ObjectType::TREE, verts);
+    }
 }
 
 // ============================================================
@@ -1506,6 +1515,48 @@ void VulkanContext::createVertexBuffer() {
     copyBuffer(stagingBuffer, m_vertexBuffer, size);
     vkDestroyBuffer(m_device, stagingBuffer, nullptr);
     vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+}
+
+void VulkanContext::createItemMesh() {
+    // Small cube: reuse the unit cube scaled down so dropped items read as little pickups.
+    std::vector<Vertex> verts = kVertices;
+    for (auto& v : verts) v.pos *= 0.3f;
+    VkDeviceSize size = sizeof(Vertex) * verts.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(m_device, stagingBufferMemory, 0, size, 0, &data);
+    memcpy(data, verts.data(), (size_t)size);
+    vkUnmapMemory(m_device, stagingBufferMemory);
+
+    createBuffer(size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_itemVertexBuffer, m_itemVertexMemory);
+
+    copyBuffer(stagingBuffer, m_itemVertexBuffer, size);
+    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
+    vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+}
+
+void VulkanContext::createDropInstanceBuffer() {
+    VkDeviceSize size = sizeof(InstanceData) * MAX_DROPS;
+    m_dropInstBuffer.resize(MAX_FRAMES_IN_FLIGHT);
+    m_dropInstMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    m_dropInstMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(size,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_dropInstBuffer[i], m_dropInstMemory[i]);
+        vkMapMemory(m_device, m_dropInstMemory[i], 0, size, 0, &m_dropInstMapped[i]);
+    }
 }
 
 void VulkanContext::createPlayerInstanceBuffer(const glm::vec3& playerPosition) {
