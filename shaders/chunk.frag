@@ -12,10 +12,9 @@ layout(binding = 0) uniform UniformBufferObject {
 layout(binding = 1) uniform sampler2DShadow shadowMap;
 
 layout(location = 0) flat in vec3 fragNormal;
-layout(location = 1) flat in vec3 fragTopColor;
-layout(location = 2) flat in vec3 fragSideColor;
-layout(location = 3)      in vec4 fragPosLightSpace;
-layout(location = 4)      in float fragViewDepth;
+layout(location = 1)      in vec3 fragColor;
+layout(location = 2)      in vec4 fragPosLightSpace;
+layout(location = 3)      in float fragViewDepth;
 layout(location = 0) out vec4 outColor;
 
 void main() {
@@ -41,11 +40,7 @@ void main() {
     float diff    = max(dot(normalize(fragNormal), lightDir), 0.0);
     float ambient = mix(0.15, 0.3, dayFactor);
     float light   = ambient + diff * 0.7 * dayFactor * shadowFactor;
-
-    // top face (normal.z > 0.9) uses topColor, sides use sideColor
-    float isTop  = step(0.9, fragNormal.z);
-    vec3  color  = mix(fragSideColor, fragTopColor, isTop);
-    vec3  litColor = color * light;
+    vec3  litColor = fragColor * light;
 
     // Fog
     const float FOG_START = 27.0;

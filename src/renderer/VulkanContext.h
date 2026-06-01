@@ -1,21 +1,44 @@
 #pragma once
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 #include <vector>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <array>
+#include "world/Chunk.h"
+#include "renderer/Frustum.h"
 
 class Window;
+class World;
+class Camera;
+
+// Per-frame snapshot the renderer consumes. Mirrors the previous drawFrame
+// argument list (by-ref for heavy data, by-value for scalars).
+struct FrameRenderData {
+    const Camera&                            camera;
+    glm::vec3                                playerPosition;
+    std::optional<glm::ivec3>                targetTile;
+    int                                      hotbarSelected;
+    const std::array<ItemStack, INV_SLOTS>&  inventory;
+    float                                    timeOfDay;
+    bool                                     inventoryOpen;
+    int                                      day;
+    const std::vector<DroppedItem>&          drops;
+    bool                                     nearWorkbench;
+};
 
 class VulkanContext {
 public:
-    explicit VulkanContext(Window& window);
+    VulkanContext(Window& window, World& world);
     ~VulkanContext();
 
-    void drawFrame();
+    void drawFrame(const FrameRenderData& frame);
     void waitIdle();
 
 private:
+    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     void createInstance();
     void setupDebugMessenger();
     void createSurface();
@@ -24,16 +47,69 @@ private:
     void createSwapchain();
     void createImageViews();
     void createRenderPass();
+    struct PipelineConfig {
+        const char*                                    vertPath;
+        const char*                                    fragPath;
+        std::vector<VkVertexInputBindingDescription>   bindings;
+        std::vector<VkVertexInputAttributeDescription> attributes;
+        VkCullModeFlags  cullMode;
+        bool             depthTest;   // depthTestEnable + depthWriteEnable
+        bool             alphaBlend;  // semi-transparent (UI)
+        VkPipelineLayout layout;
+    };
+    VkPipeline createPipeline(const PipelineConfig& cfg);
     void createGraphicsPipeline();
     void createFramebuffers();
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
+    void createDescriptorSetLayout();
     void createVertexBuffer();
+    void createIndexBuffer();
+    void createSelectorBuffers();
+    void createChunkPipeline();
+    void buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk);
+    void buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk);
+    void rebuildDirtyChunks();
+    void createUIPipeline();
+    void createUIBuffer();
+    void updateHotbar();
+    void createObjectPipeline();
+    void createPostRenderPass();
+    void createOffscreenResources();
+    void createPostPipeline();
+    void createPostSampler();
+    void createPostDescriptors();
+    void updatePostDescriptors();
+    void createObjectMeshes();
+    void createItemMesh();
+    void createDropInstanceBuffer();
+    void updateDropInstanceBuffer(const std::vector<DroppedItem>& drops);
+    void createPlayerInstanceBuffer(const glm::vec3& playerPosition);
+    void createUniformBuffers();
+    void createDescriptorPool();
+    void createDescriptorSets();
+    void updateUniformBuffer(uint32_t currentFrame, const Camera& camera);
+    void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
+    void updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile);
+    void createDepthResources();
+    void createShadowResources();
+    void createShadowPipeline();
+    void createShadowObjectPipeline();
+    void createShadowPlayerPipeline();
+    void createShadowSampler();
+    void createImage(uint32_t width, uint32_t height, VkFormat format,
+        VkImageTiling tiling, VkImageUsageFlags usage,
+        VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
+    VkFormat findDepthFormat();
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
+        VkImageTiling tiling, VkFormatFeatureFlags features);
 
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
     void cleanupSwapchain();
     void recreateSwapchain();
+
+    void deferDestroy(VkBuffer buf, VkDeviceMemory mem);
 
     VkShaderModule          createShaderModule(const std::vector<char>& code);
     std::vector<char>       readFile(const std::string& path);
@@ -51,6 +127,7 @@ private:
 
     // ---- Vulkan handles ----
     Window& m_window;
+    World&  m_world;
 
     VkInstance               m_instance        = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger   = VK_NULL_HANDLE;
@@ -65,21 +142,133 @@ private:
     VkFormat                 m_swapchainFormat  = VK_FORMAT_UNDEFINED;
     VkExtent2D               m_swapchainExtent  = {};
     std::vector<VkImageView> m_swapchainImageViews;
-    std::vector<VkFramebuffer> m_framebuffers;
+    std::vector<VkFramebuffer> m_sceneFramebuffers;  // offscreen color + depth (per frame in flight)
+    std::vector<VkFramebuffer> m_postFramebuffers;   // swapchain (per image)
 
-    VkRenderPass             m_renderPass       = VK_NULL_HANDLE;
-    VkPipelineLayout         m_pipelineLayout   = VK_NULL_HANDLE;
-    VkPipeline               m_pipeline         = VK_NULL_HANDLE;
+    VkRenderPass             m_renderPass        = VK_NULL_HANDLE;
+    VkPipelineLayout         m_pipelineLayout    = VK_NULL_HANDLE;
+    VkPipeline               m_pipeline          = VK_NULL_HANDLE;  // Player / selector (instancing)
+    VkPipeline               m_chunkPipeline     = VK_NULL_HANDLE;  // Chunk mesh
+    VkPipeline               m_uiPipeline        = VK_NULL_HANDLE;  // 2D UI overlay
+    VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
+    VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props (trees)
 
-    VkBuffer                 m_vertexBuffer       = VK_NULL_HANDLE;
-    VkDeviceMemory           m_vertexBufferMemory = VK_NULL_HANDLE;
+    // Post-process: scene → offscreen color, then fullscreen pass → swapchain
+    VkRenderPass             m_postRenderPass          = VK_NULL_HANDLE;
+    VkPipeline               m_postPipeline            = VK_NULL_HANDLE;
+    VkPipelineLayout         m_postPipelineLayout      = VK_NULL_HANDLE;
+    VkDescriptorSetLayout    m_postDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool         m_postDescriptorPool      = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> m_postDescriptorSets;
+    VkSampler                m_postSampler             = VK_NULL_HANDLE;
+    std::vector<VkImage>        m_offscreenImage;   // per frame in flight
+    std::vector<VkDeviceMemory> m_offscreenMemory;
+    std::vector<VkImageView>    m_offscreenView;
+
+    VkBuffer                 m_vertexBuffer        = VK_NULL_HANDLE;
+    VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
+    VkBuffer                 m_indexBuffer         = VK_NULL_HANDLE;
+    VkDeviceMemory           m_indexBufferMemory   = VK_NULL_HANDLE;
+    struct ChunkRenderData {
+        VkBuffer       vertexBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
+        VkBuffer       indexBuffer  = VK_NULL_HANDLE;
+        VkDeviceMemory indexMemory  = VK_NULL_HANDLE;
+        uint32_t       indexCount   = 0;
+        // Per-chunk object instances, one buffer group per ObjectType present
+        struct ObjGroup {
+            ObjectType     type   = ObjectType::TREE;
+            VkBuffer       buffer = VK_NULL_HANDLE;
+            VkDeviceMemory memory = VK_NULL_HANDLE;
+            uint32_t       count  = 0;
+        };
+        std::vector<ObjGroup> objGroups;
+    };
+    std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
+    Frustum                  m_frustum;
+
+    // Shared low-poly object meshes, indexed by ObjectType (instanced per Object)
+    struct ObjectMesh {
+        VkBuffer       vbuf  = VK_NULL_HANDLE;
+        VkDeviceMemory vmem  = VK_NULL_HANDLE;
+        uint32_t       count = 0;
+    };
+    std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
+
+    // Dropped items — shared small cube mesh + per-frame instance buffer (reuses m_indexBuffer + m_pipeline)
+    static constexpr uint32_t   MAX_DROPS = 256;
+    VkBuffer                    m_itemVertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory              m_itemVertexMemory = VK_NULL_HANDLE;
+    std::vector<VkBuffer>       m_dropInstBuffer;
+    std::vector<VkDeviceMemory> m_dropInstMemory;
+    std::vector<void*>          m_dropInstMapped;
+    uint32_t                    m_dropCount = 0;
+
+    // UI / hotbar — one buffer per frame in flight (avoids overwrite while GPU still reads)
+    static constexpr uint32_t   UI_MAX_VERTS = 2048;
+    std::vector<VkBuffer>       m_uiBuffer;
+    std::vector<VkDeviceMemory> m_uiMemory;
+    std::vector<void*>          m_uiMapped;
+    uint32_t                 m_uiVertexCount   = 0;
+    int                      m_hotbarSelected  = 0;
+    int                      m_dayHud          = 0;
+    std::array<ItemStack, INV_SLOTS> m_invHud{};
+    bool                     m_inventoryOpen   = false;
+    bool                     m_nearWorkbenchHud = false;
+    std::array<float, 4>     m_skyColor        = {0.08f, 0.08f, 0.12f, 1.0f};
+    std::vector<VkBuffer>       m_playerInstBuffer;
+    std::vector<VkDeviceMemory> m_playerInstMemory;
+    std::vector<void*>          m_playerInstMapped;
+    VkBuffer                 m_selectorVertexBuffer  = VK_NULL_HANDLE;
+    VkDeviceMemory           m_selectorVertexMemory  = VK_NULL_HANDLE;
+    VkBuffer                 m_selectorIndexBuffer   = VK_NULL_HANDLE;
+    VkDeviceMemory           m_selectorIndexMemory   = VK_NULL_HANDLE;
+    std::vector<VkBuffer>       m_selectorInstBuffer;
+    std::vector<VkDeviceMemory> m_selectorInstMemory;
+    std::vector<void*>          m_selectorInstMapped;
+    bool                     m_showSelector          = false;
+
+    VkImage                      m_depthImage           = VK_NULL_HANDLE;
+    VkDeviceMemory               m_depthImageMemory     = VK_NULL_HANDLE;
+    VkImageView                  m_depthImageView       = VK_NULL_HANDLE;
+
+    static constexpr uint32_t    SHADOW_MAP_SIZE        = 2048;
+    VkImage                      m_shadowImage          = VK_NULL_HANDLE;
+    VkDeviceMemory               m_shadowImageMemory    = VK_NULL_HANDLE;
+    VkImageView                  m_shadowImageView      = VK_NULL_HANDLE;
+    VkRenderPass                 m_shadowRenderPass     = VK_NULL_HANDLE;
+    VkFramebuffer                m_shadowFramebuffer    = VK_NULL_HANDLE;
+    VkPipelineLayout             m_shadowPipelineLayout = VK_NULL_HANDLE;
+    VkPipeline                   m_shadowPipeline       = VK_NULL_HANDLE;
+    VkPipeline                   m_shadowObjectPipeline = VK_NULL_HANDLE;  // instanced tree shadow caster
+    VkPipeline                   m_shadowPlayerPipeline = VK_NULL_HANDLE;  // player cube shadow caster
+    VkSampler                    m_shadowSampler        = VK_NULL_HANDLE;
+    glm::mat4                    m_lightMVP             = glm::mat4(1.0f);
+    glm::vec3                    m_sunDir               = glm::vec3(0.0f, 0.0f, 1.0f);
+    float                        m_dayFactor            = 0.0f;
+
+    VkDescriptorSetLayout        m_descriptorSetLayout = VK_NULL_HANDLE;
+    std::vector<VkBuffer>        m_uniformBuffers;
+    std::vector<VkDeviceMemory>  m_uniformBuffersMemory;
+    std::vector<void*>           m_uniformBuffersMapped;
+    VkDescriptorPool             m_descriptorPool   = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> m_descriptorSets;
 
     VkCommandPool            m_commandPool      = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> m_commandBuffers;
 
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-    std::vector<VkSemaphore> m_imageAvailable;
-    std::vector<VkSemaphore> m_renderFinished;
-    std::vector<VkFence>     m_inFlight;
+    std::vector<VkSemaphore> m_imageAvailable;   // per frame in flight
+    std::vector<VkSemaphore> m_renderFinished;   // per swapchain image (present wait)
+    std::vector<VkFence>     m_inFlight;          // per frame in flight
+    std::vector<VkFence>     m_imagesInFlight;    // per swapchain image; non-owning fence refs
     uint32_t                 m_currentFrame     = 0;
+
+    struct DeferredDelete {
+        VkBuffer       buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        uint64_t       frame  = 0;
+    };
+    std::vector<DeferredDelete> m_deletionQueue;
+    uint64_t                    m_frameCount = 0;
 };

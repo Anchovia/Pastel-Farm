@@ -28,12 +28,19 @@ FetchContent_MakeAvailable(glm)
 
 add_executable(engine
     src/main.cpp
+    src/game/GameState.cpp
     src/platform/Window.cpp
     src/renderer/VulkanContext.cpp
-)
+    src/renderer/VulkanContext_Init.cpp
+    src/renderer/VulkanContext_Frame.cpp
+    src/renderer/VulkanContext_Chunk.cpp
+    src/world/World.cpp
+    src/world/TerrainGen.cpp
+ "src/game/Camera.h" "src/platform/InputManager.h" "src/platform/InputManager.cpp")
 
 target_include_directories(engine PRIVATE src ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(engine PRIVATE Vulkan::Vulkan glfw glm::glm)
+target_compile_definitions(engine PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
 # VS 디버거 작업 디렉토리를 exe 위치로 고정 (셰이더 경로 문제 해결)
 set_target_properties(engine PROPERTIES
@@ -52,6 +59,16 @@ set(SHADER_OUT_DIR $<TARGET_FILE_DIR:engine>/shaders)
 set(SHADERS
     ${SHADER_SRC_DIR}/triangle.vert
     ${SHADER_SRC_DIR}/triangle.frag
+    ${SHADER_SRC_DIR}/chunk.vert
+    ${SHADER_SRC_DIR}/chunk.frag
+    ${SHADER_SRC_DIR}/ui.vert
+    ${SHADER_SRC_DIR}/ui.frag
+    ${SHADER_SRC_DIR}/object.vert
+    ${SHADER_SRC_DIR}/shadow.vert
+    ${SHADER_SRC_DIR}/shadow_object.vert
+    ${SHADER_SRC_DIR}/shadow_player.vert
+    ${SHADER_SRC_DIR}/post.vert
+    ${SHADER_SRC_DIR}/post.frag
 )
 
 set(SPIRV_OUTPUTS)
@@ -76,4 +93,14 @@ add_custom_command(TARGET engine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_OUT_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/triangle.vert.spv ${SHADER_OUT_DIR}/triangle.vert.spv
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/triangle.frag.spv ${SHADER_OUT_DIR}/triangle.frag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/chunk.vert.spv    ${SHADER_OUT_DIR}/chunk.vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/chunk.frag.spv    ${SHADER_OUT_DIR}/chunk.frag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/ui.vert.spv       ${SHADER_OUT_DIR}/ui.vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/ui.frag.spv       ${SHADER_OUT_DIR}/ui.frag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/object.vert.spv   ${SHADER_OUT_DIR}/object.vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/shadow.vert.spv  ${SHADER_OUT_DIR}/shadow.vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/shadow_object.vert.spv ${SHADER_OUT_DIR}/shadow_object.vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/shadow_player.vert.spv ${SHADER_OUT_DIR}/shadow_player.vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/post.vert.spv ${SHADER_OUT_DIR}/post.vert.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/post.frag.spv ${SHADER_OUT_DIR}/post.frag.spv
 )
