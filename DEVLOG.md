@@ -346,7 +346,7 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `UniformBufferObject`에 `vec4 lightDir` 추가 (xyz = 태양 방향, w = dayFactor 0..1). 기존 192 bytes → 208 bytes.
 - `updateUniformBuffer()`가 `timeOfDay`를 받아 매 프레임 태양 위치 계산: `elevation = sin(tod × π)` (자정=0, 정오=1), `azimuth = tod × 2π` (하루 동안 360° 회전). sunDir은 두 값으로 구성한 단위 벡터.
 - Descriptor set layout의 UBO stage flags: `VERTEX_BIT` → `VERTEX_BIT | FRAGMENT_BIT`. Fragment shader에서 UBO를 읽으려면 필수.
-- `chunk.frag` / `triangle.frag`에 UBO 바인딩 추가. Lambert diffuse에 `dayFactor` 곱해 낮엔 full lighting, 밤엔 diffuse=0. ambient는 `mix(0.15, 0.3, dayFactor)`로 보간 — 밤엔 0.15(달빛), 낮엔 0.3.
+- `chunk.frag` / `triangle.frag`에 UBO 바인딩 추가. Lambert diffuse에 `dayFactor` 곱해 낮엔 full lighting, 밤엔 diffuse=0. ambient는 당시 `mix(0.15, 0.3, dayFactor)`로 보간 — 이후 hemisphere ambient 튜닝에서 밤 바닥값을 0.10으로 낮춤.
 - `chunk.vert`, `object.vert`, `triangle.vert` UBO 구조체에 `vec4 lightDir` 선언 추가 (C++ 쪽 버퍼 크기와 일치).
 - 결과: 시간 흐름에 따라 태양 방향이 회전하고 밤이 되면 어두워짐. Shadow Map의 light matrix 기반이 되는 단계.
 
@@ -698,6 +698,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `snapToTarget`을 추가해 첫 업데이트와 Loading 후 월드 세션 시작 시에는 저장 위치로 즉시 스냅. 메뉴 → Gameplay 진입 때 먼 위치에서 길게 미끄러지는 상황 방지.
 - 회전(`Q/E`)은 기존처럼 즉시 반응하고, follow 댐핑은 타겟 위치에만 적용. 마우스 피킹과 이동 방향 계산은 기존 `Camera` 행렬을 그대로 사용.
 - 검증 결과: 이동 시 카메라 추적감, 메뉴→Loading→Gameplay 진입 스냅, Pause/Settings 중 drift 없음, Q/E 회전 및 월드 클릭 정상 확인.
+
+### Hemisphere/colored ambient + 밤 밝기 조율 (Tier 2 비주얼 튜닝)
+- `chunk.frag`와 `triangle.frag`의 조명 계산에서 `fragNormal`을 한 번 normalize해 shadow bias, diffuse, ambient 방향 계산에 공유.
+- 기존 scalar ambient(`mix(0.15, 0.30, dayFactor)`)를 법선 방향 기반 hemisphere ambient로 변경. 윗면은 `SKY_AMBIENT`(cool), 아래/측면은 `GROUND_AMBIENT`(warm)를 섞어 로우폴리 면 방향이 더 읽히게 조율.
+- diffuse·shadow·fog 구조는 유지하고 ambient tint만 곱함. C++ UBO나 파이프라인 구조 변경 없이 셰이더 상수 튜닝으로 제한.
+- 검증 후 밤이 조금 밝다는 피드백에 따라 ambient 바닥값을 `0.15 → 0.10`으로 낮춤. 낮 최대값 `0.30`은 유지해 낮 장면 변화는 최소화.
+- 검증 결과: 셰이더 컴파일/실행 정상, 낮 색감 유지, 밤 장면 더 어둡게 조율, 플레이어/셀렉터 색 이상 없음.
 
 ---
 

@@ -84,7 +84,7 @@
 - 아이템/도구 시스템 — `ItemType` enum(블록 6종 + 도구 2종)으로 핫바 통합. 도구 선택 시 블록 미설치(동작은 이후 단계). `I`키로 인벤토리 창 토글, 슬롯 클릭으로 핫바에 아이템 할당
 - 농사 시스템 — 호미로 GRASS/DIRT → FARMLAND 경작. SEED_WHEAT로 씨앗 심기 → WHEAT 성장(단계별 색상 변화: 연초록→황금). `m_day` 기반 2일마다 1단계 성장. 완숙(stage 3) 좌클릭 수확
 - 세계 저장/로드 — 플레이어가 수정한 청크만 `save.dat`에 바이너리로 저장(타일 + TileState). Ctrl+S 저장, Gameplay 진입 시 자동 로드. 언로드된 수정 청크는 메모리에 보관했다가 재방문 시 복원
-- 동적 태양 조명 — UBO에 `lightDir(xyz) + dayFactor(w)` 추가. `timeOfDay` 기반으로 태양 고도/방위각 계산, 낮엔 Lambert diffuse 최대, 밤엔 ambient 0.15(달빛)만 남도록 셰이더 전체 적용
+- 동적 태양 조명 — UBO에 `lightDir(xyz) + dayFactor(w)` 추가. `timeOfDay` 기반으로 태양 고도/방위각 계산, 낮엔 Lambert diffuse 최대, 밤엔 낮은 ambient만 남도록 셰이더 전체 적용
 - Shadow Map 인프라 — 1024×1024 depth-only `VkImage` + shadow 전용 `VkRenderPass` / `VkFramebuffer` 생성. 스왑체인과 독립적으로 한 번만 생성. Shadow pass 실행 및 셰이더 샘플링은 다음 단계
 - Shadow Pass 파이프라인 — depth-only 파이프라인 + `shadow.vert`(push constant lightMVP). `drawFrame`에서 태양 방향 기반 orthographic light matrix 계산, main pass 이전에 청크 메시를 태양 시점으로 렌더링해 shadow map을 채움
 - Shadow Sampler + Descriptor 연결 — comparison sampler(`LESS_OR_EQUAL`) 생성. descriptor layout binding 1에 `combinedImageSampler` 추가, descriptor set에 shadow image view + sampler 바인딩. fragment shader에서 shadow map을 읽을 준비 완료
@@ -127,6 +127,7 @@
 - Loading 1차 App-state — MainMenu에서 `START` 후 한 프레임 `LOADING` 화면을 표시하고, 그 다음 save 로드 + 초기 청크 로드 + Gameplay 진입
 - Pause 클릭 메뉴 — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 `PAUSED` + `RESUME` / `SETTINGS` / `QUIT` row 표시. Pause에서 Settings 진입 시 `BACK`/`ESC`는 Pause로 복귀. 인벤토리가 열린 Gameplay에서는 `ESC`가 먼저 인벤토리만 닫음
 - 카메라 follow 댐핑 — 플레이어 위치를 즉시 추적하지 않고 지수 보간으로 부드럽게 따라감. Loading 후 Gameplay 진입 시에는 저장 위치로 스냅해 긴 미끄러짐 방지
+- Hemisphere ambient — `chunk.frag`/`triangle.frag`의 ambient를 법선 방향 기반 warm/cool tint로 조율. 윗면은 살짝 cool, 아래/측면은 살짝 warm하게 섞고 밤 ambient 바닥값을 낮춰 야간을 더 어둡게 정리
 
 > **스타듀식 오브젝트 경제 아크 ①~⑥ 완료.** (인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작 → 설치/철거+영속성)
 
@@ -134,7 +135,7 @@
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
 - **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
-- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · height fog · hemisphere ambient(warm/cool) · vegetation/object variation · wind · **AA(SMAA + FXAA fallback)** · LUT
+- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · height fog · vegetation/object variation · wind · **AA(SMAA + FXAA fallback)** · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless
 

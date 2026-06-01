@@ -79,7 +79,8 @@ src/
 
 **Tier 2 — 비주얼 정체성 (DevUI로 실시간 튜닝)**
 - ✅ 카메라 follow 댐핑 — `Camera` 내부 `m_followTarget` 지수 보간 + Loading 후 `snapToTarget`으로 저장 위치 스냅. 플레이어 추적감 개선, 회전은 기존 즉시 반응 유지
-- height fog · hemisphere/colored ambient(조명단 warm/cool)
+- ✅ hemisphere/colored ambient — `chunk.frag`/`triangle.frag`에서 법선 방향 기반 warm/cool ambient tint 적용. 밤 ambient 바닥값은 0.10으로 낮춰 야간을 더 어둡게 조율
+- height fog
 - vegetation/object variation(스케일/회전/tint) · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
@@ -93,7 +94,7 @@ src/
 - ✅ 그림자 접지 튜닝 (피터패닝 — bias 축소 + cull 조정 완료)
 - contact / blob shadow (접지감 추가, 거의 무료)
 - terrain breakup (vertex color hue / dirt 패치)
-- height fog / hemisphere ambient / vegetation variation / wind / sky tint
+- height fog / vegetation variation / wind / sky tint
 
 ### 스타듀식 오브젝트 경제 — **결정**(우선순위 ↑, 복셀 블록 편집은 은퇴)
 순서: ✅① 인벤토리/작물 경제 → ✅② 제네릭 오브젝트 시스템 → ✅③ 자원 채집 → ✅④ 지형 불변화 → ⑤⑥ 제작·건축(아래 분할) → ⑦ 이후.

@@ -19,6 +19,7 @@ layout(location = 4)      in float fragViewDepth;
 layout(location = 0) out vec4 outColor;
 
 void main() {
+    vec3  normal    = normalize(fragNormal);
     vec3  lightDir  = normalize(ubo.lightDir.xyz);
     float dayFactor = ubo.lightDir.w;
 
@@ -27,7 +28,7 @@ void main() {
     projCoords.xy    = projCoords.xy * 0.5 + 0.5;
     float shadow     = 1.0;
     if (dayFactor > 0.01 && projCoords.z >= 0.0 && projCoords.z <= 1.0) {
-        float NdotL = max(dot(normalize(fragNormal), lightDir), 0.0);
+        float NdotL = max(dot(normal, lightDir), 0.0);
         float bias  = mix(0.0015, 0.0003, NdotL);
         float texel = 1.0 / 2048.0;
         shadow = 0.0;
@@ -38,14 +39,19 @@ void main() {
     }
     float shadowFactor = max(shadow, 0.4);
 
-    float diff    = max(dot(normalize(fragNormal), lightDir), 0.0);
-    float ambient = mix(0.15, 0.3, dayFactor);
-    float light   = ambient + diff * 0.7 * dayFactor * shadowFactor;
-
     // top face (normal.z > 0.9) uses topColor, sides use sideColor
     float isTop  = step(0.9, fragNormal.z);
     vec3  color  = mix(fragSideColor, fragTopColor, isTop);
-    vec3  litColor = color * light;
+
+    const vec3 SKY_AMBIENT    = vec3(0.74, 0.84, 1.08);
+    const vec3 GROUND_AMBIENT = vec3(1.02, 0.92, 0.74);
+    float hemi = clamp(normal.z * 0.5 + 0.5, 0.0, 1.0);
+    vec3 ambientTint = mix(GROUND_AMBIENT, SKY_AMBIENT, hemi);
+
+    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 ambient = ambientTint * mix(0.10, 0.30, dayFactor);
+    vec3 direct  = vec3(diff * 0.7 * dayFactor * shadowFactor);
+    vec3 litColor = color * (ambient + direct);
 
     // Fog
     const float FOG_START = 27.0;
