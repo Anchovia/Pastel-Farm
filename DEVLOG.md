@@ -613,6 +613,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 동작은 기존 pause와 동일: `ESC` pause/resume, F3 DevUI, Ctrl+S 저장 정책 유지. 추후 MainMenu/Settings 입력 컨텍스트를 추가할 접합면 확보.
 - 검증 결과: pause 중 게임플레이 입력 차단, DevUI 입력 캡처, F3 토글 정상 확인.
 
+### Pause 시각 피드백 (Tier 1-D 슬라이스)
+- `FrameRenderData`에 `paused` bool 추가. 렌더러는 AppMode 자체가 아니라 프레임 스냅샷 값만 소비해 기존 레이어 분리를 유지.
+- `main.cpp`가 `appMode == AppMode::Paused`를 `drawFrame`에 전달. 게임 업데이트 차단 로직은 기존 pause 슬라이스와 동일.
+- 기존 UI quad 파이프라인으로 화면 전체 dim + 중앙 pause 아이콘(두 막대)을 렌더. 새 폰트/텍스처/의존성 없이 pause 상태를 시각적으로 확인 가능.
+- 검증 결과: `ESC` pause/resume 시 overlay 표시/해제, DevUI 조작, 리사이즈 중앙 정렬 정상 확인.
+
 ---
 
 ## 게임 설계 메모

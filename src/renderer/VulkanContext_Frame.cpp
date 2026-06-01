@@ -347,6 +347,7 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
     m_hotbarSelected   = frame.hotbarSelected;
     m_invHud           = frame.inventory;
     m_inventoryOpen    = frame.inventoryOpen;
+    m_pausedHud        = frame.paused;
     m_nearWorkbenchHud = frame.nearWorkbench;
     m_dayHud           = frame.day;
 
@@ -658,6 +659,20 @@ void VulkanContext::updateHotbar() {
 
     // Day counter HUD (top-left)
     pushNumber(m_dayHud, 16.0f, 16.0f, 4.0f, {1.0f, 1.0f, 1.0f, 0.9f});
+
+    if (m_pausedHud) {
+        pushQuad(0.0f, 0.0f, W, H, {0.0f, 0.0f, 0.0f, 0.42f});
+
+        const float barW = 18.0f;
+        const float barH = 86.0f;
+        const float gapW = 18.0f;
+        const float x0 = W * 0.5f - barW - gapW * 0.5f;
+        const float x1 = W * 0.5f + gapW * 0.5f;
+        const float y  = H * 0.5f - barH * 0.5f;
+        const glm::vec4 barColor = {0.95f, 0.92f, 0.82f, 0.95f};
+        pushQuad(x0, y, barW, barH, barColor);
+        pushQuad(x1, y, barW, barH, barColor);
+    }
 
     if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
     m_uiVertexCount = (uint32_t)verts.size();
