@@ -118,6 +118,7 @@ private:
     void createChunkPipeline();
     void buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk);
     void buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk);
+    void buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chunk);
     void rebuildDirtyChunks();
     void createUIPipeline();
     void createUIBuffer();
@@ -234,6 +235,8 @@ private:
             uint32_t       count  = 0;
         };
         std::vector<ObjGroup> objGroups;
+        GpuBuffer      grassBuffer;
+        uint32_t       grassCount = 0;
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;
@@ -244,6 +247,7 @@ private:
         uint32_t       count = 0;
     };
     std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
+    ObjectMesh m_grassClumpMesh;
 
     // Dropped items — shared small cube mesh + per-frame instance buffer (reuses m_indexBuffer + m_pipeline)
     static constexpr uint32_t   MAX_DROPS = 256;

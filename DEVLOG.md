@@ -712,6 +712,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 타일별 색 랜덤/강한 per-tile hue variation은 금지 방향. 이는 Minecraft식 블록 월드 느낌을 강화함.
 - 다음 breakup 방향은 비격자 dressing layer: 낮은 풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리, 덤불/꽃/forage. 좌표 기반 결정론은 유지하되 저장 대상이 아닌 재생 가능한 시각 레이어로 시작.
 
+### Vegetation alpha card 투자 판단 (Tier 2 비주얼 방향)
+- 현재 기하 기반 풀 clump는 풀밭의 방향성 검증에는 유용하지만, 얇은 삼각형 실루엣 때문에 멀리서 삐쭉한 바늘처럼 보이는 한계가 확인됨.
+- 참고 이미지에 가까운 풀은 alpha texture card가 더 적합. 목표는 낮고 풍성한 X자/부채꼴 card clump, 색/높이/회전 variation, 밀도 rule, 약한 wind sway.
+- GTX 1050 Ti 권장 목표라면 투자 가치가 있음. 조건은 shadow 제외, alpha test/clip 우선, 근거리 청크 중심, clump당 card 2장 정도, 거리/밀도 제한.
+- 새 텍스처와 alpha 파이프라인이 들어가므로 구현 전 설계안 필요. 텍스처 0개 원칙의 첫 예외가 될 수 있으나 vegetation은 ROI가 높은 예외로 판단.
+
 ---
 
 ## 게임 설계 메모

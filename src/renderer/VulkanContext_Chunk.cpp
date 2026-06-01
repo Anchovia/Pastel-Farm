@@ -142,10 +142,67 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     vkUnmapMemory(m_device, data.indexBuffer.memory);
 
     // Object instances change only when objects are added/removed (generation, harvest)
+    buildGrassDressingBuffer(coord, chunk);
     if (chunk.objectsDirty) {
         buildChunkObjectBuffer(coord, chunk);
         chunk.objectsDirty = false;
     }
+}
+
+// ============================================================
+//  Per-chunk visual grass dressing
+// ============================================================
+void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chunk) {
+    auto& data = m_chunkBuffers[coord];
+    deferDestroy(std::move(data.grassBuffer));
+    data.grassCount = 0;
+
+    const int baseX = coord.x * CHUNK_SIZE;
+    const int baseY = coord.y * CHUNK_SIZE;
+    std::vector<ObjectInstance> insts;
+    insts.reserve(96);
+
+    auto hash01 = [](int wx, int wy, int salt) -> float {
+        uint32_t h = (uint32_t)wx * 73856093u ^ (uint32_t)wy * 19349663u ^ (uint32_t)salt * 83492791u;
+        h ^= h >> 13;
+        h *= 1274126177u;
+        return (float)(h & 65535u) / 65535.0f;
+    };
+    auto hasObjectAt = [&chunk](int wx, int wy) {
+        for (const Object& o : chunk.objects)
+            if ((int)o.pos.x == wx && (int)o.pos.y == wy)
+                return true;
+        return false;
+    };
+
+    for (int z  = 0; z  < CHUNK_DEPTH - 1; z++)
+    for (int ly = 0; ly < CHUNK_SIZE;      ly++)
+    for (int lx = 0; lx < CHUNK_SIZE;      lx++) {
+        if (chunk.tiles[z][ly][lx] != TileType::GRASS) continue;
+        if (chunk.tiles[z + 1][ly][lx] != TileType::AIR) continue;
+
+        const int wx = baseX + lx;
+        const int wy = baseY + ly;
+        if (hasObjectAt(wx, wy)) continue;
+        if (hash01(wx, wy, 11) > 0.18f) continue;
+
+        const float ox = (hash01(wx, wy, 23) - 0.5f) * 0.72f;
+        const float oy = (hash01(wx, wy, 37) - 0.5f) * 0.72f;
+        const float sc = 0.75f + hash01(wx, wy, 41) * 0.45f;
+        const float rt = hash01(wx, wy, 53) * 6.2831853f;
+        insts.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.51f}, sc, rt});
+    }
+
+    if (insts.empty()) return;
+
+    data.grassCount = (uint32_t)insts.size();
+    VkDeviceSize size = sizeof(ObjectInstance) * insts.size();
+    data.grassBuffer = createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    void* mapped;
+    vkMapMemory(m_device, data.grassBuffer.memory, 0, size, 0, &mapped);
+    memcpy(mapped, insts.data(), size);
+    vkUnmapMemory(m_device, data.grassBuffer.memory);
 }
 
 // ============================================================
@@ -196,6 +253,7 @@ void VulkanContext::rebuildDirtyChunks() {
             auto& d = it->second;
             deferDestroy(std::move(d.vertexBuffer));
             deferDestroy(std::move(d.indexBuffer));
+            deferDestroy(std::move(d.grassBuffer));
             for (auto& g : d.objGroups)
                 deferDestroy(std::move(g.buffer));
             it = m_chunkBuffers.erase(it);

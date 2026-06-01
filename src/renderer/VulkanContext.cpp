@@ -90,6 +90,7 @@ VulkanContext::~VulkanContext() {
     m_selectorVertexBuffer.destroy();
     m_chunkBuffers.clear();          // frees each chunk's vertex/index + object groups
     for (auto& mesh : m_objectMeshes) mesh.vbuf.destroy();
+    m_grassClumpMesh.vbuf.destroy();
     m_itemVertexBuffer.destroy();
     m_dropInstBuffer.clear();
     m_indexBuffer.destroy();
