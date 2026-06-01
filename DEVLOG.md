@@ -671,6 +671,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - DevUI 프레임이 시작된 상태에서 재생성할 수 있어, 기존 out-of-date 처리와 동일하게 `ImGui::EndFrame()` 후 swapchain을 재생성하도록 처리.
 - 검증 결과: Settings에서 VSync ON/OFF 토글 시 swapchain 재생성, 표시 유지, 리사이즈·MainMenu/Loading/Gameplay/Pause/DevUI 흐름 정상 확인.
 
+### Settings 클릭형 row UI 전환 + AA 데이터 토글 (Tier 1-D 슬라이스)
+- Settings 내부의 V/A 키보드 토글을 제거하고, 실제 게임 설정창에 가까운 클릭형 row UI로 전환. row는 `VSYNC ON/OFF`, `AA OFF/FXAA/SMAA`, `BACK`.
+- `settingsRowRect`를 `Types.h`에 추가해 렌더링과 클릭 판정이 같은 screen-space rect를 공유하도록 정리. 기존 제작 UI의 `craftRowRect`와 같은 패턴.
+- `AppSettings`는 Settings 상태에서 마우스 좌클릭 edge-detect로 row를 판정. VSync row는 설정값 토글 + 기존 present mode 적용 경로 사용, AA row는 `OFF → FXAA → SMAA` 데이터 순환, BACK row는 MainMenu 복귀.
+- AA는 아직 실제 렌더링에 적용하지 않고 설정 데이터/UI만 제공. 이전 임시 `TOGGLE` 안내 문구를 제거해 AA 모드 변경 시 글자가 겹쳐 깨지던 문제도 함께 해소.
+- 검증 결과: Settings row 클릭, VSync 적용, AA 데이터 순환, BACK/ESC 복귀, Gameplay의 A 이동 입력 정상 확인.
+
 ---
 
 ## 게임 설계 메모

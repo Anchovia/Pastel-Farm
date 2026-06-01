@@ -70,6 +70,11 @@ struct AppFlow {
             mode = AppMode::Gameplay;
     }
 
+    void leaveSettings() {
+        if (mode == AppMode::Settings)
+            mode = AppMode::MainMenu;
+    }
+
     void updateEscape(bool escPressed) {
         if (escPressed && !prevEsc) {
             if (mode == AppMode::Gameplay)
@@ -99,12 +104,33 @@ struct AppFlow {
 
 struct AppSettings {
     bool vsync = true;
-    bool prevVsyncToggle = false;
+    int aaMode = 0; // 0=off, 1=FXAA, 2=SMAA
+    bool prevClick = false;
 
-    void update(bool togglePressed, AppMode mode) {
-        if (mode == AppMode::Settings && togglePressed && !prevVsyncToggle)
-            vsync = !vsync;
-        prevVsyncToggle = togglePressed;
+    bool update(const PlayerInput& input, AppMode mode) {
+        bool backClicked = false;
+        if (mode == AppMode::Settings && input.leftClick && !prevClick) {
+            float x, y, w, h;
+            settingsRowRect(0, (float)input.windowWidth, (float)input.windowHeight, x, y, w, h);
+            if (input.mouseX >= x && input.mouseX <= x + w &&
+                input.mouseY >= y && input.mouseY <= y + h) {
+                vsync = !vsync;
+            }
+
+            settingsRowRect(1, (float)input.windowWidth, (float)input.windowHeight, x, y, w, h);
+            if (input.mouseX >= x && input.mouseX <= x + w &&
+                input.mouseY >= y && input.mouseY <= y + h) {
+                aaMode = (aaMode + 1) % 3;
+            }
+
+            settingsRowRect(2, (float)input.windowWidth, (float)input.windowHeight, x, y, w, h);
+            if (input.mouseX >= x && input.mouseX <= x + w &&
+                input.mouseY >= y && input.mouseY <= y + h) {
+                backClicked = true;
+            }
+        }
+        prevClick = input.leftClick;
+        return backClicked;
     }
 };
 
@@ -142,7 +168,6 @@ static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx)
         input.quit            = false;
         input.startKey        = false;
         input.settingsKey     = false;
-        input.toggleVsyncKey  = false;
     }
 }
 #endif
@@ -200,7 +225,8 @@ int main() {
 
             app.updateEscape(input.quit);
             app.updateMainMenuSettings(input.settingsKey);
-            settings.update(input.toggleVsyncKey, app.mode);
+            if (settings.update(input, app.mode))
+                app.leaveSettings();
             if (app.consumeMainMenuStart(input.startKey)) {
                 app.enterLoading();
                 pendingWorldStart = true;
@@ -241,7 +267,7 @@ int main() {
                 camera, gameState.player().position(), gameState.targetTile(),
                 gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
                 gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench(),
-                app.mainMenu(), app.settings(), app.loading(), app.paused(), settings.vsync
+                app.mainMenu(), app.settings(), app.loading(), app.paused(), settings.vsync, settings.aaMode
             });
 
             if (pendingWorldStart && app.loading()) {

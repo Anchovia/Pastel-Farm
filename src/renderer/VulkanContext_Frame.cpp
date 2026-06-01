@@ -352,6 +352,7 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
     m_loadingHud       = frame.loading;
     m_pausedHud        = frame.paused;
     m_vsyncHud         = frame.vsyncEnabled;
+    m_aaModeHud        = frame.aaMode;
     m_nearWorkbenchHud = frame.nearWorkbench;
     m_dayHud           = frame.day;
 
@@ -616,10 +617,18 @@ void VulkanContext::updateHotbar() {
 
     if (m_settingsHud) {
         pushQuad(0.0f, 0.0f, W, H, {0.06f, 0.08f, 0.07f, 0.72f});
-        pushCenteredText("SETTINGS", H * 0.5f - 48.0f, 8.0f, {0.95f, 0.92f, 0.82f, 1.0f});
-        pushCenteredText(m_vsyncHud ? "VSYNC ON" : "VSYNC OFF", H * 0.5f + 22.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.92f});
-        pushCenteredText("V TOGGLE", H * 0.5f + 58.0f, 4.0f, {0.95f, 0.92f, 0.82f, 0.70f});
-        pushCenteredText("PRESS ESC", H * 0.5f + 92.0f, 4.0f, {0.95f, 0.92f, 0.82f, 0.70f});
+        const char* aaText = "AA OFF";
+        if (m_aaModeHud == 1) aaText = "AA FXAA";
+        else if (m_aaModeHud == 2) aaText = "AA SMAA";
+
+        pushCenteredText("SETTINGS", H * 0.5f - 72.0f, 8.0f, {0.95f, 0.92f, 0.82f, 1.0f});
+        const char* rows[] = { m_vsyncHud ? "VSYNC ON" : "VSYNC OFF", aaText, "BACK" };
+        for (int i = 0; i < 3; ++i) {
+            float rx, ry, rw, rh;
+            settingsRowRect(i, W, H, rx, ry, rw, rh);
+            pushQuad(rx, ry, rw, rh, {0.12f, 0.14f, 0.13f, 0.85f});
+            pushCenteredText(rows[i], ry + 9.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.92f});
+        }
 
         if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
         m_uiVertexCount = (uint32_t)verts.size();

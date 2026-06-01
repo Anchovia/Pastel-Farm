@@ -67,6 +67,7 @@ struct FrameRenderData {
     bool                                     loading;
     bool                                     paused;
     bool                                     vsyncEnabled;
+    int                                      aaMode;
 };
 
 class VulkanContext {
@@ -263,6 +264,7 @@ private:
     bool                     m_loadingHud       = false;
     bool                     m_pausedHud       = false;
     bool                     m_vsyncHud        = true;
+    int                      m_aaModeHud       = 0;
     bool                     m_nearWorkbenchHud = false;
     std::array<float, 4>     m_skyColor        = {0.08f, 0.08f, 0.12f, 1.0f};
     std::vector<GpuBuffer>      m_playerInstBuffer;
