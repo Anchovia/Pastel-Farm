@@ -26,6 +26,7 @@ struct PlayerInput {
     bool rotateRight     = false;  // E
     bool saveKey         = false;  // Ctrl+S (raw; main edge-detects)
     bool toggleDevUi     = false;  // F3 (dev builds; main edge-detects)
+    bool startKey        = false;  // Enter (app-level confirm/start)
     int  selectSlot  = -1;  // 0..HOTBAR_SLOTS-1 if a number key was pressed, else -1
     int  scrollDelta = 0;   // slots to move from scroll wheel
     int windowWidth = 1280;

@@ -11,13 +11,15 @@ static constexpr int LOAD_RADIUS   = 3;
 static constexpr int UNLOAD_RADIUS = 4;
 
 enum class AppMode {
+    MainMenu,
     Gameplay,
     Paused,
 };
 
 struct AppFlow {
-    AppMode mode = AppMode::Gameplay;
+    AppMode mode = AppMode::MainMenu;
     bool prevEsc = false;
+    bool prevStart = false;
     bool prevCtrlS = false;
 #ifdef PASTEL_DEV_BUILD
     bool prevDevUiToggle = false;
@@ -31,11 +33,22 @@ struct AppFlow {
         return mode == AppMode::Paused;
     }
 
+    bool mainMenu() const {
+        return mode == AppMode::MainMenu;
+    }
+
+    void updateMainMenuStart(bool startPressed) {
+        if (mode == AppMode::MainMenu && startPressed && !prevStart)
+            mode = AppMode::Gameplay;
+        prevStart = startPressed;
+    }
+
     void updatePauseToggle(bool escPressed) {
         if (escPressed && !prevEsc) {
-            mode = (mode == AppMode::Gameplay)
-                ? AppMode::Paused
-                : AppMode::Gameplay;
+            if (mode == AppMode::Gameplay)
+                mode = AppMode::Paused;
+            else if (mode == AppMode::Paused)
+                mode = AppMode::Gameplay;
         }
         prevEsc = escPressed;
     }
@@ -70,8 +83,10 @@ static void clearGameplayInput(PlayerInput& input) {
 }
 
 static void applyAppModeInputPolicy(PlayerInput& input, AppMode mode) {
-    if (mode == AppMode::Paused)
+    if (mode != AppMode::Gameplay)
         clearGameplayInput(input);
+    if (mode == AppMode::MainMenu)
+        input.saveKey = false;
 }
 
 #ifdef PASTEL_DEV_BUILD
@@ -85,6 +100,7 @@ static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx)
         clearGameplayInput(input);
         input.saveKey         = false;
         input.quit            = false;
+        input.startKey        = false;
     }
 }
 #endif
@@ -139,6 +155,7 @@ int main() {
 #endif
 
             app.updatePauseToggle(input.quit);
+            app.updateMainMenuStart(input.startKey);
 
             applyAppModeInputPolicy(input, app.mode);
 
@@ -172,7 +189,7 @@ int main() {
                 camera, gameState.player().position(), gameState.targetTile(),
                 gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
                 gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench(),
-                app.paused()
+                app.mainMenu(), app.paused()
             });
         }
         ctx.waitIdle();

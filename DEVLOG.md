@@ -631,6 +631,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - pause overlay에 `PAUSED` 텍스트를 추가하고 중앙 pause 아이콘과 겹치지 않도록 위치를 조율. 메인메뉴/설정/로딩 화면에 필요한 최소 게임 UI 텍스트 기반 확보.
 - 검증 결과: pause/resume 시 `PAUSED` 문구와 pause 아이콘 표시, 기존 숫자 UI 정상 확인.
 
+### MainMenu 1차 App-state (Tier 1-D 슬라이스)
+- `AppMode`에 `MainMenu`를 추가하고 앱 시작 상태를 메뉴로 변경. `Enter` edge-detect로 Gameplay에 진입하며, `ESC` pause/resume은 Gameplay/Paused 사이에서만 동작하도록 제한.
+- `PlayerInput`에 `startKey`를 추가하고 `InputManager`에서 Enter를 읽음. MainMenu에서는 이동·카메라·마우스·인벤토리·핫바·Ctrl+S 저장 입력을 차단해 게임 시간이 시작 전 흘러가지 않도록 유지.
+- `FrameRenderData`에 `mainMenu` bool을 추가. 렌더러는 AppMode를 직접 알지 않고 스냅샷 값만 소비해 기존 레이어 분리를 유지.
+- Tiny UI Text로 `PASTEL FARM` / `PRESS ENTER` 메뉴 화면을 표시. 새 폰트·텍스처·의존성 없이 기존 UI quad 파이프라인 재사용.
+- 검증 결과: 실행 직후 메뉴 표시, Enter 게임 진입, 메뉴 중 입력 차단, 진입 후 pause/resume 및 DevUI 정상 확인.
+
 ---
 
 ## 게임 설계 메모

@@ -347,6 +347,7 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
     m_hotbarSelected   = frame.hotbarSelected;
     m_invHud           = frame.inventory;
     m_inventoryOpen    = frame.inventoryOpen;
+    m_mainMenuHud      = frame.mainMenu;
     m_pausedHud        = frame.paused;
     m_nearWorkbenchHud = frame.nearWorkbench;
     m_dayHud           = frame.day;
@@ -567,6 +568,14 @@ void VulkanContext::updateHotbar() {
             cx += 4.0f * px;
         }
     };
+    auto textWidth = [](const char* text, float px) {
+        int n = 0;
+        for (const char* p = text; *p; ++p) ++n;
+        return n > 0 ? n * 4.0f * px - px : 0.0f;
+    };
+    auto pushCenteredText = [&](const char* text, float y, float px, glm::vec4 col) {
+        pushText(text, W * 0.5f - textWidth(text, px) * 0.5f, y, px, col);
+    };
     auto pushNumber = [&](int value, float ox, float oy, float px, glm::vec4 col) {
         if (value < 0) value = 0;
         int digs[12]; int n = 0;
@@ -578,6 +587,17 @@ void VulkanContext::updateHotbar() {
             cx += 4.0f * px;
         }
     };
+
+    if (m_mainMenuHud) {
+        pushQuad(0.0f, 0.0f, W, H, {0.06f, 0.08f, 0.07f, 0.72f});
+        pushCenteredText("PASTEL FARM", H * 0.5f - 70.0f, 10.0f, {0.95f, 0.92f, 0.82f, 1.0f});
+        pushCenteredText("PRESS ENTER", H * 0.5f + 20.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.85f});
+
+        if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
+        m_uiVertexCount = (uint32_t)verts.size();
+        memcpy(m_uiBuffer[m_currentFrame].mapped, verts.data(), sizeof(UIVertex) * verts.size());
+        return;
+    }
 
     // --- Hotbar ---
     const float slot = 56.0f, gap = 6.0f, pad = 6.0f;
