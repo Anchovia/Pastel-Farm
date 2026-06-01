@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstring>
+#include <utility>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -117,34 +118,28 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
 
     auto& data = m_chunkBuffers[coord];
 
-    // Defer destruction of old buffers — GPU may still be reading them
-    deferDestroy(data.vertexBuffer, data.vertexMemory);
-    data.vertexBuffer = VK_NULL_HANDLE;
-    data.vertexMemory = VK_NULL_HANDLE;
-    deferDestroy(data.indexBuffer, data.indexMemory);
-    data.indexBuffer = VK_NULL_HANDLE;
-    data.indexMemory = VK_NULL_HANDLE;
+    // Defer destruction of old buffers — GPU may still be reading them (move nulls them)
+    deferDestroy(std::move(data.vertexBuffer));
+    deferDestroy(std::move(data.indexBuffer));
 
     data.indexCount = (uint32_t)indices.size();
     if (data.indexCount == 0) return;
 
     VkDeviceSize vSize = sizeof(ChunkVertex) * vertices.size();
-    createBuffer(vSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        data.vertexBuffer, data.vertexMemory);
+    data.vertexBuffer = createBuffer(vSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     void* vMapped;
-    vkMapMemory(m_device, data.vertexMemory, 0, vSize, 0, &vMapped);
+    vkMapMemory(m_device, data.vertexBuffer.memory, 0, vSize, 0, &vMapped);
     memcpy(vMapped, vertices.data(), vSize);
-    vkUnmapMemory(m_device, data.vertexMemory);
+    vkUnmapMemory(m_device, data.vertexBuffer.memory);
 
     VkDeviceSize iSize = sizeof(uint32_t) * indices.size();
-    createBuffer(iSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        data.indexBuffer, data.indexMemory);
+    data.indexBuffer = createBuffer(iSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     void* iMapped;
-    vkMapMemory(m_device, data.indexMemory, 0, iSize, 0, &iMapped);
+    vkMapMemory(m_device, data.indexBuffer.memory, 0, iSize, 0, &iMapped);
     memcpy(iMapped, indices.data(), iSize);
-    vkUnmapMemory(m_device, data.indexMemory);
+    vkUnmapMemory(m_device, data.indexBuffer.memory);
 
     // Object instances change only when objects are added/removed (generation, harvest)
     if (chunk.objectsDirty) {
@@ -161,7 +156,7 @@ void VulkanContext::buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk
 
     // Release any previously built groups (GPU may still be reading them)
     for (auto& g : data.objGroups)
-        deferDestroy(g.buffer, g.memory);
+        deferDestroy(std::move(g.buffer));
     data.objGroups.clear();
 
     if (chunk.objects.empty()) return;
@@ -180,15 +175,14 @@ void VulkanContext::buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk
         group.count = (uint32_t)insts.size();
 
         VkDeviceSize oSize = sizeof(ObjectInstance) * insts.size();
-        createBuffer(oSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            group.buffer, group.memory);
+        group.buffer = createBuffer(oSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         void* oMapped;
-        vkMapMemory(m_device, group.memory, 0, oSize, 0, &oMapped);
+        vkMapMemory(m_device, group.buffer.memory, 0, oSize, 0, &oMapped);
         memcpy(oMapped, insts.data(), oSize);
-        vkUnmapMemory(m_device, group.memory);
+        vkUnmapMemory(m_device, group.buffer.memory);
 
-        data.objGroups.push_back(group);
+        data.objGroups.push_back(std::move(group));
     }
 }
 
@@ -200,10 +194,10 @@ void VulkanContext::rebuildDirtyChunks() {
     for (auto it = m_chunkBuffers.begin(); it != m_chunkBuffers.end(); ) {
         if (m_world.chunks().find(it->first) == m_world.chunks().end()) {
             auto& d = it->second;
-            deferDestroy(d.vertexBuffer,  d.vertexMemory);
-            deferDestroy(d.indexBuffer,   d.indexMemory);
+            deferDestroy(std::move(d.vertexBuffer));
+            deferDestroy(std::move(d.indexBuffer));
             for (auto& g : d.objGroups)
-                deferDestroy(g.buffer, g.memory);
+                deferDestroy(std::move(g.buffer));
             it = m_chunkBuffers.erase(it);
         } else {
             ++it;

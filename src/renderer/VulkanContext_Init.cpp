@@ -18,6 +18,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#ifdef PASTEL_DEV_BUILD
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
+#endif
+
 // ============================================================
 //  Instance
 // ============================================================
@@ -552,13 +558,10 @@ void VulkanContext::createObjectPipeline() {
 void VulkanContext::createUIBuffer() {
     VkDeviceSize size = sizeof(UIVertex) * UI_MAX_VERTS;
     m_uiBuffer.resize(MAX_FRAMES_IN_FLIGHT);
-    m_uiMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    m_uiMapped.resize(MAX_FRAMES_IN_FLIGHT);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            m_uiBuffer[i], m_uiMemory[i]);
-        vkMapMemory(m_device, m_uiMemory[i], 0, size, 0, &m_uiMapped[i]);
+        m_uiBuffer[i] = createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vkMapMemory(m_device, m_uiBuffer[i].memory, 0, size, 0, &m_uiBuffer[i].mapped);
     }
 }
 
@@ -572,13 +575,12 @@ void VulkanContext::createObjectMeshes() {
         ObjectMesh& mesh = m_objectMeshes[(size_t)type];
         mesh.count = (uint32_t)verts.size();
         VkDeviceSize size = sizeof(ChunkVertex) * verts.size();
-        createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            mesh.vbuf, mesh.vmem);
+        mesh.vbuf = createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         void* mapped;
-        vkMapMemory(m_device, mesh.vmem, 0, size, 0, &mapped);
+        vkMapMemory(m_device, mesh.vbuf.memory, 0, size, 0, &mapped);
         memcpy(mapped, verts.data(), size);
-        vkUnmapMemory(m_device, mesh.vmem);
+        vkUnmapMemory(m_device, mesh.vbuf.memory);
     };
 
     // ---- TREE: box trunk + 3 stacked cones (pine) ----
@@ -978,6 +980,120 @@ void VulkanContext::createCommandPool() {
     if (vkCreateCommandPool(m_device, &info, nullptr, &m_commandPool) != VK_SUCCESS)
         throw std::runtime_error("Failed to create command pool");
 }
+
+#ifdef PASTEL_DEV_BUILD
+void VulkanContext::createDevTools() {
+    VkDescriptorPoolSize poolSizes[] = {
+        { VK_DESCRIPTOR_TYPE_SAMPLER,                1000 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+        { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,       1000 },
+    };
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.maxSets       = 1000 * (uint32_t)(sizeof(poolSizes) / sizeof(poolSizes[0]));
+    poolInfo.poolSizeCount = (uint32_t)(sizeof(poolSizes) / sizeof(poolSizes[0]));
+    poolInfo.pPoolSizes    = poolSizes;
+    if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_devDescriptorPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create dev descriptor pool");
+
+    std::vector<VkQueueFamilyProperties> queueProps;
+    uint32_t queueCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, nullptr);
+    queueProps.resize(queueCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, queueProps.data());
+    auto indices = findQueueFamilies(m_physicalDevice);
+    if (indices.graphics && queueProps[*indices.graphics].timestampValidBits > 0) {
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
+        m_devTimestampPeriod  = props.limits.timestampPeriod;
+        m_devTimingSupported  = true;
+
+        VkQueryPoolCreateInfo queryInfo{};
+        queryInfo.sType      = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        queryInfo.queryType  = VK_QUERY_TYPE_TIMESTAMP;
+        queryInfo.queryCount = MAX_FRAMES_IN_FLIGHT * DEV_TIMESTAMP_COUNT;
+        if (vkCreateQueryPool(m_device, &queryInfo, nullptr, &m_devQueryPool) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create dev query pool");
+    }
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForVulkan(m_window.handle(), false);
+
+    ImGui_ImplVulkan_InitInfo initInfo{};
+    initInfo.Instance        = m_instance;
+    initInfo.PhysicalDevice  = m_physicalDevice;
+    initInfo.Device          = m_device;
+    initInfo.QueueFamily     = *indices.graphics;
+    initInfo.Queue           = m_graphicsQueue;
+    initInfo.PipelineCache   = VK_NULL_HANDLE;
+    initInfo.DescriptorPool  = m_devDescriptorPool;
+    initInfo.Allocator       = nullptr;
+    initInfo.MinImageCount   = 2;
+    initInfo.ImageCount      = (uint32_t)m_swapchainImages.size();
+    initInfo.MSAASamples     = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.CheckVkResultFn = nullptr;
+    if (!ImGui_ImplVulkan_Init(&initInfo, m_postRenderPass))
+        throw std::runtime_error("Failed to initialize ImGui Vulkan backend");
+
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool        = m_commandPool;
+    allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmd;
+    vkAllocateCommandBuffers(m_device, &allocInfo, &cmd);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &beginInfo);
+    ImGui_ImplVulkan_CreateFontsTexture(cmd);
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers    = &cmd;
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VkFence fence;
+    vkCreateFence(m_device, &fenceInfo, nullptr, &fence);
+    vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, fence);
+    vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(m_device, fence, nullptr);
+    vkFreeCommandBuffers(m_device, m_commandPool, 1, &cmd);
+    ImGui_ImplVulkan_DestroyFontUploadObjects();
+}
+
+void VulkanContext::destroyDevTools() {
+    if (ImGui::GetCurrentContext()) {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
+    if (m_devQueryPool) {
+        vkDestroyQueryPool(m_device, m_devQueryPool, nullptr);
+        m_devQueryPool = VK_NULL_HANDLE;
+    }
+    if (m_devDescriptorPool) {
+        vkDestroyDescriptorPool(m_device, m_devDescriptorPool, nullptr);
+        m_devDescriptorPool = VK_NULL_HANDLE;
+    }
+}
+#endif
 
 void VulkanContext::createCommandBuffers() {
     m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1459,15 +1575,12 @@ void VulkanContext::createDescriptorSetLayout() {
 void VulkanContext::createUniformBuffers() {
     VkDeviceSize size = sizeof(UniformBufferObject);
     m_uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    m_uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    m_uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        createBuffer(size,
+        m_uniformBuffers[i] = createBuffer(size,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            m_uniformBuffers[i], m_uniformBuffersMemory[i]);
-        vkMapMemory(m_device, m_uniformBuffersMemory[i], 0, size, 0, &m_uniformBuffersMapped[i]);
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vkMapMemory(m_device, m_uniformBuffers[i].memory, 0, size, 0, &m_uniformBuffers[i].mapped);
     }
 }
 
@@ -1539,51 +1652,41 @@ void VulkanContext::createDescriptorSets() {
 void VulkanContext::createIndexBuffer() {
     VkDeviceSize size = sizeof(kIndices[0]) * kIndices.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(size,
+    GpuBuffer staging = createBuffer(size,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBuffer, stagingBufferMemory);
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     void* data;
-    vkMapMemory(m_device, stagingBufferMemory, 0, size, 0, &data);
+    vkMapMemory(m_device, staging.memory, 0, size, 0, &data);
     memcpy(data, kIndices.data(), (size_t)size);
-    vkUnmapMemory(m_device, stagingBufferMemory);
+    vkUnmapMemory(m_device, staging.memory);
 
-    createBuffer(size,
+    m_indexBuffer = createBuffer(size,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_indexBuffer, m_indexBufferMemory);
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    copyBuffer(stagingBuffer, m_indexBuffer, size);
-    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
-    vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+    copyBuffer(staging, m_indexBuffer, size);
+    // staging frees itself at scope exit
 }
 
 void VulkanContext::createVertexBuffer() {
     VkDeviceSize size = sizeof(kVertices[0]) * kVertices.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(size,
+    GpuBuffer staging = createBuffer(size,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBuffer, stagingBufferMemory);
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     void* data;
-    vkMapMemory(m_device, stagingBufferMemory, 0, size, 0, &data);
+    vkMapMemory(m_device, staging.memory, 0, size, 0, &data);
     memcpy(data, kVertices.data(), (size_t)size);
-    vkUnmapMemory(m_device, stagingBufferMemory);
+    vkUnmapMemory(m_device, staging.memory);
 
-    createBuffer(size,
+    m_vertexBuffer = createBuffer(size,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_vertexBuffer, m_vertexBufferMemory);
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    copyBuffer(stagingBuffer, m_vertexBuffer, size);
-    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
-    vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+    copyBuffer(staging, m_vertexBuffer, size);
+    // staging frees itself at scope exit
 }
 
 void VulkanContext::createItemMesh() {
@@ -1592,53 +1695,42 @@ void VulkanContext::createItemMesh() {
     for (auto& v : verts) v.pos *= 0.3f;
     VkDeviceSize size = sizeof(Vertex) * verts.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(size,
+    GpuBuffer staging = createBuffer(size,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBuffer, stagingBufferMemory);
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     void* data;
-    vkMapMemory(m_device, stagingBufferMemory, 0, size, 0, &data);
+    vkMapMemory(m_device, staging.memory, 0, size, 0, &data);
     memcpy(data, verts.data(), (size_t)size);
-    vkUnmapMemory(m_device, stagingBufferMemory);
+    vkUnmapMemory(m_device, staging.memory);
 
-    createBuffer(size,
+    m_itemVertexBuffer = createBuffer(size,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_itemVertexBuffer, m_itemVertexMemory);
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    copyBuffer(stagingBuffer, m_itemVertexBuffer, size);
-    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
-    vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+    copyBuffer(staging, m_itemVertexBuffer, size);
+    // staging frees itself at scope exit
 }
 
 void VulkanContext::createDropInstanceBuffer() {
     VkDeviceSize size = sizeof(InstanceData) * MAX_DROPS;
     m_dropInstBuffer.resize(MAX_FRAMES_IN_FLIGHT);
-    m_dropInstMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    m_dropInstMapped.resize(MAX_FRAMES_IN_FLIGHT);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        createBuffer(size,
+        m_dropInstBuffer[i] = createBuffer(size,
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            m_dropInstBuffer[i], m_dropInstMemory[i]);
-        vkMapMemory(m_device, m_dropInstMemory[i], 0, size, 0, &m_dropInstMapped[i]);
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vkMapMemory(m_device, m_dropInstBuffer[i].memory, 0, size, 0, &m_dropInstBuffer[i].mapped);
     }
 }
 
 void VulkanContext::createPlayerInstanceBuffer(const glm::vec3& playerPosition) {
     VkDeviceSize size = sizeof(InstanceData);
     m_playerInstBuffer.resize(MAX_FRAMES_IN_FLIGHT);
-    m_playerInstMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    m_playerInstMapped.resize(MAX_FRAMES_IN_FLIGHT);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        createBuffer(size,
+        m_playerInstBuffer[i] = createBuffer(size,
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            m_playerInstBuffer[i], m_playerInstMemory[i]);
-        vkMapMemory(m_device, m_playerInstMemory[i], 0, size, 0, &m_playerInstMapped[i]);
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vkMapMemory(m_device, m_playerInstBuffer[i].memory, 0, size, 0, &m_playerInstBuffer[i].mapped);
     }
 
     updatePlayerInstanceBuffer(playerPosition);
@@ -1646,46 +1738,36 @@ void VulkanContext::createPlayerInstanceBuffer(const glm::vec3& playerPosition) 
 
 void VulkanContext::createSelectorBuffers() {
     VkDeviceSize vertexSize = sizeof(kSelectorVertices[0]) * kSelectorVertices.size();
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingMemory;
 
-    createBuffer(vertexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBuffer, stagingMemory);
+    GpuBuffer staging = createBuffer(vertexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     void* data;
-    vkMapMemory(m_device, stagingMemory, 0, vertexSize, 0, &data);
+    vkMapMemory(m_device, staging.memory, 0, vertexSize, 0, &data);
     memcpy(data, kSelectorVertices.data(), vertexSize);
-    vkUnmapMemory(m_device, stagingMemory);
+    vkUnmapMemory(m_device, staging.memory);
 
-    createBuffer(vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_selectorVertexBuffer, m_selectorVertexMemory);
-    copyBuffer(stagingBuffer, m_selectorVertexBuffer, vertexSize);
-    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
-    vkFreeMemory(m_device, stagingMemory, nullptr);
+    m_selectorVertexBuffer = createBuffer(vertexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    copyBuffer(staging, m_selectorVertexBuffer, vertexSize);
 
     VkDeviceSize indexSize = sizeof(kSelectorIndices[0]) * kSelectorIndices.size();
-    createBuffer(indexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBuffer, stagingMemory);
+    staging = createBuffer(indexSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    vkMapMemory(m_device, stagingMemory, 0, indexSize, 0, &data);
+    vkMapMemory(m_device, staging.memory, 0, indexSize, 0, &data);
     memcpy(data, kSelectorIndices.data(), indexSize);
-    vkUnmapMemory(m_device, stagingMemory);
+    vkUnmapMemory(m_device, staging.memory);
 
-    createBuffer(indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_selectorIndexBuffer, m_selectorIndexMemory);
-    copyBuffer(stagingBuffer, m_selectorIndexBuffer, indexSize);
-    vkDestroyBuffer(m_device, stagingBuffer, nullptr);
-    vkFreeMemory(m_device, stagingMemory, nullptr);
+    m_selectorIndexBuffer = createBuffer(indexSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    copyBuffer(staging, m_selectorIndexBuffer, indexSize);
+    // staging frees itself at scope exit
 
     VkDeviceSize instanceSize = sizeof(InstanceData);
     m_selectorInstBuffer.resize(MAX_FRAMES_IN_FLIGHT);
-    m_selectorInstMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    m_selectorInstMapped.resize(MAX_FRAMES_IN_FLIGHT);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        createBuffer(instanceSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            m_selectorInstBuffer[i], m_selectorInstMemory[i]);
-        vkMapMemory(m_device, m_selectorInstMemory[i], 0, instanceSize, 0, &m_selectorInstMapped[i]);
+        m_selectorInstBuffer[i] = createBuffer(instanceSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vkMapMemory(m_device, m_selectorInstBuffer[i].memory, 0, instanceSize, 0, &m_selectorInstBuffer[i].mapped);
     }
 }

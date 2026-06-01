@@ -13,6 +13,7 @@
 #include <cstring>
 #include <chrono>
 #include <cmath>
+#include <utility>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -45,6 +46,9 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createShadowPlayerPipeline();
     createFramebuffers();
     createCommandPool();
+#ifdef PASTEL_DEV_BUILD
+    createDevTools();
+#endif
     createVertexBuffer();
     createIndexBuffer();
     createSelectorBuffers();
@@ -67,66 +71,30 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
 VulkanContext::~VulkanContext() {
     waitIdle();
 
-    for (auto& d : m_deletionQueue) {
-        vkDestroyBuffer(m_device, d.buffer, nullptr);
-        vkFreeMemory(m_device, d.memory, nullptr);
-    }
+#ifdef PASTEL_DEV_BUILD
+    destroyDevTools();
+#endif
+
+    // Free all GpuBuffers here (device still alive). Their dtors run again after this
+    // body when members destruct, but destroy() is idempotent so those are no-ops.
     m_deletionQueue.clear();
 
     cleanupSwapchain();
 
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroyBuffer(m_device, m_uniformBuffers[i], nullptr);
-        vkFreeMemory(m_device, m_uniformBuffersMemory[i], nullptr);
-    }
+    m_uniformBuffers.clear();
     vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroyBuffer(m_device, m_playerInstBuffer[i], nullptr);
-        vkFreeMemory(m_device, m_playerInstMemory[i], nullptr);
-        vkDestroyBuffer(m_device, m_selectorInstBuffer[i], nullptr);
-        vkFreeMemory(m_device, m_selectorInstMemory[i], nullptr);
-    }
-    vkDestroyBuffer(m_device, m_selectorIndexBuffer, nullptr);
-    vkFreeMemory(m_device, m_selectorIndexMemory, nullptr);
-    vkDestroyBuffer(m_device, m_selectorVertexBuffer, nullptr);
-    vkFreeMemory(m_device, m_selectorVertexMemory, nullptr);
-    for (auto& [coord, data] : m_chunkBuffers) {
-        if (data.vertexBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(m_device, data.vertexBuffer, nullptr);
-            vkFreeMemory(m_device, data.vertexMemory, nullptr);
-        }
-        if (data.indexBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(m_device, data.indexBuffer, nullptr);
-            vkFreeMemory(m_device, data.indexMemory, nullptr);
-        }
-        for (auto& g : data.objGroups) {
-            if (g.buffer != VK_NULL_HANDLE) {
-                vkDestroyBuffer(m_device, g.buffer, nullptr);
-                vkFreeMemory(m_device, g.memory, nullptr);
-            }
-        }
-    }
-    for (auto& mesh : m_objectMeshes) {
-        if (mesh.vbuf != VK_NULL_HANDLE) {
-            vkDestroyBuffer(m_device, mesh.vbuf, nullptr);
-            vkFreeMemory(m_device, mesh.vmem, nullptr);
-        }
-    }
-    vkDestroyBuffer(m_device, m_itemVertexBuffer, nullptr);
-    vkFreeMemory(m_device, m_itemVertexMemory, nullptr);
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroyBuffer(m_device, m_dropInstBuffer[i], nullptr);
-        vkFreeMemory(m_device, m_dropInstMemory[i], nullptr);
-    }
-    vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
-    vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
-    vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
-    vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroyBuffer(m_device, m_uiBuffer[i], nullptr);
-        vkFreeMemory(m_device, m_uiMemory[i], nullptr);
-    }
+    m_playerInstBuffer.clear();
+    m_selectorInstBuffer.clear();
+    m_selectorIndexBuffer.destroy();
+    m_selectorVertexBuffer.destroy();
+    m_chunkBuffers.clear();          // frees each chunk's vertex/index + object groups
+    for (auto& mesh : m_objectMeshes) mesh.vbuf.destroy();
+    m_itemVertexBuffer.destroy();
+    m_dropInstBuffer.clear();
+    m_indexBuffer.destroy();
+    m_vertexBuffer.destroy();
+    m_uiBuffer.clear();
     vkDestroyPipeline(m_device, m_uiPipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_uiPipelineLayout, nullptr);
     vkDestroyPipeline(m_device, m_objectPipeline, nullptr);
@@ -166,9 +134,9 @@ VulkanContext::~VulkanContext() {
 
 void VulkanContext::waitIdle() { vkDeviceWaitIdle(m_device); }
 
-void VulkanContext::deferDestroy(VkBuffer buf, VkDeviceMemory mem) {
-    if (buf != VK_NULL_HANDLE)
-        m_deletionQueue.push_back({buf, mem, m_frameCount});
+void VulkanContext::deferDestroy(GpuBuffer&& buf) {
+    if (buf.buffer != VK_NULL_HANDLE)
+        m_deletionQueue.push_back({std::move(buf), m_frameCount});
 }
 
 // ============================================================
@@ -209,28 +177,32 @@ uint32_t VulkanContext::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlag
     throw std::runtime_error("Failed to find suitable memory type");
 }
 
-void VulkanContext::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
-    VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory)
+GpuBuffer VulkanContext::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+    VkMemoryPropertyFlags properties)
 {
+    GpuBuffer buf;
+    buf.device = m_device;
+
     VkBufferCreateInfo bufInfo{};
     bufInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufInfo.size        = size;
     bufInfo.usage       = usage;
     bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    if (vkCreateBuffer(m_device, &bufInfo, nullptr, &buffer) != VK_SUCCESS)
+    if (vkCreateBuffer(m_device, &bufInfo, nullptr, &buf.buffer) != VK_SUCCESS)
         throw std::runtime_error("Failed to create buffer");
 
     VkMemoryRequirements memReq;
-    vkGetBufferMemoryRequirements(m_device, buffer, &memReq);
+    vkGetBufferMemoryRequirements(m_device, buf.buffer, &memReq);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize  = memReq.size;
     allocInfo.memoryTypeIndex = findMemoryType(memReq.memoryTypeBits, properties);
-    if (vkAllocateMemory(m_device, &allocInfo, nullptr, &memory) != VK_SUCCESS)
+    if (vkAllocateMemory(m_device, &allocInfo, nullptr, &buf.memory) != VK_SUCCESS)
         throw std::runtime_error("Failed to allocate buffer memory");
 
-    vkBindBufferMemory(m_device, buffer, memory, 0);
+    vkBindBufferMemory(m_device, buf.buffer, buf.memory, 0);
+    return buf;
 }
 
 VkFormat VulkanContext::findSupportedFormat(const std::vector<VkFormat>& candidates,

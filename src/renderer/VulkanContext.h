@@ -14,6 +14,41 @@ class Window;
 class World;
 class Camera;
 
+// Owning RAII pair for a VkBuffer + its VkDeviceMemory (and optional persistent map).
+// Move-only; frees on destruction. Implicitly converts to VkBuffer for bind/draw calls,
+// so existing handle reads keep compiling unchanged.
+struct GpuBuffer {
+    VkBuffer       buffer = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    void*          mapped = nullptr;        // non-null while persistently mapped
+    VkDevice       device = VK_NULL_HANDLE; // owner device, for self-destruction
+
+    GpuBuffer() = default;
+    GpuBuffer(const GpuBuffer&)            = delete;
+    GpuBuffer& operator=(const GpuBuffer&) = delete;
+    GpuBuffer(GpuBuffer&& o) noexcept
+        : buffer(o.buffer), memory(o.memory), mapped(o.mapped), device(o.device) {
+        o.buffer = VK_NULL_HANDLE; o.memory = VK_NULL_HANDLE; o.mapped = nullptr; o.device = VK_NULL_HANDLE;
+    }
+    GpuBuffer& operator=(GpuBuffer&& o) noexcept {
+        if (this != &o) {
+            destroy();
+            buffer = o.buffer; memory = o.memory; mapped = o.mapped; device = o.device;
+            o.buffer = VK_NULL_HANDLE; o.memory = VK_NULL_HANDLE; o.mapped = nullptr; o.device = VK_NULL_HANDLE;
+        }
+        return *this;
+    }
+    ~GpuBuffer() { destroy(); }
+
+    operator VkBuffer() const { return buffer; }
+
+    void destroy() {
+        if (buffer) vkDestroyBuffer(device, buffer, nullptr);
+        if (memory) vkFreeMemory(device, memory, nullptr);
+        buffer = VK_NULL_HANDLE; memory = VK_NULL_HANDLE; mapped = nullptr; device = VK_NULL_HANDLE;
+    }
+};
+
 // Per-frame snapshot the renderer consumes. Mirrors the previous drawFrame
 // argument list (by-ref for heavy data, by-value for scalars).
 struct FrameRenderData {
@@ -36,6 +71,13 @@ public:
 
     void drawFrame(const FrameRenderData& frame);
     void waitIdle();
+
+#ifdef PASTEL_DEV_BUILD
+    void beginDevFrame();
+    bool devWantsMouse() const;
+    bool devWantsKeyboard() const;
+    void toggleDevUi();
+#endif
 
 private:
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
@@ -109,14 +151,21 @@ private:
     void cleanupSwapchain();
     void recreateSwapchain();
 
-    void deferDestroy(VkBuffer buf, VkDeviceMemory mem);
+    void deferDestroy(GpuBuffer&& buf);
+
+#ifdef PASTEL_DEV_BUILD
+    void createDevTools();
+    void destroyDevTools();
+    void buildDevUi(const FrameRenderData& frame);
+    void readDevGpuTimings(uint32_t frameIndex);
+    void writeDevTimestamp(VkCommandBuffer cmd, uint32_t index);
+#endif
 
     VkShaderModule          createShaderModule(const std::vector<char>& code);
     std::vector<char>       readFile(const std::string& path);
     uint32_t                findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-    void                    createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
-                                VkMemoryPropertyFlags properties,
-                                VkBuffer& buffer, VkDeviceMemory& memory);
+    GpuBuffer               createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+                                VkMemoryPropertyFlags properties);
 
     struct QueueFamilyIndices {
         std::optional<uint32_t> graphics;
@@ -165,21 +214,16 @@ private:
     std::vector<VkDeviceMemory> m_offscreenMemory;
     std::vector<VkImageView>    m_offscreenView;
 
-    VkBuffer                 m_vertexBuffer        = VK_NULL_HANDLE;
-    VkDeviceMemory           m_vertexBufferMemory  = VK_NULL_HANDLE;
-    VkBuffer                 m_indexBuffer         = VK_NULL_HANDLE;
-    VkDeviceMemory           m_indexBufferMemory   = VK_NULL_HANDLE;
+    GpuBuffer                m_vertexBuffer;
+    GpuBuffer                m_indexBuffer;
     struct ChunkRenderData {
-        VkBuffer       vertexBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
-        VkBuffer       indexBuffer  = VK_NULL_HANDLE;
-        VkDeviceMemory indexMemory  = VK_NULL_HANDLE;
+        GpuBuffer      vertexBuffer;
+        GpuBuffer      indexBuffer;
         uint32_t       indexCount   = 0;
         // Per-chunk object instances, one buffer group per ObjectType present
         struct ObjGroup {
             ObjectType     type   = ObjectType::TREE;
-            VkBuffer       buffer = VK_NULL_HANDLE;
-            VkDeviceMemory memory = VK_NULL_HANDLE;
+            GpuBuffer      buffer;
             uint32_t       count  = 0;
         };
         std::vector<ObjGroup> objGroups;
@@ -189,26 +233,20 @@ private:
 
     // Shared low-poly object meshes, indexed by ObjectType (instanced per Object)
     struct ObjectMesh {
-        VkBuffer       vbuf  = VK_NULL_HANDLE;
-        VkDeviceMemory vmem  = VK_NULL_HANDLE;
+        GpuBuffer      vbuf;
         uint32_t       count = 0;
     };
     std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
 
     // Dropped items — shared small cube mesh + per-frame instance buffer (reuses m_indexBuffer + m_pipeline)
     static constexpr uint32_t   MAX_DROPS = 256;
-    VkBuffer                    m_itemVertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory              m_itemVertexMemory = VK_NULL_HANDLE;
-    std::vector<VkBuffer>       m_dropInstBuffer;
-    std::vector<VkDeviceMemory> m_dropInstMemory;
-    std::vector<void*>          m_dropInstMapped;
+    GpuBuffer                   m_itemVertexBuffer;
+    std::vector<GpuBuffer>      m_dropInstBuffer;
     uint32_t                    m_dropCount = 0;
 
     // UI / hotbar — one buffer per frame in flight (avoids overwrite while GPU still reads)
     static constexpr uint32_t   UI_MAX_VERTS = 2048;
-    std::vector<VkBuffer>       m_uiBuffer;
-    std::vector<VkDeviceMemory> m_uiMemory;
-    std::vector<void*>          m_uiMapped;
+    std::vector<GpuBuffer>      m_uiBuffer;
     uint32_t                 m_uiVertexCount   = 0;
     int                      m_hotbarSelected  = 0;
     int                      m_dayHud          = 0;
@@ -216,16 +254,10 @@ private:
     bool                     m_inventoryOpen   = false;
     bool                     m_nearWorkbenchHud = false;
     std::array<float, 4>     m_skyColor        = {0.08f, 0.08f, 0.12f, 1.0f};
-    std::vector<VkBuffer>       m_playerInstBuffer;
-    std::vector<VkDeviceMemory> m_playerInstMemory;
-    std::vector<void*>          m_playerInstMapped;
-    VkBuffer                 m_selectorVertexBuffer  = VK_NULL_HANDLE;
-    VkDeviceMemory           m_selectorVertexMemory  = VK_NULL_HANDLE;
-    VkBuffer                 m_selectorIndexBuffer   = VK_NULL_HANDLE;
-    VkDeviceMemory           m_selectorIndexMemory   = VK_NULL_HANDLE;
-    std::vector<VkBuffer>       m_selectorInstBuffer;
-    std::vector<VkDeviceMemory> m_selectorInstMemory;
-    std::vector<void*>          m_selectorInstMapped;
+    std::vector<GpuBuffer>      m_playerInstBuffer;
+    GpuBuffer                m_selectorVertexBuffer;
+    GpuBuffer                m_selectorIndexBuffer;
+    std::vector<GpuBuffer>      m_selectorInstBuffer;
     bool                     m_showSelector          = false;
 
     VkImage                      m_depthImage           = VK_NULL_HANDLE;
@@ -248,9 +280,7 @@ private:
     float                        m_dayFactor            = 0.0f;
 
     VkDescriptorSetLayout        m_descriptorSetLayout = VK_NULL_HANDLE;
-    std::vector<VkBuffer>        m_uniformBuffers;
-    std::vector<VkDeviceMemory>  m_uniformBuffersMemory;
-    std::vector<void*>           m_uniformBuffersMapped;
+    std::vector<GpuBuffer>       m_uniformBuffers;
     VkDescriptorPool             m_descriptorPool   = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> m_descriptorSets;
 
@@ -264,9 +294,30 @@ private:
     std::vector<VkFence>     m_imagesInFlight;    // per swapchain image; non-owning fence refs
     uint32_t                 m_currentFrame     = 0;
 
+#ifdef PASTEL_DEV_BUILD
+    static constexpr uint32_t DEV_TIMESTAMP_COUNT = 5; // start, shadow, scene, post, imgui/end
+
+    struct DevGpuTiming {
+        bool  valid    = false;
+        float totalMs  = 0.0f;
+        float shadowMs = 0.0f;
+        float sceneMs  = 0.0f;
+        float postMs   = 0.0f;
+        float imguiMs  = 0.0f;
+    };
+
+    VkDescriptorPool m_devDescriptorPool = VK_NULL_HANDLE;
+    VkQueryPool      m_devQueryPool      = VK_NULL_HANDLE;
+    float            m_devTimestampPeriod = 0.0f;
+    bool             m_devTimingSupported = false;
+    bool             m_devUiVisible       = true;
+    bool             m_devFrameStarted    = false;
+    DevGpuTiming     m_devGpuTiming;
+    std::array<bool, MAX_FRAMES_IN_FLIGHT> m_devQueriesWritten{};
+#endif
+
     struct DeferredDelete {
-        VkBuffer       buffer = VK_NULL_HANDLE;
-        VkDeviceMemory memory = VK_NULL_HANDLE;
+        GpuBuffer      buffer;
         uint64_t       frame  = 0;
     };
     std::vector<DeferredDelete> m_deletionQueue;

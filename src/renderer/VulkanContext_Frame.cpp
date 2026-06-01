@@ -12,6 +12,102 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#ifdef PASTEL_DEV_BUILD
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
+#endif
+
+#ifdef PASTEL_DEV_BUILD
+void VulkanContext::beginDevFrame() {
+    if (!ImGui::GetCurrentContext()) return;
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    m_devFrameStarted = true;
+}
+
+bool VulkanContext::devWantsMouse() const {
+    return ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
+}
+
+bool VulkanContext::devWantsKeyboard() const {
+    return ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard;
+}
+
+void VulkanContext::toggleDevUi() {
+    m_devUiVisible = !m_devUiVisible;
+}
+
+void VulkanContext::buildDevUi(const FrameRenderData& frame) {
+    if (!ImGui::GetCurrentContext()) return;
+    if (!m_devFrameStarted) beginDevFrame();
+
+    if (m_devUiVisible) {
+        ImGui::SetNextWindowSize(ImVec2(360.0f, 260.0f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Pastel Farm Dev", &m_devUiVisible)) {
+            ImGui::TextUnformatted("F3 toggles this panel");
+            ImGui::Separator();
+            ImGui::Text("Day: %d", frame.day);
+            ImGui::Text("Time of day: %.3f", frame.timeOfDay);
+            ImGui::Text("Player: %.2f, %.2f, %.2f",
+                frame.playerPosition.x, frame.playerPosition.y, frame.playerPosition.z);
+            ImGui::Text("Chunks loaded: %d", (int)m_world.chunks().size());
+            ImGui::Text("Drops: %d", (int)frame.drops.size());
+            ImGui::Text("Selected slot: %d", frame.hotbarSelected + 1);
+            ImGui::Text("Near workbench: %s", frame.nearWorkbench ? "yes" : "no");
+            ImGui::Separator();
+            if (!m_devTimingSupported) {
+                ImGui::TextUnformatted("GPU timing: unavailable");
+            } else if (!m_devGpuTiming.valid) {
+                ImGui::TextUnformatted("GPU timing: waiting for first frame");
+            } else {
+                ImGui::Text("GPU total:  %.3f ms", m_devGpuTiming.totalMs);
+                ImGui::Text("  shadow:   %.3f ms", m_devGpuTiming.shadowMs);
+                ImGui::Text("  scene:    %.3f ms", m_devGpuTiming.sceneMs);
+                ImGui::Text("  post:     %.3f ms", m_devGpuTiming.postMs);
+                ImGui::Text("  imgui:    %.3f ms", m_devGpuTiming.imguiMs);
+            }
+        }
+        ImGui::End();
+    }
+
+    ImGui::Render();
+    m_devFrameStarted = false;
+}
+
+void VulkanContext::readDevGpuTimings(uint32_t frameIndex) {
+    if (!m_devTimingSupported || !m_devQueriesWritten[frameIndex]) return;
+
+    uint64_t timestamps[DEV_TIMESTAMP_COUNT] = {};
+    VkResult result = vkGetQueryPoolResults(
+        m_device, m_devQueryPool, frameIndex * DEV_TIMESTAMP_COUNT, DEV_TIMESTAMP_COUNT,
+        sizeof(timestamps), timestamps, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+    if (result != VK_SUCCESS) {
+        m_devGpuTiming.valid = false;
+        return;
+    }
+
+    auto ms = [&](uint32_t a, uint32_t b) {
+        return (float)((double)(timestamps[b] - timestamps[a]) *
+            (double)m_devTimestampPeriod / 1000000.0);
+    };
+    m_devGpuTiming.valid    = true;
+    m_devGpuTiming.totalMs  = ms(0, 4);
+    m_devGpuTiming.shadowMs = ms(0, 1);
+    m_devGpuTiming.sceneMs  = ms(1, 2);
+    m_devGpuTiming.postMs   = ms(2, 3);
+    m_devGpuTiming.imguiMs  = ms(3, 4);
+    m_devQueriesWritten[frameIndex] = false;
+}
+
+void VulkanContext::writeDevTimestamp(VkCommandBuffer cmd, uint32_t index) {
+    if (!m_devTimingSupported) return;
+    const uint32_t query = m_currentFrame * DEV_TIMESTAMP_COUNT + index;
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_devQueryPool, query);
+}
+#endif
+
 // ============================================================
 //  Command buffer recording
 // ============================================================
@@ -19,6 +115,14 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     VkCommandBufferBeginInfo begin{};
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     vkBeginCommandBuffer(cmd, &begin);
+
+#ifdef PASTEL_DEV_BUILD
+    if (m_devTimingSupported) {
+        const uint32_t base = m_currentFrame * DEV_TIMESTAMP_COUNT;
+        vkCmdResetQueryPool(cmd, m_devQueryPool, base, DEV_TIMESTAMP_COUNT);
+        vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_devQueryPool, base);
+    }
+#endif
 
     // Shadow pass — render chunk depth from sun's perspective
     {
@@ -96,6 +200,9 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         }
         vkCmdEndRenderPass(cmd);
     }
+#ifdef PASTEL_DEV_BUILD
+    writeDevTimestamp(cmd, 1);
+#endif
 
     VkClearValue clearValues[2];
     clearValues[0].color        = {{m_skyColor[0], m_skyColor[1], m_skyColor[2], 1.0f}};
@@ -194,6 +301,9 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     }
 
     vkCmdEndRenderPass(cmd); // end scene pass (offscreen color now SHADER_READ_ONLY)
+#ifdef PASTEL_DEV_BUILD
+    writeDevTimestamp(cmd, 2);
+#endif
 
     // Post-process pass — sample offscreen scene, output to swapchain
     {
@@ -214,6 +324,15 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
             m_postPipelineLayout, 0, 1, &m_postDescriptorSets[m_currentFrame], 0, nullptr);
         vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
+#ifdef PASTEL_DEV_BUILD
+        writeDevTimestamp(cmd, 3);
+        if (ImGui::GetCurrentContext()) {
+            ImDrawData* drawData = ImGui::GetDrawData();
+            if (drawData && drawData->CmdListsCount > 0)
+                ImGui_ImplVulkan_RenderDrawData(drawData, cmd);
+        }
+        writeDevTimestamp(cmd, 4);
+#endif
 
         vkCmdEndRenderPass(cmd);
     }
@@ -233,15 +352,11 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
 
     // Advance frame counter and free buffers that are no longer in flight
     m_frameCount++;
+    // Erase entries the GPU has finished with; GpuBuffer RAII frees them on erase.
     m_deletionQueue.erase(
         std::remove_if(m_deletionQueue.begin(), m_deletionQueue.end(),
             [&](const DeferredDelete& d) {
-                if (m_frameCount - d.frame > (uint64_t)MAX_FRAMES_IN_FLIGHT) {
-                    vkDestroyBuffer(m_device, d.buffer, nullptr);
-                    vkFreeMemory(m_device, d.memory, nullptr);
-                    return true;
-                }
-                return false;
+                return m_frameCount - d.frame > (uint64_t)MAX_FRAMES_IN_FLIGHT;
             }),
         m_deletionQueue.end()
     );
@@ -262,6 +377,9 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
 
     // Wait for the previous frame using this slot to finish
     vkWaitForFences(m_device, 1, &m_inFlight[m_currentFrame], VK_TRUE, UINT64_MAX);
+#ifdef PASTEL_DEV_BUILD
+    readDevGpuTimings(m_currentFrame);
+#endif
 
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(
@@ -269,6 +387,12 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
         m_imageAvailable[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+#ifdef PASTEL_DEV_BUILD
+        if (m_devFrameStarted && ImGui::GetCurrentContext()) {
+            ImGui::EndFrame();
+            m_devFrameStarted = false;
+        }
+#endif
         recreateSwapchain();
         return;
     }
@@ -307,8 +431,14 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
     updateHotbar();
     rebuildDirtyChunks();
     m_frustum = Frustum::extractFrom(frame.camera.viewProj());
+#ifdef PASTEL_DEV_BUILD
+    buildDevUi(frame);
+#endif
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
+#ifdef PASTEL_DEV_BUILD
+    m_devQueriesWritten[m_currentFrame] = m_devTimingSupported;
+#endif
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{};
@@ -350,18 +480,18 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& cam
     ubo.lightDir = glm::vec4(m_sunDir, m_dayFactor); // w = dayFactor (0=night, 1=noon)
     ubo.lightMVP = m_lightMVP;
     ubo.fogColor = glm::vec4(m_skyColor[0], m_skyColor[1], m_skyColor[2], 1.0f);
-    memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+    memcpy(m_uniformBuffers[currentFrame].mapped, &ubo, sizeof(ubo));
 }
 
 void VulkanContext::updatePlayerInstanceBuffer(const glm::vec3& playerPosition) {
     static const glm::vec3 kPlayerColor = {1.0f, 0.45f, 0.1f};
     InstanceData inst{playerPosition, kPlayerColor, kPlayerColor};
-    memcpy(m_playerInstMapped[m_currentFrame], &inst, sizeof(inst));
+    memcpy(m_playerInstBuffer[m_currentFrame].mapped, &inst, sizeof(inst));
 }
 
 void VulkanContext::updateDropInstanceBuffer(const std::vector<DroppedItem>& drops) {
     m_dropCount = std::min((uint32_t)drops.size(), MAX_DROPS);
-    InstanceData* dst = reinterpret_cast<InstanceData*>(m_dropInstMapped[m_currentFrame]);
+    InstanceData* dst = reinterpret_cast<InstanceData*>(m_dropInstBuffer[m_currentFrame].mapped);
     for (uint32_t i = 0; i < m_dropCount; i++) {
         const glm::vec3 c = itemColor(drops[i].type);
         dst[i] = InstanceData{ drops[i].pos, c, c };
@@ -375,7 +505,7 @@ void VulkanContext::updateSelectorInstanceBuffer(const std::optional<glm::ivec3>
     static const glm::vec3 kSelectorColor = {1.0f, 0.9f, 0.1f};
     const glm::ivec3 tile = *targetTile;
     InstanceData inst{m_world.tileCenter(tile.x, tile.y, tile.z), kSelectorColor, kSelectorColor};
-    memcpy(m_selectorInstMapped[m_currentFrame], &inst, sizeof(inst));
+    memcpy(m_selectorInstBuffer[m_currentFrame].mapped, &inst, sizeof(inst));
 }
 
 // ============================================================
@@ -531,5 +661,5 @@ void VulkanContext::updateHotbar() {
 
     if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow
     m_uiVertexCount = (uint32_t)verts.size();
-    memcpy(m_uiMapped[m_currentFrame], verts.data(), sizeof(UIVertex) * verts.size());
+    memcpy(m_uiBuffer[m_currentFrame].mapped, verts.data(), sizeof(UIVertex) * verts.size());
 }

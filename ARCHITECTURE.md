@@ -43,6 +43,7 @@ src/
 - **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+나무+플레이어, 밤엔 shadow pass 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
 - 색: top/side vertex color (텍스처 미사용, 추후 아틀라스 호환 구조), per-vertex AO 베이크
+- **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
 
 ---
 
@@ -71,9 +72,9 @@ src/
 
 ### 우선순위 Tier (현재)
 **Tier 1 — 가속기 + 부채 상환 (app-flow 토대)**
-- DevUI(ImGui, `DEV_BUILD` 게이트) + Dev 빌드 구성 + GPU timestamp 프로파일링 — 비주얼 튜닝의 전제조건
+- ✅ DevUI(ImGui, `PASTEL_DEV_BUILD` 게이트) + Dev 빌드 구성 + GPU timestamp 프로파일링 — 비주얼 튜닝의 전제조건. **완료**
 - ✅ `FrameRenderData` 스냅샷 — `drawFrame` 인자 10개 → 구조체 1개(`VulkanContext.h`). 렌더러는 public 경계에서 스냅샷만 소비. **완료**
-- `GpuBuffer` RAII 래퍼 — `VkBuffer+VkDeviceMemory` 수동 쌍 정리
+- ✅ `GpuBuffer` RAII 래퍼 — `VkBuffer+VkDeviceMemory`(+mapped) move-only RAII로 통합, `createBuffer` 반환형화. `operator VkBuffer()`로 읽기 무변경. **완료**
 - App-state 머신(Boot/MainMenu/Loading/Gameplay/Pause) + 입력 컨텍스트 + 설정(해상도/vsync/볼륨/AA) + world load/unload (현재 ESC=즉시 종료)
 
 **Tier 2 — 비주얼 정체성 (DevUI로 실시간 튜닝)**
