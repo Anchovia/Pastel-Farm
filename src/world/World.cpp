@@ -311,6 +311,15 @@ bool World::hasObjectAt(int x, int y) const {
     return false;
 }
 
+bool World::isCollidableAt(int x, int y) const {
+    auto it = m_chunks.find(chunkCoord(x, y));
+    if (it == m_chunks.end()) return false;
+    for (const Object& o : it->second.objects)
+        if ((int)o.pos.x == x && (int)o.pos.y == y && objectDef(o.type).collidable)
+            return true;
+    return false;
+}
+
 bool World::isObjectTypeNear(int x, int y, ObjectType type, int radius) const {
     for (int dy = -radius; dy <= radius; dy++)
     for (int dx = -radius; dx <= radius; dx++) {

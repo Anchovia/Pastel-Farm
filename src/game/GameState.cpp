@@ -15,7 +15,8 @@ bool canOccupy(const World& world, const glm::vec3& position) {
     const glm::ivec3 tile = world.worldToTile(position);
     TileType body = world.getTile(tile.x, tile.y, tile.z + 1);
     bool bodyPassable = (body == TileType::AIR || body == TileType::WHEAT);
-    return world.isWalkable(tile.x, tile.y, tile.z) && bodyPassable;
+    return world.isWalkable(tile.x, tile.y, tile.z) && bodyPassable
+           && !world.isCollidableAt(tile.x, tile.y);
 }
 }
 

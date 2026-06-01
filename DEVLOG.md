@@ -575,6 +575,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - **분석 정정 사항**(코드 실제 기준): 색 그레이딩·split-tone·fog는 이미 구현됨 / 청크 리빌드 throttle 존재 / 에셋·텍스처·애니메이션 거의 없음 → asset DB·material 시스템은 시기상조 / 좌표 변환은 이미 중앙화.
 - **즉시 가능한 작은 완성도**로 식별: 오브젝트 충돌(`collidable` 이미 데이터, `canOccupy` 한 줄).
 
+### 오브젝트 충돌 (즉시 완성도)
+- `World::isCollidableAt(x,y)` — 타일 위 오브젝트 중 `objectDef.collidable`인 게 있으면 true. `hasObjectAt`(아무 오브젝트나)과 분리 — 후자는 설치 중복 방지용, 책임이 다름.
+- `GameState::canOccupy`에 `&& !world.isCollidableAt(...)` 한 줄 추가. 이로써 데이터로만 있던 `collidable` 플래그가 실제 이동 차단으로 배선됨.
+- 결과: 나무·돌·울타리·작업대·돌담을 통과하지 못함(건축이 장식→기능). 축 분리 이동이라 옆면 미끄러짐은 유지, 작물(WHEAT 타일)은 타일 충돌이라 영향 없음.
+
 ---
 
 ## 게임 설계 메모

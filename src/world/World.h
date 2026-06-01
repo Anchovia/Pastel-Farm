@@ -23,6 +23,8 @@ public:
                                    glm::vec3& outPos, ItemType& outDrop, int& outCount);
 
     bool hasObjectAt(int x, int y) const;
+    // True if a collidable object sits on tile (x,y) (blocks player movement).
+    bool isCollidableAt(int x, int y) const;
     // True if an object of the given type sits within `radius` tiles of (x,y).
     bool isObjectTypeNear(int x, int y, ObjectType type, int radius) const;
     // Places an object on top of the ground at (x,y). Fails if the tile is not

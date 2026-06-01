@@ -84,7 +84,7 @@ src/
 **Tier 3 — 확장 (rule of 3 도달 시)**
 - 오디오(ambient/발걸음/SFX, 가벼운 single-header 미들웨어) · 경량 `IRenderPass` · 콘텐츠 데이터화(JSON 등) · 상호작용 인터페이스(`IInteractable`) · 순수 로직 테스트(inventory/save/craft)
 
-> 즉시 가능한 작은 완성도: **오브젝트 충돌** — `collidable`이 이미 `ObjectDef` 데이터로 존재 → `canOccupy` 한 줄로 건축이 장식에서 기능으로.
+> ✅ 즉시 가능한 작은 완성도: **오브젝트 충돌** — `collidable`이 이미 `ObjectDef` 데이터로 존재 → `World::isCollidableAt` + `canOccupy` 한 줄로 배선 완료. 건축이 장식에서 기능으로.
 
 ### 그림자 / 비주얼 로드맵 (Tier 2 세부)
 - ✅ color grading / tone mapping (post 1패스: exposure/contrast/saturation/split-tone/vignette)
