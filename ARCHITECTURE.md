@@ -75,7 +75,7 @@ src/
 - ✅ DevUI(ImGui, `PASTEL_DEV_BUILD` 게이트) + Dev 빌드 구성 + GPU timestamp 프로파일링 — 비주얼 튜닝의 전제조건. **완료**
 - ✅ `FrameRenderData` 스냅샷 — `drawFrame` 인자 10개 → 구조체 1개(`VulkanContext.h`). 렌더러는 public 경계에서 스냅샷만 소비. **완료**
 - ✅ `GpuBuffer` RAII 래퍼 — `VkBuffer+VkDeviceMemory`(+mapped) move-only RAII로 통합, `createBuffer` 반환형화. `operator VkBuffer()`로 읽기 무변경. **완료**
-- App-state 머신(Boot/MainMenu/Settings/Loading/Gameplay/Pause) + 입력 컨텍스트 + 설정(해상도/vsync/볼륨/AA) + world load/unload. **MainMenu 1차 + Settings 1차 + Loading 1차 + Pause 1차 완료**: 시작 시 MainMenu 표시, `S`로 Settings 진입/`ESC`로 복귀, `Enter`로 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단, dim overlay + pause 아이콘 + `PAUSED` 문구 표시. 입력 정책 helper와 로컬 `AppFlow`, Tiny UI Text 기반으로 DevUI 캡처/app mode 차단/edge-detect/기초 문구 표시 접합면을 정리. 실제 설정값 적용은 예정
+- App-state 머신(Boot/MainMenu/Settings/Loading/Gameplay/Pause) + 입력 컨텍스트 + 설정(해상도/vsync/볼륨/AA) + world load/unload. **MainMenu 1차 + Settings 1차(+VSync 데이터 토글) + Loading 1차 + Pause 1차 완료**: 시작 시 MainMenu 표시, `S`로 Settings 진입/`ESC`로 복귀, Settings에서 `V`로 VSync 설정값 ON/OFF 토글(데이터/표시만), `Enter`로 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단, dim overlay + pause 아이콘 + `PAUSED` 문구 표시. 입력 정책 helper와 로컬 `AppFlow`, Tiny UI Text 기반으로 DevUI 캡처/app mode 차단/edge-detect/기초 문구 표시 접합면을 정리. 실제 swapchain present mode 적용은 예정
 
 **Tier 2 — 비주얼 정체성 (DevUI로 실시간 튜닝)**
 - height fog · hemisphere/colored ambient(조명단 warm/cool) · 카메라 follow 댐핑

@@ -658,6 +658,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - Settings 중에는 기존 app mode 입력 정책으로 게임플레이 입력과 저장이 차단됨. 실제 설정값(해상도/vsync/AA 등) 변경은 다음 슬라이스로 보류.
 - 검증 결과: MainMenu → Settings 진입, Settings → MainMenu 복귀, Settings 중 Enter 무시, Gameplay 진입 후 S 이동·저장·pause/resume·DevUI 정상 확인.
 
+### Settings VSync 데이터 토글 (Tier 1-D 슬라이스)
+- `main.cpp`에 로컬 `AppSettings` 구조체 추가. 현재는 `vsync` bool과 V 키 edge-detect만 보관하며, 전역 설정 파일/새 시스템으로 키우지 않음.
+- `PlayerInput`에 `toggleVsyncKey`를 추가하고 `InputManager`에서 V 키를 읽음. `AppSettings::update`는 `AppMode::Settings`에서만 V 입력을 소비해 Gameplay 입력과 분리.
+- `FrameRenderData`에 `vsyncEnabled` bool 추가. Settings 화면에 `VSYNC ON` / `VSYNC OFF`, `V TOGGLE`, `PRESS ESC`를 표시.
+- 실제 Vulkan swapchain present mode 재생성/적용은 의도적으로 보류. 이번 슬라이스는 설정 데이터 모델 + UI 표시 + 입력 토글까지만 완료.
+- 검증 결과: Settings에서 VSync ON/OFF 토글, Settings 재진입 시 값 유지, MainMenu/Loading/Gameplay/Pause 흐름 정상 확인.
+
 ---
 
 ## 게임 설계 메모

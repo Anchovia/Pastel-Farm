@@ -97,6 +97,17 @@ struct AppFlow {
 #endif
 };
 
+struct AppSettings {
+    bool vsync = true;
+    bool prevVsyncToggle = false;
+
+    void update(bool togglePressed, AppMode mode) {
+        if (mode == AppMode::Settings && togglePressed && !prevVsyncToggle)
+            vsync = !vsync;
+        prevVsyncToggle = togglePressed;
+    }
+};
+
 static void clearGameplayInput(PlayerInput& input) {
     input.moveForward     = false;
     input.moveBackward    = false;
@@ -131,6 +142,7 @@ static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx)
         input.quit            = false;
         input.startKey        = false;
         input.settingsKey     = false;
+        input.toggleVsyncKey  = false;
     }
 }
 #endif
@@ -145,6 +157,7 @@ int main() {
         Camera camera(45.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
 
         AppFlow app;
+        AppSettings settings;
         bool worldSessionStarted = false;
         bool pendingWorldStart = false;
         glm::ivec2 lastPlayerChunk{0, 0};
@@ -187,6 +200,7 @@ int main() {
 
             app.updateEscape(input.quit);
             app.updateMainMenuSettings(input.settingsKey);
+            settings.update(input.toggleVsyncKey, app.mode);
             if (app.consumeMainMenuStart(input.startKey)) {
                 app.enterLoading();
                 pendingWorldStart = true;
@@ -227,7 +241,7 @@ int main() {
                 camera, gameState.player().position(), gameState.targetTile(),
                 gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
                 gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench(),
-                app.mainMenu(), app.settings(), app.loading(), app.paused()
+                app.mainMenu(), app.settings(), app.loading(), app.paused(), settings.vsync
             });
 
             if (pendingWorldStart && app.loading()) {

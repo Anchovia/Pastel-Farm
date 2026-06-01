@@ -41,6 +41,7 @@ PlayerInput InputManager::pollInput() {
     input.toggleDevUi = glfwGetKey(win, GLFW_KEY_F3)     == GLFW_PRESS;
     input.startKey    = glfwGetKey(win, GLFW_KEY_ENTER)  == GLFW_PRESS;
     input.settingsKey = glfwGetKey(win, GLFW_KEY_S)      == GLFW_PRESS;
+    input.toggleVsyncKey = glfwGetKey(win, GLFW_KEY_V)   == GLFW_PRESS;
 
     // Window size
     glfwGetFramebufferSize(win, &input.windowWidth, &input.windowHeight);
