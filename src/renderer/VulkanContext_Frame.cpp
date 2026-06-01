@@ -758,21 +758,14 @@ void VulkanContext::updateHotbar() {
 
     if (m_pausedHud) {
         pushQuad(0.0f, 0.0f, W, H, {0.0f, 0.0f, 0.0f, 0.42f});
-
-        const float barW = 18.0f;
-        const float barH = 86.0f;
-        const float gapW = 18.0f;
-        const float x0 = W * 0.5f - barW - gapW * 0.5f;
-        const float x1 = W * 0.5f + gapW * 0.5f;
-        const float y  = H * 0.5f - barH * 0.5f;
-        const glm::vec4 barColor = {0.95f, 0.92f, 0.82f, 0.95f};
-        pushQuad(x0, y, barW, barH, barColor);
-        pushQuad(x1, y, barW, barH, barColor);
-
-        const char* text = "PAUSED";
-        const float textPx = 8.0f;
-        const float textW = 6.0f * 4.0f * textPx - textPx;
-        pushText(text, W * 0.5f - textW * 0.5f, y - 64.0f, textPx, {0.95f, 0.92f, 0.82f, 0.95f});
+        pushCenteredText("PAUSED", H * 0.5f - 72.0f, 8.0f, {0.95f, 0.92f, 0.82f, 0.95f});
+        const char* rows[] = { "RESUME", "SETTINGS", "QUIT" };
+        for (int i = 0; i < 3; ++i) {
+            float rx, ry, rw, rh;
+            pauseMenuRowRect(i, W, H, rx, ry, rw, rh);
+            pushQuad(rx, ry, rw, rh, {0.12f, 0.14f, 0.13f, 0.88f});
+            pushCenteredText(rows[i], ry + 9.0f, 5.0f, {0.95f, 0.92f, 0.82f, 0.92f});
+        }
     }
 
     if (verts.size() > UI_MAX_VERTS) verts.resize(UI_MAX_VERTS); // guard against buffer overflow

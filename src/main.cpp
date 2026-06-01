@@ -24,7 +24,9 @@ struct AppFlow {
     bool prevStart = false;
     bool prevSettings = false;
     bool prevMenuClick = false;
+    bool prevPauseClick = false;
     bool prevCtrlS = false;
+    AppMode settingsReturnMode = AppMode::MainMenu;
 #ifdef PASTEL_DEV_BUILD
     bool prevDevUiToggle = false;
 #endif
@@ -75,15 +77,33 @@ struct AppFlow {
         return action;
     }
 
+    int consumePauseClick(const PlayerInput& input) {
+        int action = 0; // 0=none, 1=resume, 2=settings, 3=quit
+        if (mode == AppMode::Paused && input.leftClick && !prevPauseClick) {
+            float x, y, w, h;
+            for (int i = 0; i < 3; ++i) {
+                pauseMenuRowRect(i, (float)input.windowWidth, (float)input.windowHeight, x, y, w, h);
+                if (input.mouseX >= x && input.mouseX <= x + w &&
+                    input.mouseY >= y && input.mouseY <= y + h) {
+                    action = i + 1;
+                }
+            }
+        }
+        prevPauseClick = input.leftClick;
+        return action;
+    }
+
     void updateMainMenuSettings(bool settingsPressed) {
         if (mode == AppMode::MainMenu && settingsPressed && !prevSettings)
-            mode = AppMode::Settings;
+            enterSettings();
         prevSettings = settingsPressed;
     }
 
     void enterSettings() {
-        if (mode == AppMode::MainMenu)
+        if (mode == AppMode::MainMenu || mode == AppMode::Paused) {
+            settingsReturnMode = mode;
             mode = AppMode::Settings;
+        }
     }
 
     void enterLoading() {
@@ -98,7 +118,12 @@ struct AppFlow {
 
     void leaveSettings() {
         if (mode == AppMode::Settings)
-            mode = AppMode::MainMenu;
+            mode = settingsReturnMode;
+    }
+
+    void resumeGameplay() {
+        if (mode == AppMode::Paused)
+            mode = AppMode::Gameplay;
     }
 
     void updateEscape(bool escPressed) {
@@ -108,9 +133,16 @@ struct AppFlow {
             else if (mode == AppMode::Paused)
                 mode = AppMode::Gameplay;
             else if (mode == AppMode::Settings)
-                mode = AppMode::MainMenu;
+                leaveSettings();
         }
         prevEsc = escPressed;
+    }
+
+    bool consumeInventoryEscape(bool escPressed, bool inventoryOpen) {
+        const bool pressed = mode == AppMode::Gameplay && inventoryOpen && escPressed && !prevEsc;
+        if (pressed)
+            prevEsc = escPressed;
+        return pressed;
     }
 
     bool consumeSavePress(bool savePressed) {
@@ -132,6 +164,10 @@ struct AppSettings {
     bool vsync = true;
     int aaMode = 0; // 0=off, 1=FXAA, 2=SMAA
     bool prevClick = false;
+
+    void syncClickState(const PlayerInput& input) {
+        prevClick = input.leftClick;
+    }
 
     bool update(const PlayerInput& input, AppMode mode) {
         bool backClicked = false;
@@ -249,12 +285,30 @@ int main() {
             applyDevUiInputCapture(input, ctx);
 #endif
 
-            app.updateEscape(input.quit);
+            if (app.consumeInventoryEscape(input.quit, gameState.inventoryOpen())) {
+                gameState.closeInventory();
+                input.quit = false;
+            } else {
+                app.updateEscape(input.quit);
+            }
             const bool wasSettings = app.settings();
             const int menuClickAction = app.consumeMainMenuClick(input);
+            const int pauseClickAction = app.consumePauseClick(input);
             app.updateMainMenuSettings(input.settingsKey);
-            if (menuClickAction == 2)
+            if (menuClickAction == 2) {
                 app.enterSettings();
+                settings.syncClickState(input);
+            }
+            if (pauseClickAction == 1) {
+                app.resumeGameplay();
+                clearGameplayInput(input);
+            }
+            else if (pauseClickAction == 2) {
+                app.enterSettings();
+                settings.syncClickState(input);
+            }
+            else if (pauseClickAction == 3)
+                window.close();
             if (wasSettings && settings.update(input, app.mode))
                 app.leaveSettings();
             if (app.consumeMainMenuStart(input.startKey) || menuClickAction == 1) {

@@ -47,6 +47,7 @@ public:
     const std::array<ItemStack, INV_SLOTS>& inventory() const { return m_inventory; }
 
     bool inventoryOpen() const { return m_inventoryOpen; }
+    void closeInventory() { m_inventoryOpen = false; }
     bool nearWorkbench() const { return m_nearWorkbench; }
 
     const std::vector<DroppedItem>& drops() const { return m_drops; }

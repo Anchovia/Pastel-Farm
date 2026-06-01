@@ -685,6 +685,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `Enter` / `S`는 백업 입력으로 유지하되, 화면 노출은 클릭형 메뉴 중심으로 정리. Settings 진입 클릭 프레임이 Settings row 클릭으로도 소비되지 않도록 업데이트 순서를 분리.
 - 검증 결과: MainMenu `START` 클릭, `SETTINGS` 클릭, Settings row 조작, BACK/ESC 복귀, Loading/Gameplay/Pause 흐름 정상 확인.
 
+### Pause 클릭형 row 메뉴 + 인벤토리 ESC 우선순위 (Tier 1-D 슬라이스)
+- Pause overlay를 단순 pause 아이콘에서 클릭형 `RESUME` / `SETTINGS` / `QUIT` row 메뉴로 전환. `pauseMenuRowRect`를 `Types.h`에 추가해 렌더링과 클릭 판정이 같은 screen-space rect를 공유.
+- `AppFlow::consumePauseClick`에서 마우스 좌클릭 edge-detect로 pause 메뉴 row를 판정. `RESUME`은 Gameplay 복귀, `SETTINGS`는 Settings 진입, `QUIT`은 `Window::close()`로 창 종료 요청.
+- Settings 진입 위치를 `settingsReturnMode`로 보관해 MainMenu에서 들어온 Settings는 MainMenu로, Pause에서 들어온 Settings는 Pause로 `BACK`/`ESC` 복귀.
+- `RESUME` 클릭 프레임의 마우스 입력이 월드 클릭으로 새지 않도록 gameplay 입력을 비움. Settings 진입 클릭 프레임도 Settings row 클릭으로 이어지지 않도록 click edge 상태를 동기화.
+- 인벤토리가 열린 Gameplay에서 `ESC`를 누르면 Pause 진입보다 인벤토리 닫기를 우선하도록 `GameState::closeInventory`와 `AppFlow::consumeInventoryEscape`를 추가. 인벤토리 UI와 Pause 메뉴가 동시에 겹쳐 보이던 문제 해결.
+- 검증 결과: Pause `RESUME`/`SETTINGS`/`QUIT`, Pause → Settings → Pause 복귀, MainMenu → Settings → MainMenu 복귀, 인벤토리 열린 상태의 `ESC` 닫기 우선순위 정상 확인.
+
 ---
 
 ## 게임 설계 메모

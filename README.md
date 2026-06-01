@@ -125,14 +125,14 @@
 - MainMenu 1차 App-state — 실행 직후 `PASTEL FARM`과 클릭형 `START` / `SETTINGS` row 표시. `START` 클릭(또는 `Enter`)으로 save 로드 + 초기 청크 로드 후 Gameplay 진입, `SETTINGS` 클릭(또는 `S`)으로 Settings 진입. 메뉴 중 게임 입력·시간 진행·청크 스트리밍 차단
 - Settings 1차 App-state — MainMenu에서 Settings 화면 진입, `ESC`/`BACK`으로 MainMenu 복귀. 설정 row 클릭으로 VSync ON/OFF(실제 present mode 적용), AA OFF/FXAA/SMAA(데이터/UI) 변경
 - Loading 1차 App-state — MainMenu에서 `START` 후 한 프레임 `LOADING` 화면을 표시하고, 그 다음 save 로드 + 초기 청크 로드 + Gameplay 진입
-- Pause 1차 App-state — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 dim overlay + pause 아이콘 + `PAUSED` 문구 표시
+- Pause 클릭 메뉴 — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 `PAUSED` + `RESUME` / `SETTINGS` / `QUIT` row 표시. Pause에서 Settings 진입 시 `BACK`/`ESC`는 Pause로 복귀. 인벤토리가 열린 Gameplay에서는 `ESC`가 먼저 인벤토리만 닫음
 
 > **스타듀식 오브젝트 경제 아크 ①~⑥ 완료.** (인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작 → 설치/철거+영속성)
 
 ---
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
-- **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 1차 / 추가 옵션 예정)
+- **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
 - **Tier 2 (비주얼)**: height fog · hemisphere ambient(warm/cool) · 카메라 댐핑 · vegetation/object variation · wind · **AA(SMAA + FXAA fallback)** · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless
