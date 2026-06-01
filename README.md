@@ -117,6 +117,17 @@
 - 오브젝트 설치/철거 — 제작한 작업대·울타리를 우클릭으로 바닥에 설치(인벤 소모), 좌클릭으로 철거(아이템 회수). 자연물은 도구 채집, 설치물은 맨손 철거
 - 오브젝트 영속성(save v2) — 청크별 오브젝트 직렬화. 설치물 재시작 유지 + 채집 자연물 respawn 해소
 - 작업대 제작(2단계) — 기본 레시피는 인벤 어디서나, 고급 레시피(`requiresWorkbench`)는 설치된 작업대 근처에서만 해금. `isObjectTypeNear` 판정. 데모: 돌담(STONE×2, 작업대 필요)
+
+> **스타듀식 오브젝트 경제 아크 ①~⑥ 완료.** (인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작 → 설치/철거+영속성)
+
+---
+
+## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
+- **Tier 1**: DevUI(ImGui) + GPU 프로파일링 · `FrameRenderData` 스냅샷 · `GpuBuffer` RAII · App-state(메인메뉴/일시정지/로딩) + 설정
+- **Tier 2 (비주얼)**: height fog · hemisphere ambient(warm/cool) · 카메라 댐핑 · vegetation/object variation · wind · **AA(SMAA + FXAA fallback)** · LUT
+- **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄)
+- **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless
+
 ---
 
 ## 프로젝트 구조

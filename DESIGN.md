@@ -95,10 +95,18 @@ Explore → Gather → Farm/Build → Progress → Unlock → Return to world
 ## Visual Direction
 타깃: **스타일라이즈드 grounded 로우폴리**. 비주얼 퀄리티는 조명·그림자·분위기·구도·scene dressing·color grading에서 나온다. 사실성·PBR·AAA 충실도 아님.
 
+### Visual North Star — 결정됨
+**레퍼런스: 스타일라이즈드 로우폴리 "디오라마" 룩 (예: 덕코프류) — 단, 그래픽만 참고하고 게임 시스템(전투 등)은 차용하지 않는다.**
+- 핵심은 지오메트리 디테일이 아니라 **art-directed lighting + 분위기 + 구도**다. (로우폴리는 수단)
+- 추구: warm/cool 분리 조명, 따뜻한 톤, 읽히는 실루엣, 부드러운 후처리(과한 bloom·sharpen 회피), composition.
+- **현 엔진은 이미 토대를 갖춤**(top/side vertex color + AO + shadow/PCF + day-night + fog + post-grading[exposure/contrast/saturation/split-tone/vignette]). 남은 격차는 "기능 부재"가 아니라 **튜닝과 소수의 추가**(height fog, hemisphere/colored ambient, vegetation/object variation, wind). → **다시 만들기가 아니라 조율하기.** (기술 단계는 `ARCHITECTURE.md` 비주얼 로드맵)
+- 전투 중심 연출(hit feedback, attack anticipation 등)은 **차용 안 함** — 코지 농사/라이프심엔 환경 연출(grass sway·leaf drift·발걸음/상호작용 피드백·ambient wildlife)만 가져온다.
+
 ---
 
 ## Long-Term Feature Direction
 작물 · 날씨 · 계절 · 동물 · tractor/도구 · 마을/NPC · 가벼운 서사 · 환경 스토리텔링.
+**비주얼·분위기 증폭기**(콘텐츠 재사용 가치 큼): photo mode · 날씨/계절 프리셋 · ambient wildlife(새·나비·반딧불) · 사운드 생태(바람·새·밤벌레).
 > 모든 기능이 확정은 아니며 스코프는 의도적으로 통제한다.
 
 ## 멀티플레이 — v2 기둥 (post-prototype)

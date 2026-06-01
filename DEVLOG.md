@@ -565,6 +565,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 데모 고급 레시피: 돌담 `STONE×2`(작업대 필요). `ObjectType::STONE_FENCE` + 메시(회색 벽) + ⑥ 설치/철거/save 인프라 그대로 재사용.
 - **이로써 스타듀 오브젝트 경제 아크 ①~⑥ 전체 완성** — 인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작(인벤+작업대 2단계) → 설치/철거+영속성.
 
+### 중간점검 — 방향/마일스톤 재설정 (외부 분석 검토 후)
+- 아크 ①~⑥ 완료 시점에 프로젝트 상태·기술부채·미래대비를 점검(외부 LLM 분석을 비판적으로 검토). 결론을 4개 문서에 반영.
+- **핵심 판단**: 기술 기반은 이미 충분 — "기능 추가"보다 **iteration speed · 비주얼 정체성 · app-flow**가 ROI 높음. 비주얼은 **다시 만들기가 아니라 조율**(grading·fog·shadow·AO 이미 존재).
+- **비주얼 노스스타 확정**(DESIGN): 스타일라이즈드 로우폴리 디오라마 룩(덕코프류 **그래픽만** 참고, 시스템·전투 연출은 차용 안 함).
+- **기술 Tier 재정렬**(ARCHITECTURE): Tier 1(DevUI/프로파일링·`FrameRenderData` 스냅샷·`GpuBuffer` RAII·app-state/메뉴/설정) → Tier 2(height fog·hemisphere ambient·wind·variation·AA SMAA+FXAA·LUT) → Tier 3(오디오·IRenderPass·데이터화·테스트).
+- **명시적 비목표 신설**(ARCHITECTURE): ECS rewrite·render graph·asset DB·material graph·job system·RTX/PBR/mesh shader/bindless — rule of 3/실제 병목 전엔 안 함(renderer addiction 방어선).
+- **불변식 명문화**: 결정론 생성 / 레이어 분리(렌더러=스냅샷 소비) / 상태는 World·GameState 경유 / 지형 불변 / 세이브 버전 정책.
+- **분석 정정 사항**(코드 실제 기준): 색 그레이딩·split-tone·fog는 이미 구현됨 / 청크 리빌드 throttle 존재 / 에셋·텍스처·애니메이션 거의 없음 → asset DB·material 시스템은 시기상조 / 좌표 변환은 이미 중앙화.
+- **즉시 가능한 작은 완성도**로 식별: 오브젝트 충돌(`collidable` 이미 데이터, `canOccupy` 한 줄).
+
 ---
 
 ## 게임 설계 메모
