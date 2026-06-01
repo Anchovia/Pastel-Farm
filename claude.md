@@ -62,4 +62,33 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
+## 5. Code Style
+
+- All comments must be written in **English**.
+
+## 6. Before You Start
+
+**Summarize, confirm, then act.**
+
+- Before starting any task, summarize the plan and **ask for explicit approval** before proceeding.
+- If you haven't seen the relevant source files, **ask before implementing**. Don't guess at existing code structure.
+- Before proposing structural changes, check `ARCHITECTURE.md`. Decisions already marked as resolved should not be revisited without discussion.
+- Do not create new files or add dependencies without explicit approval.
+
+## 7. Build & Workflow
+
+**The user owns the build. You own the handoff.**
+
+- **Never run the build yourself.** The user handles all builds.
+- After implementation, list what the user should verify in the build result (behavior, visuals, errors, edge cases).
+- After implementation, list what **existing functionality might be affected or broken**.
+- After build verification is confirmed, update relevant docs as appropriate: `README`, `DEVLOG`, `DESIGN`, `ARCHITECTURE`.
+
+## 8. Refactoring
+
+- Do not mix refactoring with feature implementation.
+- If refactoring is needed, **propose it as a separate task** after the current task is complete.
+
+---
+
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

@@ -25,6 +25,7 @@ GameState::GameState() {
     m_inventory[1] = { ItemType::TOOL_WATERINGCAN, 1  };
     m_inventory[2] = { ItemType::SEED_WHEAT,       10 };
     m_inventory[3] = { ItemType::TOOL_AXE,         1  };
+    m_inventory[4] = { ItemType::TOOL_SICKLE,      1  };
 }
 
 void GameState::update(float dt, const PlayerInput& input, const Camera& camera, World& world) {
@@ -122,8 +123,19 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                     if (world.inBounds(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z)) {
                         m_targetTile = finalTargetTile;
 
-                        if (input.leftClick)
-                            world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
+                        if (input.leftClick) {
+                            if (world.getTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z) == TileType::WHEAT) {
+                                // Crops are protected: only a sickle can harvest, and only when ripe.
+                                ItemType sel = m_inventory[m_selectedSlot].type;
+                                TileState s  = world.getTileState(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z);
+                                if (sel == ItemType::TOOL_SICKLE && s.growthStage == 3 &&
+                                    addItem(ItemType::ITEM_WHEAT, 1)) {
+                                    world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
+                                }
+                            } else {
+                                world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
+                            }
+                        }
 
                         if (input.rightClick) {
                             ItemStack& slot = m_inventory[m_selectedSlot];
@@ -152,10 +164,14 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                                     if (--slot.count <= 0) slot = ItemStack{}; // consume seed
                                 }
                             } else if (item == ItemType::TOOL_WATERINGCAN) {
-                                if (world.getTile(tx, ty, tz) == TileType::FARMLAND) {
-                                    TileState s = world.getTileState(tx, ty, tz);
+                                // A planted crop occupies the tile above its soil, so the picked
+                                // tile is the WHEAT — water the FARMLAND directly beneath it.
+                                int fz = tz;
+                                if (world.getTile(tx, ty, fz) == TileType::WHEAT) fz -= 1;
+                                if (world.getTile(tx, ty, fz) == TileType::FARMLAND) {
+                                    TileState s = world.getTileState(tx, ty, fz);
                                     s.watered = true;
-                                    world.setTileState(tx, ty, tz, s);
+                                    world.setTileState(tx, ty, fz, s);
                                 }
                             }
                         }
@@ -167,6 +183,24 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
             }
         }
     }
+}
+
+bool GameState::addItem(ItemType type, int count) {
+    // Fill an existing stack of the same type first.
+    for (ItemStack& slot : m_inventory) {
+        if (slot.type == type && slot.count > 0) {
+            slot.count += count;
+            return true;
+        }
+    }
+    // Otherwise use the first empty slot.
+    for (ItemStack& slot : m_inventory) {
+        if (slot.type == ItemType::NONE || slot.count <= 0) {
+            slot = { type, count };
+            return true;
+        }
+    }
+    return false; // inventory full
 }
 
 void GameState::setPlayerPosition(const glm::vec3& pos) {

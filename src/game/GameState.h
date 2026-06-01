@@ -52,6 +52,11 @@ public:
     void setTime(float t);
 
 private:
+    // Adds count items of the given type to the inventory: fills an existing
+    // matching stack first, otherwise the first empty slot. Returns false if
+    // there is no room (item not added).
+    bool addItem(ItemType type, int count);
+
     Player m_player;
     std::optional<glm::ivec3> m_targetTile;
 

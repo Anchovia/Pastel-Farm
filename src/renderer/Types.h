@@ -27,6 +27,8 @@ enum class ItemType : uint8_t {
     TOOL_AXE,
     SEED_WHEAT,
     TOOL_WATERINGCAN,
+    TOOL_SICKLE,
+    ITEM_WHEAT,
     COUNT,
 };
 
@@ -34,7 +36,8 @@ inline bool isBlock(ItemType t) {
     return t >= ItemType::BLOCK_GRASS && t <= ItemType::BLOCK_WATER;
 }
 inline bool isTool(ItemType t) {
-    return t == ItemType::TOOL_HOE || t == ItemType::TOOL_AXE || t == ItemType::TOOL_WATERINGCAN;
+    return t == ItemType::TOOL_HOE || t == ItemType::TOOL_AXE || t == ItemType::TOOL_WATERINGCAN
+        || t == ItemType::TOOL_SICKLE;
 }
 inline TileType itemToTile(ItemType t) {
     switch (t) {
@@ -59,6 +62,8 @@ inline glm::vec3 itemColor(ItemType t) {
         case ItemType::TOOL_AXE:     return {0.50f, 0.50f, 0.55f};
         case ItemType::SEED_WHEAT:   return {0.80f, 0.75f, 0.20f};
         case ItemType::TOOL_WATERINGCAN: return {0.30f, 0.55f, 0.80f};
+        case ItemType::TOOL_SICKLE:  return {0.70f, 0.72f, 0.45f};
+        case ItemType::ITEM_WHEAT:   return {0.90f, 0.75f, 0.15f};
         default:                     return {0.0f,  0.0f,  0.0f};
     }
 }
