@@ -37,10 +37,15 @@ struct AppFlow {
         return mode == AppMode::MainMenu;
     }
 
-    void updateMainMenuStart(bool startPressed) {
-        if (mode == AppMode::MainMenu && startPressed && !prevStart)
-            mode = AppMode::Gameplay;
+    bool consumeMainMenuStart(bool startPressed) {
+        const bool pressed = mode == AppMode::MainMenu && startPressed && !prevStart;
         prevStart = startPressed;
+        return pressed;
+    }
+
+    void enterGameplay() {
+        if (mode == AppMode::MainMenu)
+            mode = AppMode::Gameplay;
     }
 
     void updatePauseToggle(bool escPressed) {
@@ -114,25 +119,25 @@ int main() {
         InputManager  inputManager(window);
         Camera camera(45.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
 
-        // Auto-load save file if it exists
-        {
+        AppFlow app;
+        bool worldSessionStarted = false;
+        glm::ivec2 lastPlayerChunk{0, 0};
+
+        auto startWorldSession = [&]() {
             glm::vec3 savedPos;
             float     savedTime;
             if (world.load("save.dat", savedPos, savedTime)) {
                 gameState.setPlayerPosition(savedPos);
                 gameState.setTime(savedTime);
             }
-        }
 
-        // Initial chunk load around spawn (or restored position)
-        glm::ivec2 spawnChunk = World::chunkCoord(
-            (int)gameState.player().position().x,
-            (int)gameState.player().position().y
-        );
-        world.loadChunksAround(spawnChunk.x, spawnChunk.y, LOAD_RADIUS);
-        glm::ivec2 lastPlayerChunk = spawnChunk;
-
-        AppFlow app;
+            lastPlayerChunk = World::chunkCoord(
+                (int)gameState.player().position().x,
+                (int)gameState.player().position().y
+            );
+            world.loadChunksAround(lastPlayerChunk.x, lastPlayerChunk.y, LOAD_RADIUS);
+            worldSessionStarted = true;
+        };
 
         float  orbitAngle = 45.0f;
         double lastTime   = glfwGetTime();
@@ -155,7 +160,11 @@ int main() {
 #endif
 
             app.updatePauseToggle(input.quit);
-            app.updateMainMenuStart(input.startKey);
+            if (app.consumeMainMenuStart(input.startKey)) {
+                startWorldSession();
+                app.enterGameplay();
+                clearGameplayInput(input);
+            }
 
             applyAppModeInputPolicy(input, app.mode);
 
@@ -164,7 +173,7 @@ int main() {
             if (input.rotateRight) orbitAngle += rotSpeed;
 
             // Ctrl+S save (edge-detect)
-            if (app.consumeSavePress(input.saveKey))
+            if (worldSessionStarted && app.consumeSavePress(input.saveKey))
                 world.save("save.dat", gameState.player().position(), gameState.time());
 
             if (input.windowWidth > 0 && input.windowHeight > 0)
@@ -175,14 +184,16 @@ int main() {
                 gameState.update(dt, input, camera, world);
 
             // Load/unload chunks when player crosses a chunk boundary
-            glm::ivec2 playerChunk = World::chunkCoord(
-                (int)gameState.player().position().x,
-                (int)gameState.player().position().y
-            );
-            if (playerChunk != lastPlayerChunk) {
-                world.loadChunksAround(playerChunk.x, playerChunk.y, LOAD_RADIUS);
-                world.unloadChunksOutside(playerChunk.x, playerChunk.y, UNLOAD_RADIUS);
-                lastPlayerChunk = playerChunk;
+            if (worldSessionStarted) {
+                glm::ivec2 playerChunk = World::chunkCoord(
+                    (int)gameState.player().position().x,
+                    (int)gameState.player().position().y
+                );
+                if (playerChunk != lastPlayerChunk) {
+                    world.loadChunksAround(playerChunk.x, playerChunk.y, LOAD_RADIUS);
+                    world.unloadChunksOutside(playerChunk.x, playerChunk.y, UNLOAD_RADIUS);
+                    lastPlayerChunk = playerChunk;
+                }
             }
 
             ctx.drawFrame(FrameRenderData{

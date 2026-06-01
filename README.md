@@ -83,7 +83,7 @@
 - 인게임 시간 시스템 — 하루 120초 주기(`DAY_DURATION`), `timeOfDay`(0→1, 자정→정오→자정) + `day` 카운터. 하늘 배경색이 자정/새벽/낮/노을 4 키프레임 선형 보간으로 변화
 - 아이템/도구 시스템 — `ItemType` enum(블록 6종 + 도구 2종)으로 핫바 통합. 도구 선택 시 블록 미설치(동작은 이후 단계). `I`키로 인벤토리 창 토글, 슬롯 클릭으로 핫바에 아이템 할당
 - 농사 시스템 — 호미로 GRASS/DIRT → FARMLAND 경작. SEED_WHEAT로 씨앗 심기 → WHEAT 성장(단계별 색상 변화: 연초록→황금). `m_day` 기반 2일마다 1단계 성장. 완숙(stage 3) 좌클릭 수확
-- 세계 저장/로드 — 플레이어가 수정한 청크만 `save.dat`에 바이너리로 저장(타일 + TileState). Ctrl+S 저장, 시작 시 자동 로드. 언로드된 수정 청크는 메모리에 보관했다가 재방문 시 복원
+- 세계 저장/로드 — 플레이어가 수정한 청크만 `save.dat`에 바이너리로 저장(타일 + TileState). Ctrl+S 저장, Gameplay 진입 시 자동 로드. 언로드된 수정 청크는 메모리에 보관했다가 재방문 시 복원
 - 동적 태양 조명 — UBO에 `lightDir(xyz) + dayFactor(w)` 추가. `timeOfDay` 기반으로 태양 고도/방위각 계산, 낮엔 Lambert diffuse 최대, 밤엔 ambient 0.15(달빛)만 남도록 셰이더 전체 적용
 - Shadow Map 인프라 — 1024×1024 depth-only `VkImage` + shadow 전용 `VkRenderPass` / `VkFramebuffer` 생성. 스왑체인과 독립적으로 한 번만 생성. Shadow pass 실행 및 셰이더 샘플링은 다음 단계
 - Shadow Pass 파이프라인 — depth-only 파이프라인 + `shadow.vert`(push constant lightMVP). `drawFrame`에서 태양 방향 기반 orthographic light matrix 계산, main pass 이전에 청크 메시를 태양 시점으로 렌더링해 shadow map을 채움
@@ -122,7 +122,7 @@
 - `FrameRenderData` 스냅샷 — `drawFrame`의 프레임 입력을 구조체 1개로 묶어 렌더러 public 경계를 안정화
 - `GpuBuffer` RAII — `VkBuffer+VkDeviceMemory`(+mapped)를 move-only 래퍼로 통합하고 device 파괴 전 명시 정리
 - DevUI(ImGui) + GPU 프로파일링 — `PASTEL_DEV_BUILD` 전용 F3 패널. post pass 위에 렌더링하고 GPU timestamp로 total/shadow/scene/post/imgui 구간 시간 표시
-- MainMenu 1차 App-state — 실행 직후 `PASTEL FARM` / `PRESS ENTER` 메뉴 표시, `Enter`로 Gameplay 진입. 메뉴 중 게임 입력과 시간 진행 차단
+- MainMenu 1차 App-state — 실행 직후 `PASTEL FARM` / `PRESS ENTER` 메뉴 표시, `Enter`로 save 로드 + 초기 청크 로드 후 Gameplay 진입. 메뉴 중 게임 입력·시간 진행·청크 스트리밍 차단
 - Pause 1차 App-state — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 dim overlay + pause 아이콘 + `PAUSED` 문구 표시
 
 > **스타듀식 오브젝트 경제 아크 ①~⑥ 완료.** (인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작 → 설치/철거+영속성)

@@ -638,6 +638,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - Tiny UI Text로 `PASTEL FARM` / `PRESS ENTER` 메뉴 화면을 표시. 새 폰트·텍스처·의존성 없이 기존 UI quad 파이프라인 재사용.
 - 검증 결과: 실행 직후 메뉴 표시, Enter 게임 진입, 메뉴 중 입력 차단, 진입 후 pause/resume 및 DevUI 정상 확인.
 
+### 월드 세션 시작 지연 (Tier 1-D 슬라이스)
+- 앱 시작 시 즉시 실행하던 `save.dat` 로드와 초기 청크 로드를 `startWorldSession` 람다로 이동. MainMenu는 더 이상 이미 준비된 게임 위에 덮이는 화면이 아니라, Gameplay 진입 전 대기 상태가 됨.
+- `Enter` 입력을 consume할 때 save 로드 → 플레이어 위치/시간 복원 → 해당 위치 주변 청크 로드 → Gameplay 진입 순서로 실행. 시작 입력 프레임의 게임플레이 입력은 `clearGameplayInput`으로 비워 첫 프레임 누수 방지.
+- `worldSessionStarted` 플래그로 메뉴 중 Ctrl+S 저장과 청크 스트리밍을 차단. 메뉴에서 기다려도 게임 시간·작물 성장·월드 로드가 진행되지 않음.
+- 검증 결과: 메뉴 대기 중 시간 정지, Enter 후 save 위치/시간 복원, 월드 표시, 저장·pause/resume·DevUI 정상 확인.
+
 ---
 
 ## 게임 설계 메모
