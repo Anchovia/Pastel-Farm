@@ -81,7 +81,7 @@ src/
 - ✅ 카메라 follow 댐핑 — `Camera` 내부 `m_followTarget` 지수 보간 + Loading 후 `snapToTarget`으로 저장 위치 스냅. 플레이어 추적감 개선, 회전은 기존 즉시 반응 유지
 - ✅ hemisphere/colored ambient — `chunk.frag`/`triangle.frag`에서 법선 방향 기반 warm/cool ambient tint 적용. 밤 ambient 바닥값은 0.10으로 낮춰 야간을 더 어둡게 조율
 - height fog
-- vegetation/object variation(스케일/회전/tint) · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
+- organic dressing layer(풀 clump/잔돌/흙 패치/길 가장자리) · vegetation/object variation(스케일/회전/tint) · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -93,8 +93,14 @@ src/
 - ✅ color grading / tone mapping (post 1패스: exposure/contrast/saturation/split-tone/vignette)
 - ✅ 그림자 접지 튜닝 (피터패닝 — bias 축소 + cull 조정 완료)
 - contact / blob shadow (접지감 추가, 거의 무료)
-- terrain breakup (vertex color hue / dirt 패치)
+- terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
 - height fog / vegetation variation / wind / sky tint
+
+### Grid 규칙 vs Organic 표현 — **결정**
+- 농사·설치/철거·충돌·저장 좌표는 grid 기반으로 유지한다. 플레이어 규칙은 예측 가능해야 한다.
+- 자연 환경은 grid를 그대로 드러내지 않는다. 큰 잔디/흙 면을 타일별 색 랜덤으로 흔들면 격자감이 더 강해지므로 금지.
+- 자연스러운 breakup은 렌더/월드의 별도 dressing layer로 만든다. 후보: 낮은 풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리, 덤불/꽃/forage.
+- dressing layer는 좌표 기반 결정론을 유지하고, 가능하면 저장 대상이 아닌 재생 가능한 시각 레이어로 시작한다.
 
 ### 스타듀식 오브젝트 경제 — **결정**(우선순위 ↑, 복셀 블록 편집은 은퇴)
 순서: ✅① 인벤토리/작물 경제 → ✅② 제네릭 오브젝트 시스템 → ✅③ 자원 채집 → ✅④ 지형 불변화 → ⑤⑥ 제작·건축(아래 분할) → ⑦ 이후.
