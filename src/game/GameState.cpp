@@ -20,11 +20,11 @@ bool canOccupy(const World& world, const glm::vec3& position) {
 }
 
 GameState::GameState() {
-    m_palette = {
-        ItemType::BLOCK_GRASS,  ItemType::BLOCK_DIRT,   ItemType::BLOCK_STONE,
-        ItemType::BLOCK_WOOD,   ItemType::BLOCK_LEAVES,  ItemType::BLOCK_WATER,
-        ItemType::TOOL_HOE,     ItemType::TOOL_WATERINGCAN, ItemType::SEED_WHEAT,
-    };
+    // Starting inventory (slots 4..26 begin empty)
+    m_inventory[0] = { ItemType::TOOL_HOE,         1  };
+    m_inventory[1] = { ItemType::TOOL_WATERINGCAN, 1  };
+    m_inventory[2] = { ItemType::SEED_WHEAT,       10 };
+    m_inventory[3] = { ItemType::TOOL_AXE,         1  };
 }
 
 void GameState::update(float dt, const PlayerInput& input, const Camera& camera, World& world) {
@@ -83,32 +83,7 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
     }
 
     if (input.windowWidth > 0 && input.windowHeight > 0) {
-        // Inventory click: assign hovered item to selected hotbar slot
-        if (m_inventoryOpen && input.leftClick) {
-            const float W  = (float)input.windowWidth;
-            const float H  = (float)input.windowHeight;
-            const float gridW = INV_COLS * INV_SLOT_SIZE + (INV_COLS - 1) * INV_GAP;
-            const float gridH = INV_ROWS * INV_SLOT_SIZE + (INV_ROWS - 1) * INV_GAP;
-            const float ox = (W - gridW) * 0.5f - INV_PAD;
-            const float oy = (H - gridH) * 0.5f - INV_PAD;
-            const float mx = (float)input.mouseX;
-            const float my = (float)input.mouseY;
-
-            for (int r = 0; r < INV_ROWS; ++r) {
-                for (int c = 0; c < INV_COLS; ++c) {
-                    int idx = r * INV_COLS + c;
-                    ItemType item = static_cast<ItemType>(idx + 1); // skip NONE(0)
-                    if (item >= ItemType::COUNT) continue;
-
-                    float sx = ox + INV_PAD + c * (INV_SLOT_SIZE + INV_GAP);
-                    float sy = oy + INV_PAD + r * (INV_SLOT_SIZE + INV_GAP);
-                    if (mx >= sx && mx <= sx + INV_SLOT_SIZE &&
-                        my >= sy && my <= sy + INV_SLOT_SIZE) {
-                        m_palette[m_selectedSlot] = item;
-                    }
-                }
-            }
-        }
+        // (Inventory is display-only for now — no click-to-assign / drag.)
 
         // World interaction — suppressed while inventory is open
         if (!m_inventoryOpen) {
@@ -151,7 +126,8 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                             world.setTile(finalTargetTile.x, finalTargetTile.y, finalTargetTile.z, TileType::AIR);
 
                         if (input.rightClick) {
-                            ItemType item = m_palette[m_selectedSlot];
+                            ItemStack& slot = m_inventory[m_selectedSlot];
+                            ItemType item = slot.type;
                             const int tx = finalTargetTile.x;
                             const int ty = finalTargetTile.y;
                             const int tz = finalTargetTile.z;
@@ -165,13 +141,15 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                                 if (cur == TileType::GRASS || cur == TileType::DIRT)
                                     world.setTile(tx, ty, tz, TileType::FARMLAND);
                             } else if (item == ItemType::SEED_WHEAT) {
-                                if (world.getTile(tx, ty, tz) == TileType::FARMLAND &&
+                                if (slot.count > 0 &&
+                                    world.getTile(tx, ty, tz) == TileType::FARMLAND &&
                                     world.getTile(tx, ty, tz + 1) == TileType::AIR) {
                                     world.setTile(tx, ty, tz + 1, TileType::WHEAT);
                                     TileState s;
                                     s.growthStage    = 0;
                                     s.lastUpdatedDay = (uint32_t)m_day;
                                     world.setTileState(tx, ty, tz + 1, s);
+                                    if (--slot.count <= 0) slot = ItemStack{}; // consume seed
                                 }
                             } else if (item == ItemType::TOOL_WATERINGCAN) {
                                 if (world.getTile(tx, ty, tz) == TileType::FARMLAND) {

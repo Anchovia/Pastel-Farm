@@ -20,7 +20,7 @@ public:
     ~VulkanContext();
 
     void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                   int hotbarSelected, const std::array<ItemType, HOTBAR_SLOTS>& palette, float timeOfDay, bool inventoryOpen, int day);
+                   int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day);
     void waitIdle();
 
 private:
@@ -178,7 +178,7 @@ private:
     uint32_t                 m_uiVertexCount   = 0;
     int                      m_hotbarSelected  = 0;
     int                      m_dayHud          = 0;
-    std::array<ItemType, HOTBAR_SLOTS> m_hotbarPalette{};
+    std::array<ItemStack, INV_SLOTS> m_invHud{};
     bool                     m_inventoryOpen   = false;
     std::array<float, 4>     m_skyColor        = {0.08f, 0.08f, 0.12f, 1.0f};
     std::vector<VkBuffer>       m_playerInstBuffer;

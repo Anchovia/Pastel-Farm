@@ -63,14 +63,21 @@ inline glm::vec3 itemColor(ItemType t) {
     }
 }
 
+// Inventory item stack (a slot holds one item type + a count)
+struct ItemStack {
+    ItemType type  = ItemType::NONE;
+    int      count = 0;
+};
+
 // Inventory grid layout (shared between GameState and VulkanContext)
-static constexpr int   INV_COLS      = 4;
-static constexpr int   INV_ROWS      = 3;  // 4x3 grid fits all item types incl. tools/seeds
-static constexpr float INV_SLOT_SIZE = 64.0f;
+static constexpr int   INV_COLS      = 9;   // first row == hotbar
+static constexpr int   INV_ROWS      = 3;
+static constexpr float INV_SLOT_SIZE = 52.0f;
 static constexpr float INV_GAP       = 8.0f;
 static constexpr float INV_PAD       = 16.0f;
 
 static constexpr int HOTBAR_SLOTS = 9;
+static constexpr int INV_SLOTS    = INV_COLS * INV_ROWS; // 27 (hotbar 0..8 + backpack)
 
 struct Vertex {
     glm::vec3 pos;

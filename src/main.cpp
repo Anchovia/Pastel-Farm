@@ -81,7 +81,7 @@ int main() {
             }
 
             ctx.drawFrame(camera, gameState.player().position(), gameState.targetTile(),
-                          gameState.selectedSlot(), gameState.palette(), gameState.timeOfDay(),
+                          gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
                           gameState.inventoryOpen(), gameState.day());
         }
         ctx.waitIdle();

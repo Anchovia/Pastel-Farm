@@ -40,7 +40,7 @@ public:
     const std::optional<glm::ivec3>& targetTile() const { return m_targetTile; }
 
     int selectedSlot() const { return m_selectedSlot; }
-    const std::array<ItemType, HOTBAR_SLOTS>& palette() const { return m_palette; }
+    const std::array<ItemStack, INV_SLOTS>& inventory() const { return m_inventory; }
 
     bool inventoryOpen() const { return m_inventoryOpen; }
 
@@ -56,7 +56,7 @@ private:
     std::optional<glm::ivec3> m_targetTile;
 
     int m_selectedSlot = 0;
-    std::array<ItemType, HOTBAR_SLOTS> m_palette;
+    std::array<ItemStack, INV_SLOTS> m_inventory;
 
     bool m_inventoryOpen   = false;
     bool m_prevToggleInv   = false; // edge-detect for I key

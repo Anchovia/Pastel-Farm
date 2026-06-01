@@ -207,9 +207,9 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
 //  drawFrame
 // ============================================================
 void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                              int hotbarSelected, const std::array<ItemType, HOTBAR_SLOTS>& palette, float timeOfDay, bool inventoryOpen, int day) {
+                              int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day) {
     m_hotbarSelected = hotbarSelected;
-    m_hotbarPalette  = palette;
+    m_invHud         = inventory;
     m_inventoryOpen  = inventoryOpen;
     m_dayHud         = day;
 
@@ -376,6 +376,26 @@ void VulkanContext::updateHotbar() {
         verts.push_back({p3, color});
     };
 
+    // Digit renderer (3x5 dot-matrix -> quads; row bits 4=left, 2=mid, 1=right)
+    static const uint8_t DIGITS[10][5] = {
+        {7,5,5,5,7}, {2,2,2,2,2}, {7,1,7,4,7}, {7,1,7,1,7}, {5,5,7,1,1},
+        {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,1,1}, {7,5,7,5,7}, {7,5,7,1,7},
+    };
+    auto pushNumber = [&](int value, float ox, float oy, float px, glm::vec4 col) {
+        if (value < 0) value = 0;
+        int digs[12]; int n = 0;
+        if (value == 0) digs[n++] = 0;
+        else for (int v = value; v > 0 && n < 12; v /= 10) digs[n++] = v % 10;
+        float cx = ox;
+        for (int i = n - 1; i >= 0; i--) {        // most significant first
+            for (int r = 0; r < 5; r++)
+                for (int c = 0; c < 3; c++)
+                    if (DIGITS[digs[i]][r] & (1 << (2 - c)))
+                        pushQuad(cx + c * px, oy + r * px, px, px, col);
+            cx += 4.0f * px;
+        }
+    };
+
     // --- Hotbar ---
     const float slot = 56.0f, gap = 6.0f, pad = 6.0f;
     const float barW = HOTBAR_SLOTS * slot + (HOTBAR_SLOTS - 1) * gap;
@@ -394,12 +414,13 @@ void VulkanContext::updateHotbar() {
             : glm::vec4(0.20f, 0.20f, 0.24f, 0.9f);
         pushQuad(x, startY, slot, slot, bg);
 
-        ItemType t = m_hotbarPalette[i];
-        if (t != ItemType::NONE) {
-            glm::vec3 col = itemColor(t);
+        const ItemStack& st = m_invHud[i];
+        if (st.type != ItemType::NONE) {
             float inset = 10.0f;
             pushQuad(x + inset, startY + inset, slot - 2 * inset, slot - 2 * inset,
-                     glm::vec4(col, 1.0f));
+                     glm::vec4(itemColor(st.type), 1.0f));
+            if (st.count > 1)
+                pushNumber(st.count, x + 5.0f, startY + slot - 5 * 3.0f - 5.0f, 3.0f, {1.0f, 1.0f, 1.0f, 0.95f});
         }
     }
 
@@ -418,48 +439,30 @@ void VulkanContext::updateHotbar() {
         // Panel background
         pushQuad(ox, oy, panelW, panelH, {0.12f, 0.12f, 0.15f, 0.92f});
 
-        for (int r = 0; r < INV_ROWS; ++r) {
-            for (int c = 0; c < INV_COLS; ++c) {
-                int idx = r * INV_COLS + c;
-                ItemType item = static_cast<ItemType>(idx + 1); // skip NONE(0)
-                if (item >= ItemType::COUNT) continue;
+        for (int idx = 0; idx < INV_SLOTS; ++idx) {
+            int c = idx % INV_COLS;
+            int r = idx / INV_COLS;
+            float sx = ox + INV_PAD + c * (INV_SLOT_SIZE + INV_GAP);
+            float sy = oy + INV_PAD + r * (INV_SLOT_SIZE + INV_GAP);
 
-                float sx = ox + INV_PAD + c * (INV_SLOT_SIZE + INV_GAP);
-                float sy = oy + INV_PAD + r * (INV_SLOT_SIZE + INV_GAP);
+            glm::vec4 slotBg = (idx == m_hotbarSelected)
+                ? glm::vec4(0.35f, 0.35f, 0.40f, 1.0f)
+                : glm::vec4(0.22f, 0.22f, 0.27f, 1.0f);
+            pushQuad(sx, sy, INV_SLOT_SIZE, INV_SLOT_SIZE, slotBg);
 
-                pushQuad(sx, sy, INV_SLOT_SIZE, INV_SLOT_SIZE, {0.22f, 0.22f, 0.27f, 1.0f});
-
-                glm::vec3 col = itemColor(item);
-                float inset = 12.0f;
+            const ItemStack& st = m_invHud[idx];
+            if (st.type != ItemType::NONE) {
+                float inset = 10.0f;
                 pushQuad(sx + inset, sy + inset, INV_SLOT_SIZE - 2 * inset, INV_SLOT_SIZE - 2 * inset,
-                         glm::vec4(col, 1.0f));
+                         glm::vec4(itemColor(st.type), 1.0f));
+                if (st.count > 1)
+                    pushNumber(st.count, sx + 4.0f, sy + INV_SLOT_SIZE - 5 * 2.0f - 4.0f, 2.0f, {1.0f, 1.0f, 1.0f, 0.95f});
             }
         }
     }
 
-    // --- Day counter HUD (top-left) ---
-    // Digits drawn as 3x5 dot-matrix quads (no font texture). Row bits: 4=left,2=mid,1=right.
-    {
-        static const uint8_t DIGITS[10][5] = {
-            {7,5,5,5,7}, {2,2,2,2,2}, {7,1,7,4,7}, {7,1,7,1,7}, {5,5,7,1,1},
-            {7,4,7,1,7}, {7,4,7,5,7}, {7,1,1,1,1}, {7,5,7,5,7}, {7,5,7,1,7},
-        };
-        auto pushNumber = [&](int value, float ox, float oy, float px, glm::vec4 col) {
-            if (value < 0) value = 0;
-            int digs[12]; int n = 0;
-            if (value == 0) digs[n++] = 0;
-            else for (int v = value; v > 0 && n < 12; v /= 10) digs[n++] = v % 10;
-            float cx = ox;
-            for (int i = n - 1; i >= 0; i--) {        // most significant first
-                for (int r = 0; r < 5; r++)
-                    for (int c = 0; c < 3; c++)
-                        if (DIGITS[digs[i]][r] & (1 << (2 - c)))
-                            pushQuad(cx + c * px, oy + r * px, px, px, col);
-                cx += 4.0f * px;
-            }
-        };
-        pushNumber(m_dayHud, 16.0f, 16.0f, 4.0f, {1.0f, 1.0f, 1.0f, 0.9f});
-    }
+    // Day counter HUD (top-left)
+    pushNumber(m_dayHud, 16.0f, 16.0f, 4.0f, {1.0f, 1.0f, 1.0f, 0.9f});
 
     m_uiVertexCount = (uint32_t)verts.size();
     memcpy(m_uiMapped[m_currentFrame], verts.data(), sizeof(UIVertex) * verts.size());
