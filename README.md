@@ -124,7 +124,7 @@
 ---
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
-- **Tier 1**: DevUI(ImGui) + GPU 프로파일링 · `FrameRenderData` 스냅샷 · `GpuBuffer` RAII · App-state(메인메뉴/일시정지/로딩) + 설정
+- **Tier 1**: DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · `GpuBuffer` RAII · App-state(메인메뉴/일시정지/로딩) + 설정
 - **Tier 2 (비주얼)**: height fog · hemisphere ambient(warm/cool) · 카메라 댐핑 · vegetation/object variation · wind · **AA(SMAA + FXAA fallback)** · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless

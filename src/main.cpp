@@ -80,9 +80,11 @@ int main() {
                 lastPlayerChunk = playerChunk;
             }
 
-            ctx.drawFrame(camera, gameState.player().position(), gameState.targetTile(),
-                          gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
-                          gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench());
+            ctx.drawFrame(FrameRenderData{
+                camera, gameState.player().position(), gameState.targetTile(),
+                gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
+                gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench()
+            });
         }
         ctx.waitIdle();
     } catch (const std::exception& e) {

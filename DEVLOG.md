@@ -580,6 +580,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `GameState::canOccupy`에 `&& !world.isCollidableAt(...)` 한 줄 추가. 이로써 데이터로만 있던 `collidable` 플래그가 실제 이동 차단으로 배선됨.
 - 결과: 나무·돌·울타리·작업대·돌담을 통과하지 못함(건축이 장식→기능). 축 분리 이동이라 옆면 미끄러짐은 유지, 작물(WHEAT 타일)은 타일 충돌이라 영향 없음.
 
+### FrameRenderData 스냅샷 (Tier 1-A, 순수 리팩토링)
+- `drawFrame`의 인자 10개 → `FrameRenderData` 구조체 1개로 묶음(`VulkanContext.h`, 클래스 위). 기능마다 인자 +1 하던 압력 제거, 렌더러는 public 경계에서 스냅샷만 소비.
+- by-ref/by-value를 기존 시그니처 그대로 미러링(camera/inventory/drops=참조, 나머지=값) → **동작·성능 불변**. 본문은 `frame.*` 기계적 치환, 호출처(`main.cpp`)는 중괄호 초기화.
+- 내부 헬퍼(`updateUniformBuffer` 등)는 좁은 인자 유지 — 스냅샷을 더 깊이 배선하지 않음(수술적 변경, 스코프 크리프 방지). DevUI(Tier 1-C)가 읽고 쓸 접합면 확보.
+
 ---
 
 ## 게임 설계 메모

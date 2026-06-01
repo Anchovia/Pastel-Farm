@@ -224,14 +224,12 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
 // ============================================================
 //  drawFrame
 // ============================================================
-void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                              int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day,
-                              const std::vector<DroppedItem>& drops, bool nearWorkbench) {
-    m_hotbarSelected   = hotbarSelected;
-    m_invHud           = inventory;
-    m_inventoryOpen    = inventoryOpen;
-    m_nearWorkbenchHud = nearWorkbench;
-    m_dayHud           = day;
+void VulkanContext::drawFrame(const FrameRenderData& frame) {
+    m_hotbarSelected   = frame.hotbarSelected;
+    m_invHud           = frame.inventory;
+    m_inventoryOpen    = frame.inventoryOpen;
+    m_nearWorkbenchHud = frame.nearWorkbench;
+    m_dayHud           = frame.day;
 
     // Advance frame counter and free buffers that are no longer in flight
     m_frameCount++;
@@ -255,7 +253,7 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
         {0.45f, 0.72f, 0.95f}, // noon
         {0.80f, 0.40f, 0.20f}, // dusk
     };
-    const float t4  = timeOfDay * 4.0f;
+    const float t4  = frame.timeOfDay * 4.0f;
     const int   seg = static_cast<int>(t4) % 4;
     const float f   = t4 - static_cast<int>(t4);
     const int   next = (seg + 1) % 4;
@@ -287,28 +285,28 @@ void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosit
     // Sun direction + light space matrix — orthographic from sun, centered on player
     {
         const float kSunAzimuth = glm::radians(225.0f); // rotate light direction in world (tune to taste)
-        float elevation = sinf(timeOfDay * 3.14159265f);
-        float azimuth   = (timeOfDay - 0.5f) * 3.14159265f + kSunAzimuth; // π → 180° sweep (sunrise→noon→sunset)
+        float elevation = sinf(frame.timeOfDay * 3.14159265f);
+        float azimuth   = (frame.timeOfDay - 0.5f) * 3.14159265f + kSunAzimuth; // π → 180° sweep (sunrise→noon→sunset)
         m_sunDir    = glm::normalize(glm::vec3(cosf(azimuth), sinf(azimuth), elevation));
         m_dayFactor = elevation; // 0 at midnight, 1 at noon
 
         const float range = 80.0f;
         glm::mat4 lightView = glm::lookAt(
-            playerPosition + m_sunDir * 150.0f,
-            playerPosition,
+            frame.playerPosition + m_sunDir * 150.0f,
+            frame.playerPosition,
             glm::vec3(0.0f, 0.0f, 1.0f));
         glm::mat4 lightProj = glm::ortho(-range, range, -range, range, 1.0f, 300.0f);
         lightProj[1][1] *= -1.0f;
         m_lightMVP = lightProj * lightView;
     }
 
-    updateUniformBuffer(m_currentFrame, camera);
-    updatePlayerInstanceBuffer(playerPosition);
-    updateDropInstanceBuffer(drops);
-    updateSelectorInstanceBuffer(targetTile);
+    updateUniformBuffer(m_currentFrame, frame.camera);
+    updatePlayerInstanceBuffer(frame.playerPosition);
+    updateDropInstanceBuffer(frame.drops);
+    updateSelectorInstanceBuffer(frame.targetTile);
     updateHotbar();
     rebuildDirtyChunks();
-    m_frustum = Frustum::extractFrom(camera.viewProj());
+    m_frustum = Frustum::extractFrom(frame.camera.viewProj());
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 

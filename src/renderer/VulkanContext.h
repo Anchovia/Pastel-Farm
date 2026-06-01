@@ -14,14 +14,27 @@ class Window;
 class World;
 class Camera;
 
+// Per-frame snapshot the renderer consumes. Mirrors the previous drawFrame
+// argument list (by-ref for heavy data, by-value for scalars).
+struct FrameRenderData {
+    const Camera&                            camera;
+    glm::vec3                                playerPosition;
+    std::optional<glm::ivec3>                targetTile;
+    int                                      hotbarSelected;
+    const std::array<ItemStack, INV_SLOTS>&  inventory;
+    float                                    timeOfDay;
+    bool                                     inventoryOpen;
+    int                                      day;
+    const std::vector<DroppedItem>&          drops;
+    bool                                     nearWorkbench;
+};
+
 class VulkanContext {
 public:
     VulkanContext(Window& window, World& world);
     ~VulkanContext();
 
-    void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
-                   int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day,
-                   const std::vector<DroppedItem>& drops, bool nearWorkbench);
+    void drawFrame(const FrameRenderData& frame);
     void waitIdle();
 
 private:
