@@ -659,6 +659,40 @@ void VulkanContext::createObjectMeshes() {
     }
     upload(ObjectType::ROCK, verts);
     }
+
+    // Flat-shaded axis-aligned box helper (cullMode is NONE for objects, so winding is free).
+    auto pushBox = [](std::vector<ChunkVertex>& v, glm::vec3 mn, glm::vec3 mx, glm::vec3 col) {
+        const glm::vec3 c[8] = {
+            {mn.x,mn.y,mn.z},{mx.x,mn.y,mn.z},{mx.x,mx.y,mn.z},{mn.x,mx.y,mn.z},
+            {mn.x,mn.y,mx.z},{mx.x,mn.y,mx.z},{mx.x,mx.y,mx.z},{mn.x,mx.y,mx.z},
+        };
+        auto quad = [&](int a, int b, int d, int e, glm::vec3 n) {
+            v.push_back({c[a],n,col}); v.push_back({c[b],n,col}); v.push_back({c[d],n,col});
+            v.push_back({c[a],n,col}); v.push_back({c[d],n,col}); v.push_back({c[e],n,col});
+        };
+        quad(4,5,6,7,{0,0,1});  quad(0,3,2,1,{0,0,-1});
+        quad(0,1,5,4,{0,-1,0}); quad(3,7,6,2,{0,1,0});
+        quad(1,2,6,5,{1,0,0});  quad(0,4,7,3,{-1,0,0});
+    };
+
+    // ---- WORKBENCH: a simple low table box ----
+    {
+    std::vector<ChunkVertex> verts;
+    pushBox(verts, {-0.35f, -0.35f, 0.0f}, {0.35f, 0.35f, 0.42f}, {0.52f, 0.36f, 0.18f});
+    pushBox(verts, {-0.40f, -0.40f, 0.42f}, {0.40f, 0.40f, 0.52f}, {0.62f, 0.45f, 0.25f}); // top slab
+    upload(ObjectType::WORKBENCH, verts);
+    }
+
+    // ---- FENCE: two posts + two rails ----
+    {
+    std::vector<ChunkVertex> verts;
+    const glm::vec3 wood = {0.56f, 0.40f, 0.22f};
+    pushBox(verts, {-0.40f, -0.07f, 0.0f}, {-0.24f, 0.07f, 0.6f}, wood); // left post
+    pushBox(verts, { 0.24f, -0.07f, 0.0f}, { 0.40f, 0.07f, 0.6f}, wood); // right post
+    pushBox(verts, {-0.40f, -0.05f, 0.40f}, {0.40f, 0.05f, 0.50f}, wood); // top rail
+    pushBox(verts, {-0.40f, -0.05f, 0.18f}, {0.40f, 0.05f, 0.28f}, wood); // lower rail
+    upload(ObjectType::FENCE, verts);
+    }
 }
 
 // ============================================================

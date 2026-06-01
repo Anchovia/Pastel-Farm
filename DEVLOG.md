@@ -547,6 +547,18 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 제작 메커니즘은 **클릭형 레시피 목록**(마크식 격자 배치 아님). 제작물은 인벤에 쌓이고 설치는 ⑥. 본격 UI 리뉴얼은 별도 UI 패스로 미룸.
 - 마크식 2단계 계획: ⑤a 인벤 제작(기본) → ⑥ 설치(작업대를 바닥에) → ⑤b 작업대 근처에서 고급 레시피(`requiresWorkbench`) 해금.
 
+### 오브젝트 설치/철거 (⑥a)
+- `ObjectType` WORKBENCH/FENCE 추가 + `ObjectDef`(placeable=true, harvestTool=NONE=맨손철거, dropItem=자기아이템). `itemToObjectType()` 매핑. 메시: `pushBox` 헬퍼로 작업대(테이블 박스)·울타리(기둥2+가로대2).
+- 설치(우클릭): placeable 아이템 → `World::placeObject(x,y,type)`(지면 위·물 아님·중복 금지, `hasObjectAt` 체크) → Object 추가 + 인벤 1 소모.
+- 철거(좌클릭): `tryHarvestObject`에서 placeable 오브젝트는 **도구 무관 철거 + 아이템 회수**, 자연물은 기존대로 도구 필요.
+- 버그 수정: `placeObject`가 `objectsDirty`만 켜고 `dirty`를 안 켜서 설치물이 안 보이던 문제 → `dirty`도 set(오브젝트 버퍼 재빌드는 `buildChunkBuffer`=dirty 게이트 안에서 일어남).
+
+### 오브젝트 영속성 (⑥b, save v2)
+- save 포맷 버전 1→2. 청크마다 `objects` 직렬화(type/pos/scale/rot). load는 TerrainGen 재생성 대신 저장된 objects를 직접 읽음.
+- 효과 둘: ① 설치한 작업대/울타리 **재시작 후 유지**, ② 채집한 자연물(나무/돌) **respawn 버그 해소**(저장 objects가 채집/설치 결과를 반영). ③의 "디스크 재시작 시 respawn" 한계 제거.
+- 기존 v1 세이브는 무시되고 새 월드(개발 중 합의된 호환 깨짐), 다음 저장에 v2로 갱신.
+- 이로써 제작·건축 아크 중 ⑤a·⑥ 완료. 남은 건 ⑤b(작업대 근처 고급 레시피 해금).
+
 ---
 
 ## 게임 설계 메모

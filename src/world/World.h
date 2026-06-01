@@ -22,6 +22,11 @@ public:
     HarvestResult tryHarvestObject(int x, int y, ItemType tool,
                                    glm::vec3& outPos, ItemType& outDrop, int& outCount);
 
+    bool hasObjectAt(int x, int y) const;
+    // Places an object on top of the ground at (x,y). Fails if the tile is not
+    // solid ground, is water, or already holds an object.
+    bool placeObject(int x, int y, ObjectType type);
+
     bool       inBounds(int x, int y, int z) const;
     bool       isWalkable(int x, int y, int z) const;
     glm::ivec3 worldToTile(const glm::vec3& position) const;

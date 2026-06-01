@@ -220,6 +220,13 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
                                     s.watered = true;
                                     world.setTileState(tx, ty, fz, s);
                                 }
+                            } else {
+                                // Placeable item (workbench / fence) → place it on the ground.
+                                ObjectType otype;
+                                if (itemToObjectType(item, otype) && slot.count > 0 &&
+                                    world.placeObject(tx, ty, otype)) {
+                                    if (--slot.count <= 0) slot = ItemStack{};
+                                }
                             }
                         }
                     }

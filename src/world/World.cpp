@@ -121,7 +121,7 @@ void World::setTileState(int x, int y, int z, const TileState& s) {
 // ---- Save / Load ----
 
 static constexpr char    kMagic[5]   = "PFRM";
-static constexpr uint8_t kSaveVer    = 1;
+static constexpr uint8_t kSaveVer    = 2; // v2: per-chunk objects serialized
 
 void World::save(const std::string& path, const glm::vec3& playerPos, float gameTime) const {
     std::ofstream f(path, std::ios::binary);
@@ -152,6 +152,19 @@ void World::save(const std::string& path, const glm::vec3& playerPos, float game
         for (int y = 0; y < CHUNK_SIZE;  y++)
         for (int x = 0; x < CHUNK_SIZE;  x++)
             f.write(reinterpret_cast<const char*>(&chunk.states[z][y][x].lastUpdatedDay), 4);
+
+        // Objects — captures placed structures + remaining natural props (post-harvest)
+        int32_t objCount = (int32_t)chunk.objects.size();
+        f.write(reinterpret_cast<const char*>(&objCount), 4);
+        for (const Object& o : chunk.objects) {
+            uint8_t t = (uint8_t)o.type;
+            f.write(reinterpret_cast<const char*>(&t), 1);
+            f.write(reinterpret_cast<const char*>(&o.pos.x), 4);
+            f.write(reinterpret_cast<const char*>(&o.pos.y), 4);
+            f.write(reinterpret_cast<const char*>(&o.pos.z), 4);
+            f.write(reinterpret_cast<const char*>(&o.scale), 4);
+            f.write(reinterpret_cast<const char*>(&o.rot), 4);
+        }
     };
 
     for (const auto& [coord, chunk] : m_chunks)
@@ -198,12 +211,25 @@ bool World::load(const std::string& path, glm::vec3& outPlayerPos, float& outGam
 
         if (!f) return false;
 
-        // Objects (trees) aren't saved — regenerate them deterministically from the
-        // coords so loaded modified chunks keep their trees. Saved tiles/states are
-        // preserved; only temp.objects is taken from the regenerated terrain.
-        Chunk temp;
-        TerrainGen::generate(cx, cy, temp);
-        chunk.objects = std::move(temp.objects);
+        // Objects are now persisted (v2): read them directly. This keeps placed
+        // structures and does not respawn harvested natural props.
+        int32_t objCount;
+        f.read(reinterpret_cast<char*>(&objCount), 4);
+        if (!f) return false;
+        chunk.objects.clear();
+        for (int j = 0; j < objCount; j++) {
+            Object o;
+            uint8_t t;
+            f.read(reinterpret_cast<char*>(&t), 1);
+            f.read(reinterpret_cast<char*>(&o.pos.x), 4);
+            f.read(reinterpret_cast<char*>(&o.pos.y), 4);
+            f.read(reinterpret_cast<char*>(&o.pos.z), 4);
+            f.read(reinterpret_cast<char*>(&o.scale), 4);
+            f.read(reinterpret_cast<char*>(&o.rot), 4);
+            o.type = (ObjectType)t;
+            chunk.objects.push_back(o);
+        }
+        if (!f) return false;
 
         chunk.modified = true;
         chunk.dirty    = true;
@@ -262,7 +288,8 @@ World::HarvestResult World::tryHarvestObject(int x, int y, ItemType tool,
         if ((int)o.pos.x != x || (int)o.pos.y != y) continue;
 
         const ObjectDef& def = objectDef(o.type);
-        if (def.harvestTool != tool) return HarvestResult::WrongTool;
+        // Player-placed structures are removable by hand; natural props need their tool.
+        if (!def.placeable && def.harvestTool != tool) return HarvestResult::WrongTool;
 
         outPos   = o.pos;
         outDrop  = def.dropItem;
@@ -274,6 +301,41 @@ World::HarvestResult World::tryHarvestObject(int x, int y, ItemType tool,
         return HarvestResult::Harvested;
     }
     return HarvestResult::NoObject;
+}
+
+bool World::hasObjectAt(int x, int y) const {
+    auto it = m_chunks.find(chunkCoord(x, y));
+    if (it == m_chunks.end()) return false;
+    for (const Object& o : it->second.objects)
+        if ((int)o.pos.x == x && (int)o.pos.y == y) return true;
+    return false;
+}
+
+bool World::placeObject(int x, int y, ObjectType type) {
+    if (hasObjectAt(x, y)) return false;
+
+    // Find the topmost solid tile to sit on.
+    int z = -1;
+    for (int zz = CHUNK_DEPTH - 1; zz >= 0; zz--) {
+        if (getTile(x, y, zz) != TileType::AIR) { z = zz; break; }
+    }
+    if (z < 0) return false;
+    if (getTile(x, y, z) == TileType::WATER) return false;
+
+    auto it = m_chunks.find(chunkCoord(x, y));
+    if (it == m_chunks.end()) return false;
+    Chunk& chunk = it->second;
+
+    Object o;
+    o.pos   = { (float)x, (float)y, (float)z + 0.5f };
+    o.scale = 1.0f;
+    o.rot   = 0.0f;
+    o.type  = type;
+    chunk.objects.push_back(o);
+    chunk.dirty        = true;  // triggers buildChunkBuffer → rebuilds the object buffers
+    chunk.objectsDirty = true;
+    chunk.modified     = true;
+    return true;
 }
 
 bool World::inBounds(int x, int y, int z) const {
