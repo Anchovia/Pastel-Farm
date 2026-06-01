@@ -311,6 +311,18 @@ bool World::hasObjectAt(int x, int y) const {
     return false;
 }
 
+bool World::isObjectTypeNear(int x, int y, ObjectType type, int radius) const {
+    for (int dy = -radius; dy <= radius; dy++)
+    for (int dx = -radius; dx <= radius; dx++) {
+        const int wx = x + dx, wy = y + dy;
+        auto it = m_chunks.find(chunkCoord(wx, wy));
+        if (it == m_chunks.end()) continue;
+        for (const Object& o : it->second.objects)
+            if (o.type == type && (int)o.pos.x == wx && (int)o.pos.y == wy) return true;
+    }
+    return false;
+}
+
 bool World::placeObject(int x, int y, ObjectType type) {
     if (hasObjectAt(x, y)) return false;
 

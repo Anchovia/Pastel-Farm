@@ -21,7 +21,7 @@ public:
 
     void drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
                    int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day,
-                   const std::vector<DroppedItem>& drops);
+                   const std::vector<DroppedItem>& drops, bool nearWorkbench);
     void waitIdle();
 
 private:
@@ -201,6 +201,7 @@ private:
     int                      m_dayHud          = 0;
     std::array<ItemStack, INV_SLOTS> m_invHud{};
     bool                     m_inventoryOpen   = false;
+    bool                     m_nearWorkbenchHud = false;
     std::array<float, 4>     m_skyColor        = {0.08f, 0.08f, 0.12f, 1.0f};
     std::vector<VkBuffer>       m_playerInstBuffer;
     std::vector<VkDeviceMemory> m_playerInstMemory;

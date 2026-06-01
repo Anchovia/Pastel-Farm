@@ -18,6 +18,7 @@ enum class ObjectType : uint8_t {
     ROCK,
     WORKBENCH,
     FENCE,
+    STONE_FENCE,
     COUNT,
 };
 
@@ -36,8 +37,9 @@ inline const ObjectDef& objectDef(ObjectType type) {
     static const ObjectDef defs[(size_t)ObjectType::COUNT] = {
         /* TREE      */ { true, true, false, ItemType::TOOL_AXE,     ItemType::BLOCK_WOOD,    1 },
         /* ROCK      */ { true, true, false, ItemType::TOOL_PICKAXE, ItemType::BLOCK_STONE,   1 },
-        /* WORKBENCH */ { true, true, true,  ItemType::NONE,         ItemType::ITEM_WORKBENCH, 1 },
-        /* FENCE     */ { true, true, true,  ItemType::NONE,         ItemType::ITEM_FENCE,     1 },
+        /* WORKBENCH */ { true, true, true,  ItemType::NONE,         ItemType::ITEM_WORKBENCH,   1 },
+        /* FENCE     */ { true, true, true,  ItemType::NONE,         ItemType::ITEM_FENCE,       1 },
+        /* STONE_FEN */ { true, true, true,  ItemType::NONE,         ItemType::ITEM_STONE_FENCE, 1 },
     };
     return defs[(size_t)type];
 }
@@ -45,9 +47,10 @@ inline const ObjectDef& objectDef(ObjectType type) {
 // Maps a placeable inventory item to the object type it places. Returns false if not placeable.
 inline bool itemToObjectType(ItemType item, ObjectType& out) {
     switch (item) {
-        case ItemType::ITEM_WORKBENCH: out = ObjectType::WORKBENCH; return true;
-        case ItemType::ITEM_FENCE:     out = ObjectType::FENCE;     return true;
-        default:                       return false;
+        case ItemType::ITEM_WORKBENCH:   out = ObjectType::WORKBENCH;   return true;
+        case ItemType::ITEM_FENCE:       out = ObjectType::FENCE;       return true;
+        case ItemType::ITEM_STONE_FENCE: out = ObjectType::STONE_FENCE; return true;
+        default:                         return false;
     }
 }
 

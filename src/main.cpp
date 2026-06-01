@@ -82,7 +82,7 @@ int main() {
 
             ctx.drawFrame(camera, gameState.player().position(), gameState.targetTile(),
                           gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
-                          gameState.inventoryOpen(), gameState.day(), gameState.drops());
+                          gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench());
         }
         ctx.waitIdle();
     } catch (const std::exception& e) {

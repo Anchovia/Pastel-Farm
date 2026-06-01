@@ -44,6 +44,7 @@ public:
     const std::array<ItemStack, INV_SLOTS>& inventory() const { return m_inventory; }
 
     bool inventoryOpen() const { return m_inventoryOpen; }
+    bool nearWorkbench() const { return m_nearWorkbench; }
 
     const std::vector<DroppedItem>& drops() const { return m_drops; }
 
@@ -73,6 +74,7 @@ private:
     bool m_inventoryOpen   = false;
     bool m_prevToggleInv   = false; // edge-detect for I key
     bool m_prevCraftClick  = false; // edge-detect for crafting-row clicks
+    bool m_nearWorkbench   = false; // player is adjacent to a placed workbench
 
     std::vector<DroppedItem> m_drops; // items lying in the world awaiting pickup
 

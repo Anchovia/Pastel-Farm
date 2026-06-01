@@ -98,13 +98,19 @@ void GameState::update(float dt, const PlayerInput& input, const Camera& camera,
         }
     }
 
+    // Advanced recipes unlock only near a placed workbench.
+    {
+        glm::ivec3 pTile = world.worldToTile(m_player.position());
+        m_nearWorkbench = world.isObjectTypeNear(pTile.x, pTile.y, ObjectType::WORKBENCH, 2);
+    }
+
     if (input.windowWidth > 0 && input.windowHeight > 0) {
         // Crafting clicks (inventory open) — edge-detected so holding doesn't repeat-craft.
         if (m_inventoryOpen && input.leftClick && !m_prevCraftClick) {
             int n = 0;
             const Recipe* table = craftingRecipes(n);
             for (int i = 0; i < n; i++) {
-                if (table[i].requiresWorkbench) continue; // inventory shows basic recipes only
+                if (table[i].requiresWorkbench && !m_nearWorkbench) continue; // workbench-gated
                 float rx, ry, rw, rh;
                 craftRowRect(i, (float)input.windowWidth, (float)input.windowHeight, rx, ry, rw, rh);
                 if (input.mouseX >= rx && input.mouseX <= rx + rw &&

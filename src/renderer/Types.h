@@ -32,6 +32,7 @@ enum class ItemType : uint8_t {
     ITEM_WHEAT,
     ITEM_WORKBENCH,
     ITEM_FENCE,
+    ITEM_STONE_FENCE,
     COUNT,
 };
 
@@ -70,6 +71,7 @@ inline glm::vec3 itemColor(ItemType t) {
         case ItemType::ITEM_WHEAT:   return {0.90f, 0.75f, 0.15f};
         case ItemType::ITEM_WORKBENCH: return {0.55f, 0.38f, 0.18f};
         case ItemType::ITEM_FENCE:   return {0.62f, 0.45f, 0.25f};
+        case ItemType::ITEM_STONE_FENCE: return {0.58f, 0.58f, 0.60f};
         default:                     return {0.0f,  0.0f,  0.0f};
     }
 }
@@ -109,8 +111,9 @@ struct Recipe {
 // Stardew-style recipe list: click a recipe to consume materials and produce the result.
 inline const Recipe* craftingRecipes(int& outCount) {
     static const Recipe table[] = {
-        { ItemType::ITEM_WORKBENCH, 1, {{ItemType::BLOCK_WOOD, 4}, {}, {}}, false },
-        { ItemType::ITEM_FENCE,     1, {{ItemType::BLOCK_WOOD, 2}, {}, {}}, false },
+        { ItemType::ITEM_WORKBENCH,   1, {{ItemType::BLOCK_WOOD, 4},  {}, {}}, false },
+        { ItemType::ITEM_FENCE,       1, {{ItemType::BLOCK_WOOD, 2},  {}, {}}, false },
+        { ItemType::ITEM_STONE_FENCE, 1, {{ItemType::BLOCK_STONE, 2}, {}, {}}, true  }, // needs workbench
     };
     outCount = (int)(sizeof(table) / sizeof(table[0]));
     return table;

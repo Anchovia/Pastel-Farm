@@ -226,11 +226,12 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
 // ============================================================
 void VulkanContext::drawFrame(const Camera& camera, const glm::vec3& playerPosition, const std::optional<glm::ivec3>& targetTile,
                               int hotbarSelected, const std::array<ItemStack, INV_SLOTS>& inventory, float timeOfDay, bool inventoryOpen, int day,
-                              const std::vector<DroppedItem>& drops) {
-    m_hotbarSelected = hotbarSelected;
-    m_invHud         = inventory;
-    m_inventoryOpen  = inventoryOpen;
-    m_dayHud         = day;
+                              const std::vector<DroppedItem>& drops, bool nearWorkbench) {
+    m_hotbarSelected   = hotbarSelected;
+    m_invHud           = inventory;
+    m_inventoryOpen    = inventoryOpen;
+    m_nearWorkbenchHud = nearWorkbench;
+    m_dayHud           = day;
 
     // Advance frame counter and free buffers that are no longer in flight
     m_frameCount++;
@@ -498,7 +499,7 @@ void VulkanContext::updateHotbar() {
         int rn = 0;
         const Recipe* rtable = craftingRecipes(rn);
         for (int i = 0; i < rn; i++) {
-            if (rtable[i].requiresWorkbench) continue;
+            if (rtable[i].requiresWorkbench && !m_nearWorkbenchHud) continue;
             const Recipe& rc = rtable[i];
 
             bool ok = true;

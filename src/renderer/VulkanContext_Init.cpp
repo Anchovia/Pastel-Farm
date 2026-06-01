@@ -693,6 +693,13 @@ void VulkanContext::createObjectMeshes() {
     pushBox(verts, {-0.40f, -0.05f, 0.18f}, {0.40f, 0.05f, 0.28f}, wood); // lower rail
     upload(ObjectType::FENCE, verts);
     }
+
+    // ---- STONE_FENCE: low stone wall ----
+    {
+    std::vector<ChunkVertex> verts;
+    pushBox(verts, {-0.42f, -0.14f, 0.0f}, {0.42f, 0.14f, 0.45f}, {0.56f, 0.56f, 0.60f});
+    upload(ObjectType::STONE_FENCE, verts);
+    }
 }
 
 // ============================================================
