@@ -15,6 +15,25 @@ enum class AppMode {
     Paused,
 };
 
+static void clearGameplayInput(PlayerInput& input) {
+    input.moveForward     = false;
+    input.moveBackward    = false;
+    input.moveLeft        = false;
+    input.moveRight       = false;
+    input.leftClick       = false;
+    input.rightClick      = false;
+    input.toggleInventory = false;
+    input.rotateLeft      = false;
+    input.rotateRight     = false;
+    input.selectSlot      = -1;
+    input.scrollDelta     = 0;
+}
+
+static void applyAppModeInputPolicy(PlayerInput& input, AppMode mode) {
+    if (mode == AppMode::Paused)
+        clearGameplayInput(input);
+}
+
 #ifdef PASTEL_DEV_BUILD
 static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx) {
     if (ctx.devWantsMouse()) {
@@ -23,16 +42,9 @@ static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx)
         input.scrollDelta = 0;
     }
     if (ctx.devWantsKeyboard()) {
-        input.moveForward     = false;
-        input.moveBackward    = false;
-        input.moveLeft        = false;
-        input.moveRight       = false;
-        input.toggleInventory = false;
-        input.rotateLeft      = false;
-        input.rotateRight     = false;
+        clearGameplayInput(input);
         input.saveKey         = false;
         input.quit            = false;
-        input.selectSlot      = -1;
     }
 }
 #endif
@@ -99,11 +111,11 @@ int main() {
             }
             prevEsc = input.quit;
 
-            const bool gameplayActive = appMode == AppMode::Gameplay;
+            applyAppModeInputPolicy(input, appMode);
 
             const float rotSpeed = 90.0f * dt;
-            if (gameplayActive && input.rotateLeft)  orbitAngle -= rotSpeed;
-            if (gameplayActive && input.rotateRight) orbitAngle += rotSpeed;
+            if (input.rotateLeft)  orbitAngle -= rotSpeed;
+            if (input.rotateRight) orbitAngle += rotSpeed;
 
             // Ctrl+S save (edge-detect)
             if (input.saveKey && !prevCtrlS)
@@ -114,7 +126,7 @@ int main() {
                 camera.setAspectRatio((float)input.windowWidth / input.windowHeight);
 
             camera.update(gameState.player().position(), orbitAngle);
-            if (gameplayActive)
+            if (appMode == AppMode::Gameplay)
                 gameState.update(dt, input, camera, world);
 
             // Load/unload chunks when player crosses a chunk boundary
