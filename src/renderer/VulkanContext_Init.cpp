@@ -1040,15 +1040,15 @@ TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t heigh
 }
 
 void VulkanContext::createTerrainTextureArray() {
-    // Step 3a: per-material layers as seamless grayscale grain, distinct per layer.
-    // Multiplied by the per-tile vertex color so hue + baked AO are preserved (tint).
-    // Per-material art (grass blades, stone speckle, ...) is tuned in a later step.
-    const uint32_t W = 32, H = 32;
+    // Step 3b: low-contrast procedural material masks. Vertex color still owns hue/AO.
+    const uint32_t W = 64, H = 64;
     const uint32_t L = TERRAIN_TEX_LAYERS;
     std::vector<uint8_t> pixels((size_t)W * H * 4 * L, 255);
 
     auto smooth = [](float t) { return t * t * (3.0f - 2.0f * t); };
     auto lerp   = [](float a, float b, float t) { return a + (b - a) * t; };
+    auto clamp01 = [](float v) { return std::clamp(v, 0.0f, 1.0f); };
+    auto fract = [](float v) { return v - std::floor(v); };
     auto hash01 = [](int x, int y, int salt) -> float {
         uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)salt * 83492791u;
         h ^= h >> 13; h *= 1274126177u;
@@ -1064,16 +1064,102 @@ void VulkanContext::createTerrainTextureArray() {
         return lerp(lerp(wh(gx, gy), wh(gx + 1, gy), tx),
                     lerp(wh(gx, gy + 1), wh(gx + 1, gy + 1), tx), ty);
     };
+    auto fbm = [&](int x, int y, int salt) {
+        return tileNoise(x, y, 16, salt) * 0.50f +
+               tileNoise(x, y,  8, salt + 1) * 0.32f +
+               tileNoise(x, y,  4, salt + 2) * 0.18f;
+    };
+    auto wave = [](float t, float freq, float phase = 0.0f) {
+        return 0.5f + 0.5f * std::sin((t * freq + phase) * 6.28318530718f);
+    };
+    auto thinLine = [&](float t, float freq, float phase = 0.0f) {
+        float d = std::abs(fract(t * freq + phase) - 0.5f) * 2.0f;
+        return std::pow(1.0f - d, 9.0f);
+    };
+    auto writePixel = [&](uint32_t layer, uint32_t x, uint32_t y, glm::vec3 c) {
+        uint8_t* p = &pixels[(((size_t)layer * H + y) * W + x) * 4];
+        p[0] = (uint8_t)(clamp01(c.r) * 255.0f);
+        p[1] = (uint8_t)(clamp01(c.g) * 255.0f);
+        p[2] = (uint8_t)(clamp01(c.b) * 255.0f);
+        p[3] = 255;
+    };
 
     for (uint32_t layer = 0; layer < L; layer++) {
         const int salt = 100 + (int)layer * 37;
         for (uint32_t y = 0; y < H; y++)
         for (uint32_t x = 0; x < W; x++) {
-            float n = tileNoise((int)x, (int)y, 8, salt) * 0.6f + tileNoise((int)x, (int)y, 4, salt + 1) * 0.4f;
-            float g = 0.72f + 0.28f * n; // gentle multiplicative grain
-            uint8_t v = (uint8_t)(g * 255.0f);
-            uint8_t* p = &pixels[(((size_t)layer * H + y) * W + x) * 4];
-            p[0] = v; p[1] = v; p[2] = v; p[3] = 255;
+            const float u = ((float)x + 0.5f) / (float)W;
+            const float v = ((float)y + 0.5f) / (float)H;
+            const float n = fbm((int)x, (int)y, salt);
+            const float fine = tileNoise((int)x, (int)y, 2, salt + 7);
+
+            glm::vec3 c(0.9f);
+            switch (layer) {
+                case 0: { // Grass top: soft blades and clumps.
+                    float blades = wave(u + tileNoise((int)x, (int)y, 8, salt + 11) * 0.10f, 18.0f);
+                    float value = 0.78f + n * 0.15f + blades * 0.07f + fine * 0.03f;
+                    c = glm::vec3(value * 0.96f, value * 1.02f, value * 0.93f);
+                    break;
+                }
+                case 1: { // Grass side: dirt strata with a little root breakup.
+                    float strata = wave(v + n * 0.07f, 5.0f);
+                    float value = 0.72f + n * 0.15f + strata * 0.07f;
+                    c = glm::vec3(value * 1.02f, value * 0.93f, value * 0.82f);
+                    break;
+                }
+                case 2: { // Dirt: clods and small darker grains.
+                    float speck = hash01((int)x, (int)y, salt + 19) > 0.78f ? 1.0f : 0.0f;
+                    float value = 0.70f + n * 0.22f + fine * 0.05f - speck * 0.07f;
+                    c = glm::vec3(value * 1.03f, value * 0.92f, value * 0.78f);
+                    break;
+                }
+                case 3: { // Stone: mottled facets and hairline cracks.
+                    float crack = std::max(thinLine(u + n * 0.05f, 4.0f), thinLine(v + n * 0.05f, 4.0f));
+                    float value = 0.72f + n * 0.20f + fine * 0.04f - crack * 0.13f;
+                    c = glm::vec3(value * 0.96f, value * 0.98f, value * 1.02f);
+                    break;
+                }
+                case 4: { // Wood: broad grain lines.
+                    float grain = wave(u + tileNoise((int)x, (int)y, 16, salt + 23) * 0.18f, 9.0f);
+                    float ring = thinLine(u + n * 0.08f, 4.0f);
+                    float value = 0.68f + grain * 0.16f + n * 0.12f - ring * 0.06f;
+                    c = glm::vec3(value * 1.06f, value * 0.91f, value * 0.70f);
+                    break;
+                }
+                case 5: { // Leaves: clustered mottling.
+                    float spot = hash01((int)(x / 2), (int)(y / 2), salt + 31) > 0.70f ? 1.0f : 0.0f;
+                    float value = 0.76f + n * 0.17f + fine * 0.06f - spot * 0.06f;
+                    c = glm::vec3(value * 0.92f, value * 1.03f, value * 0.86f);
+                    break;
+                }
+                case 6: { // Farmland: tilled furrows.
+                    float furrow = wave(v + n * 0.04f, 6.0f);
+                    float darkLine = std::pow(1.0f - furrow, 3.0f);
+                    float value = 0.68f + n * 0.12f + furrow * 0.08f - darkLine * 0.13f;
+                    c = glm::vec3(value * 1.03f, value * 0.88f, value * 0.68f);
+                    break;
+                }
+                case 7: { // Wheat: thin stalk rhythm.
+                    float stalks = std::pow(wave(u + n * 0.07f, 14.0f), 2.5f);
+                    float value = 0.76f + n * 0.12f + stalks * 0.14f;
+                    c = glm::vec3(value * 1.06f, value * 0.98f, value * 0.70f);
+                    break;
+                }
+                case 8: { // Water: subtle placeholder ripples; a dedicated water pass comes later.
+                    float ripple = wave(u + v + n * 0.03f, 2.0f) * 0.55f +
+                                   wave(u - v + n * 0.03f, 3.0f) * 0.45f;
+                    float value = 0.83f + ripple * 0.04f + n * 0.025f;
+                    c = glm::vec3(value * 0.88f, value * 0.98f, value * 1.03f);
+                    break;
+                }
+                default: {
+                    float value = 0.74f + n * 0.24f;
+                    c = glm::vec3(value);
+                    break;
+                }
+            }
+
+            writePixel(layer, x, y, c);
         }
     }
 

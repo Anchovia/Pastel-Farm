@@ -884,6 +884,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `object.vert`는 `fragLayer = -1.0` sentinel을 출력해 공유 `chunk.frag`에서 텍스처 샘플을 건너뛰게 했다. 따라서 tree/rock/workbench/fence 등 오브젝트 메시와 vertex 포맷은 이번 단계에서 건드리지 않았다.
 - 유저 빌드 검증 결과: 지형 텍스처 배열 경로가 정상 동작하고, 기존 색조/AO와 오브젝트·grass·shadow·UI·AA 경로는 유지되는 것으로 확인했다.
 
+### Terrain texture art 절차 패턴 1차 튜닝 (Task #3b)
+- `createTerrainTextureArray()` 내부만 수정해 새 이미지 파일/의존성 없이 9개 terrain layer의 절차 패턴을 구분했다. texture resource, descriptor, shader, vertex format은 그대로 유지했다.
+- texture 크기를 32×32 → 64×64로 올리고, 레이어별로 grass blade/clump, grass side strata, dirt clod/speckle, stone mottling/crack, wood grain, leaves mottling, farmland furrow, wheat stalk, water ripple 계열의 낮은 대비 패턴을 적용했다.
+- 텍스처는 여전히 albedo라기보다 material mask에 가깝게 설계했다. `chunk.frag`의 기존 `fragColor * albedo * lighting` 구조에서 vertex color가 색조와 AO를 계속 주도하도록 했다.
+- 유저 스크린샷 검증 결과: terrain layer 패턴이 보이고 grass/dirt/farmland/water 구분이 살아났다. 물은 패턴이 규칙적으로 보일 수 있어 ripple 대비/빈도를 낮춰 임시 placeholder로 정리했다.
+- water는 이후 별도 water pass 또는 water material 작업에서 다시 다룬다. 이번 단계의 목표는 실제 texture map 도입 전 UV/layer/tint/반복감 기준을 잡는 것이다.
+
 ---
 
 ## 게임 설계 메모
@@ -914,7 +921,7 @@ World
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass(FXAA/SMAA 1x), post 이후 UI overlay를 분리해 그린다.
-- 다음 비주얼 개선은 terrain texture art 튜닝, object texture mapping, material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
+- 다음 비주얼 개선은 object texture mapping, material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화, water 전용 표현이 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
 
 ---
 

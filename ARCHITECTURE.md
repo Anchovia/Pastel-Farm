@@ -45,7 +45,7 @@ src/
 - **조명 스택**: ambient + sun diffuse(dayFactor) + shadow + fog (4-layer)
 - **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어, 밤엔 shadow geometry draw 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
-- 색/재질: 지형은 `sampler2DArray` 기반 terrain albedo layer + vertex color tint + per-vertex AO 베이크를 사용한다. 오브젝트는 아직 vertex color 경로이며, grass는 alpha texture. 다음 단계에서 terrain texture art 튜닝, object texture mapping, material-lite(albedo + tint + roughness/specular 계열 상수)를 확장한다
+- 색/재질: 지형은 `sampler2DArray` 기반 terrain albedo layer + vertex color tint + per-vertex AO 베이크를 사용한다. terrain layer는 절차 패턴 1차 튜닝까지 완료했으며, 오브젝트는 아직 vertex color 경로이고 grass는 alpha texture. 다음 단계에서 object texture mapping, material-lite(albedo + tint + roughness/specular 계열 상수), water 전용 표현을 확장한다
 - **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. 자체 게임 UI도 post AA 이후에 렌더링해 픽셀 폰트가 AA에 의해 깨지지 않게 한다. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
 
 ---
@@ -86,7 +86,7 @@ src/
 - height fog
 - ✅ vegetation alpha card 1차 — 절차 grass texture + X자 card clump + alpha test + shadow 제외 + 청크별 dirty gate. **완료**
 - ✅ density field 기반 grass dressing 1차 — 균등 확률 대신 patch density + open grass bias + density 기반 offset/scale variation 적용. **완료**
-- 다음 비주얼 후보: terrain texture art 튜닝 · object texture mapping · material-lite · high-quality grass(wind/LOD/density 옵션) · ground dressing 텍스처화 · shadow quality options · height fog · SMAA T2x/S2x 또는 MSAA/alpha-to-coverage
+- 다음 비주얼 후보: object texture mapping · material-lite · high-quality grass(wind/LOD/density 옵션) · ground dressing 텍스처화 · water 전용 표현 · shadow quality options · height fog · SMAA T2x/S2x 또는 MSAA/alpha-to-coverage
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -112,9 +112,10 @@ src/
 1. ✅ 현재 SMAA 1x 1차 변경분을 커밋한다. **완료**
 2. ✅ **TextureResource 기반**: grass texture 생성/upload 경로, SMAA LUT 업로드 경로를 `GpuBuffer`식 move-only RAII `TextureResource` + `createTexture(...)` 헬퍼로 통합. terrain texture array에서는 같은 수명 모델을 `createTextureArray(...)`로 확장. **완료**
 3. ✅ **Terrain texture mapping 3a**: `sampler2DArray` 기반 terrain albedo layer, 청크 vertex UV/layer, descriptor binding 3, vertex color tint 유지. **완료**
-4. **Terrain texture art 3b + object texture mapping 3c + material-lite**: 절차 layer를 실제 머티리얼 아트로 튜닝하고, 오브젝트 albedo와 material-lite는 별도 단계로 확장한다.
-5. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
-6. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
+4. ✅ **Terrain texture art 3b**: 새 의존성 없이 절차 terrain layer를 64×64 저대비 material mask로 튜닝. 물은 임시 placeholder이며 전용 water pass에서 재검토. **완료**
+5. **Object texture mapping 3c + material-lite**: 오브젝트 albedo와 material-lite는 별도 단계로 확장한다.
+6. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
+7. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
 
 이 순서는 "품질을 올리되, 매 단계가 화면에 바로 기여하고 기존 구조와 자연스럽게 맞물리는" 경로다.
 
