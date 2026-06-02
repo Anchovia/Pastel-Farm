@@ -582,6 +582,16 @@ void VulkanContext::createObjectMeshes() {
         memcpy(mapped, verts.data(), size);
         vkUnmapMemory(m_device, mesh.vbuf.memory);
     };
+    auto uploadGrassCardMesh = [&](ObjectMesh& mesh, const std::vector<GrassCardVertex>& verts) {
+        mesh.count = (uint32_t)verts.size();
+        VkDeviceSize size = sizeof(GrassCardVertex) * verts.size();
+        mesh.vbuf = createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        void* mapped;
+        vkMapMemory(m_device, mesh.vbuf.memory, 0, size, 0, &mapped);
+        memcpy(mapped, verts.data(), size);
+        vkUnmapMemory(m_device, mesh.vbuf.memory);
+    };
 
     // Uploads a flat-shaded mesh into the registry slot for the given object type.
     auto upload = [&](ObjectType type, const std::vector<ChunkVertex>& verts) {
@@ -727,6 +737,28 @@ void VulkanContext::createObjectMeshes() {
     blade(2.0944f,   0.050f, 0.24f, {0.27f, 0.50f, 0.20f});
     blade(4.18879f,  0.045f, 0.20f, {0.19f, 0.36f, 0.16f});
     uploadMesh(m_grassClumpMesh, verts);
+    }
+
+    // ---- GRASS CARD: X-crossed alpha-card quads, instanced by the future grass pipeline ----
+    {
+    std::vector<GrassCardVertex> verts;
+    auto card = [&](float angle) {
+        const float halfW = 0.30f;
+        const float h     = 0.46f;
+        const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
+        const glm::vec3 side = dir * halfW;
+        const glm::vec3 n    = {-dir.y, dir.x, 0.0f};
+
+        const GrassCardVertex bl{{-side.x, -side.y, 0.0f}, n, {0.0f, 1.0f}};
+        const GrassCardVertex br{{ side.x,  side.y, 0.0f}, n, {1.0f, 1.0f}};
+        const GrassCardVertex tr{{ side.x,  side.y, h   }, n, {1.0f, 0.0f}};
+        const GrassCardVertex tl{{-side.x, -side.y, h   }, n, {0.0f, 0.0f}};
+
+        verts.insert(verts.end(), {bl, br, tr, bl, tr, tl});
+    };
+    card(0.0f);
+    card(1.5707963f);
+    uploadGrassCardMesh(m_grassCardMesh, verts);
     }
 }
 

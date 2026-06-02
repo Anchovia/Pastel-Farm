@@ -251,6 +251,7 @@ private:
     };
     std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
     ObjectMesh m_grassClumpMesh;
+    ObjectMesh m_grassCardMesh;
 
     // Procedural grass alpha texture (sampled by the grass card pipeline). Creation is
     // isolated in createGrassTexture so a file-loaded image can swap in later.

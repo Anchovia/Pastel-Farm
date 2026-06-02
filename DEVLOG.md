@@ -758,6 +758,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 이미지 전송용 `transitionImageLayout` / `copyBufferToImage` 헬퍼를 추가. 기존 `copyBuffer`와 one-shot command buffer 보일러플레이트가 겹치지만, 이번 기능 커밋에서는 추출 리팩토링을 섞지 않음.
 - 아직 grass 렌더 경로와 셰이더에는 연결하지 않았으므로 시각 변화 없음이 정상. 유저 빌드 검증 결과: 컴파일·실행·종료 정상, Vulkan validation 에러 없음.
 
+### Grass alpha card 메시와 셰이더 준비 (Vegetation alpha card Step 2)
+- alpha card 렌더링을 위한 전용 `GrassCardVertex`(`pos`, `normal`, `uv`)를 추가. 기존 `ChunkVertex`에는 UV가 없으므로 지형/오브젝트 정점 포맷을 건드리지 않고 grass 전용 포맷으로 분리.
+- `m_grassCardMesh`에 X자로 교차한 quad 2장(총 4 triangles)을 생성. 기존 기하 grass clump 메시와 렌더 경로는 아직 유지해 시각 결과를 바꾸지 않음.
+- `grass.vert` / `grass.frag` 추가. 인스턴스 위치·스케일·회전을 적용하고, grass 텍스처 alpha를 기준으로 `discard`하는 alpha test 셰이더를 준비.
+- grass fragment shader는 기존 `chunk.frag`의 ambient·diffuse·shadow·fog 흐름을 최대한 맞춰 이후 렌더 경로 연결 시 조명 톤이 크게 튀지 않도록 함.
+- CMake 셰이더 컴파일/복사 목록에 grass 셰이더를 추가. 유저 빌드 검증 결과: 셰이더 컴파일·앱 실행 정상, 기존 grass clump 시각 유지.
+
 ---
 
 ## 게임 설계 메모
