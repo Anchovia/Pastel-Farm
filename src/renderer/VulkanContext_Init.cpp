@@ -766,8 +766,8 @@ void VulkanContext::createObjectMeshes() {
     {
     std::vector<GrassCardVertex> verts;
     auto card = [&](float angle) {
-        const float halfW = 0.30f;
-        const float h     = 0.46f;
+        const float halfW = 0.34f;
+        const float h     = 0.42f;
         const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
         const glm::vec3 side = dir * halfW;
         const glm::vec3 n    = {-dir.y, dir.x, 0.0f};
@@ -806,14 +806,17 @@ void VulkanContext::createGrassTexture() {
 
     struct Blade { float baseX, tipX, halfW; };
     static const Blade blades[] = {
-        {0.50f, 0.50f, 0.085f},
-        {0.34f, 0.20f, 0.060f},
-        {0.66f, 0.82f, 0.060f},
-        {0.43f, 0.34f, 0.050f},
-        {0.58f, 0.68f, 0.050f},
+        {0.50f, 0.50f, 0.105f},
+        {0.32f, 0.18f, 0.075f},
+        {0.68f, 0.84f, 0.075f},
+        {0.42f, 0.30f, 0.065f},
+        {0.58f, 0.70f, 0.065f},
+        {0.24f, 0.10f, 0.045f},
+        {0.76f, 0.92f, 0.045f},
+        {0.50f, 0.62f, 0.050f},
     };
-    const glm::vec3 baseCol = {0.16f, 0.34f, 0.13f};
-    const glm::vec3 tipCol  = {0.42f, 0.62f, 0.26f};
+    const glm::vec3 baseCol = {0.18f, 0.38f, 0.14f};
+    const glm::vec3 tipCol  = {0.50f, 0.68f, 0.28f};
 
     for (uint32_t y = 0; y < H; y++) {
         const float t = 1.0f - (float)y / (float)(H - 1); // 0 at bottom row, 1 at top row

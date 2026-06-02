@@ -779,6 +779,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - shadow pass에는 grass를 추가하지 않음. 식생은 시각 dressing layer로 유지하고, shadow caster는 기존 청크·오브젝트·플레이어 범위 그대로 둠.
 - 유저 빌드 검증 결과: 컴파일·실행 정상, 기존 바늘형 clump보다 개선된 alpha card grass 표시 확인. 레퍼런스 수준의 풍성한 잔디까지는 밀도·색·형태·배치 rule 튜닝이 남았으며 Step 5에서 다룸.
 
+### Grass dressing 재생성 게이트와 1차 튜닝 (Vegetation alpha card Step 5)
+- `Chunk::grassDirty` 플래그를 추가해 grass instance buffer 재생성을 terrain/open-sky/object 변화가 있을 때로 제한. `setTile`, 오브젝트 설치/수확은 grass 배치에 영향을 주므로 `grassDirty=true`로 표시.
+- `setTileState`, 작물 성장, 물주기처럼 grass 배치와 무관한 dirty 변경에서는 grass buffer를 재생성하지 않도록 분리. 작물/농지 visual 리빌드는 유지하되 식생 dressing 낭비를 줄임.
+- grass 밀도를 18% → 28%로 올리고, 위치 오프셋과 scale 범위를 약간 키워 듬성한 느낌을 완화.
+- alpha card mesh는 조금 더 낮고 넓게 조정하고, 절차 grass texture의 blade 수·폭·색을 늘려 기존보다 두꺼운 clump로 보이게 함.
+- 검증 결과: 기존보다 두꺼워지고 alpha card 적용은 안정적이나, 아직 레퍼런스처럼 바닥을 덮는 실제 잔디밭 느낌은 부족. 다음 개선은 단순 밀도 증가보다 density field, variant, ground dressing layer가 핵심.
+
 ---
 
 ## 게임 설계 메모
