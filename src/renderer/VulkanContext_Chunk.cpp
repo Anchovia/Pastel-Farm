@@ -141,8 +141,11 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     memcpy(iMapped, indices.data(), iSize);
     vkUnmapMemory(m_device, data.indexBuffer.memory);
 
-    // Object instances change only when objects are added/removed (generation, harvest)
-    buildGrassDressingBuffer(coord, chunk);
+    // Grass instances change only when terrain/open sky or blocking objects change.
+    if (chunk.grassDirty) {
+        buildGrassDressingBuffer(coord, chunk);
+        chunk.grassDirty = false;
+    }
     if (chunk.objectsDirty) {
         buildChunkObjectBuffer(coord, chunk);
         chunk.objectsDirty = false;
@@ -184,11 +187,11 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
         const int wx = baseX + lx;
         const int wy = baseY + ly;
         if (hasObjectAt(wx, wy)) continue;
-        if (hash01(wx, wy, 11) > 0.18f) continue;
+        if (hash01(wx, wy, 11) > 0.28f) continue;
 
-        const float ox = (hash01(wx, wy, 23) - 0.5f) * 0.72f;
-        const float oy = (hash01(wx, wy, 37) - 0.5f) * 0.72f;
-        const float sc = 0.75f + hash01(wx, wy, 41) * 0.45f;
+        const float ox = (hash01(wx, wy, 23) - 0.5f) * 0.78f;
+        const float oy = (hash01(wx, wy, 37) - 0.5f) * 0.78f;
+        const float sc = 0.80f + hash01(wx, wy, 41) * 0.45f;
         const float rt = hash01(wx, wy, 53) * 6.2831853f;
         insts.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.51f}, sc, rt});
     }

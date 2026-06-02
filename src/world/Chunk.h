@@ -68,6 +68,7 @@ struct Chunk {
     std::vector<Object> objects;
     bool dirty        = true;
     bool objectsDirty = true;  // objects changed → renderer rebuilds the instance buffers
+    bool grassDirty   = true;  // grass dressing changed → renderer rebuilds the grass buffer
     bool modified     = false; // true if player has changed any tile (used for save/load)
 };
 

@@ -181,6 +181,13 @@ struct ChunkVertex {
     glm::vec3 color;  // top face uses topColor, side/bottom use sideColor
 };
 
+// Grass alpha-card vertex — local card position + lighting normal + texture UV
+struct GrassCardVertex {
+    glm::vec3 pos;
+    glm::vec3 normal;
+    glm::vec2 uv;
+};
+
 // UI vertex — screen-space NDC position + RGBA color
 struct UIVertex {
     glm::vec2 pos;
