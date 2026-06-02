@@ -242,22 +242,32 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
     }
 
-    // Objects — per-type mesh, instanced per chunk
+    // Grass alpha cards — visual-only dressing, not a shadow caster
     {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_objectPipeline);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_grassPipeline);
         for (auto& [coord, data] : m_chunkBuffers) {
-            if (data.objGroups.empty() && data.grassCount == 0) continue;
+            if (m_grassCardMesh.count == 0 || data.grassCount == 0) continue;
 
             glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
             glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
             if (!m_frustum.containsAABB(chunkMin, chunkMax)) continue;
 
-            if (m_grassClumpMesh.count > 0 && data.grassCount > 0) {
-                VkBuffer     bufs[] = { m_grassClumpMesh.vbuf, data.grassBuffer };
-                VkDeviceSize offs[] = { 0, 0 };
-                vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
-                vkCmdDraw(cmd, m_grassClumpMesh.count, data.grassCount, 0, 0);
-            }
+            VkBuffer     bufs[] = { m_grassCardMesh.vbuf, data.grassBuffer };
+            VkDeviceSize offs[] = { 0, 0 };
+            vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+            vkCmdDraw(cmd, m_grassCardMesh.count, data.grassCount, 0, 0);
+        }
+    }
+
+    // Objects — per-type mesh, instanced per chunk
+    {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_objectPipeline);
+        for (auto& [coord, data] : m_chunkBuffers) {
+            if (data.objGroups.empty()) continue;
+
+            glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+            glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+            if (!m_frustum.containsAABB(chunkMin, chunkMax)) continue;
 
             for (auto& g : data.objGroups) {
                 const ObjectMesh& mesh = m_objectMeshes[(size_t)g.type];

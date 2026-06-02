@@ -772,6 +772,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - descriptor pool과 descriptor set update에 grass texture sampler write를 추가. 텍스처는 프레임별로 변하지 않지만, 기존 프레임별 scene descriptor set 구조에 맞춰 각 set에 같은 grass texture를 기록.
 - 아직 렌더 경로는 기존 기하 grass clump를 유지하므로 시각 변화 없음이 정상. 유저 빌드 검증 결과: 컴파일·실행·종료 정상, 기존 grass clump 시각 유지, Vulkan validation 에러 없음.
 
+### Grass alpha card 렌더 경로 연결 (Vegetation alpha card Step 4)
+- 메인 scene pass에서 기존 기하 grass clump draw를 `m_grassCardMesh + m_grassPipeline` draw로 교체해 alpha card grass가 실제 화면에 나오도록 연결.
+- 기존 per-chunk grass instance buffer(`data.grassBuffer`, `grassCount`)는 그대로 재사용. 배치 좌표, 밀도, 스케일, 회전은 좌표 해시 기반 결정론을 유지.
+- grass draw를 object draw와 분리해 먼저 `m_grassPipeline`으로 카드 식생을 그리고, 이후 나무·돌·작업대·울타리는 기존 `m_objectPipeline`으로 계속 렌더링.
+- shadow pass에는 grass를 추가하지 않음. 식생은 시각 dressing layer로 유지하고, shadow caster는 기존 청크·오브젝트·플레이어 범위 그대로 둠.
+- 유저 빌드 검증 결과: 컴파일·실행 정상, 기존 바늘형 clump보다 개선된 alpha card grass 표시 확인. 레퍼런스 수준의 풍성한 잔디까지는 밀도·색·형태·배치 rule 튜닝이 남았으며 Step 5에서 다룸.
+
 ---
 
 ## 게임 설계 메모
