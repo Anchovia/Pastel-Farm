@@ -122,7 +122,7 @@
 - `FrameRenderData` 스냅샷 — `drawFrame`의 프레임 입력을 구조체 1개로 묶어 렌더러 public 경계를 안정화
 - `GpuBuffer` RAII — `VkBuffer+VkDeviceMemory`(+mapped)를 move-only 래퍼로 통합하고 device 파괴 전 명시 정리
 - DevUI(ImGui) + GPU 프로파일링 — `PASTEL_DEV_BUILD` 전용 F3 패널. post pass 위에 렌더링하고 GPU timestamp로 total/shadow/scene/post/imgui 구간 시간 표시
-- MainMenu 1차 App-state — 실행 직후 `PASTEL FARM`과 클릭형 `START` / `SETTINGS` row 표시. `START` 클릭(또는 `Enter`)으로 save 로드 + 초기 청크 로드 후 Gameplay 진입, `SETTINGS` 클릭(또는 `S`)으로 Settings 진입. 메뉴 중 게임 입력·시간 진행·청크 스트리밍 차단
+- MainMenu 1차 App-state — 실행 직후 `PASTEL FARM`과 클릭형 `START` / `SETTINGS` row 표시. `START` 클릭으로 save 로드 + 초기 청크 로드 후 Gameplay 진입, `SETTINGS` 클릭으로 Settings 진입(키보드 백업 없이 클릭 전용). 메뉴 중 게임 입력·시간 진행·청크 스트리밍 차단
 - Settings 1차 App-state — MainMenu에서 Settings 화면 진입, `ESC`/`BACK`으로 MainMenu 복귀. 설정 row 클릭으로 VSync ON/OFF(실제 present mode 적용), AA OFF/FXAA/SMAA(데이터/UI) 변경
 - Loading 1차 App-state — MainMenu에서 `START` 후 한 프레임 `LOADING` 화면을 표시하고, 그 다음 save 로드 + 초기 청크 로드 + Gameplay 진입
 - Pause 클릭 메뉴 — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 `PAUSED` + `RESUME` / `SETTINGS` / `QUIT` row 표시. Pause에서 Settings 진입 시 `BACK`/`ESC`는 Pause로 복귀. 인벤토리가 열린 Gameplay에서는 `ESC`가 먼저 인벤토리만 닫음

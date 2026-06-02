@@ -21,8 +21,6 @@ enum class AppMode {
 struct AppFlow {
     AppMode mode = AppMode::MainMenu;
     bool prevEsc = false;
-    bool prevStart = false;
-    bool prevSettings = false;
     bool prevMenuClick = false;
     bool prevPauseClick = false;
     bool prevCtrlS = false;
@@ -49,12 +47,6 @@ struct AppFlow {
 
     bool loading() const {
         return mode == AppMode::Loading;
-    }
-
-    bool consumeMainMenuStart(bool startPressed) {
-        const bool pressed = mode == AppMode::MainMenu && startPressed && !prevStart;
-        prevStart = startPressed;
-        return pressed;
     }
 
     int consumeMainMenuClick(const PlayerInput& input) {
@@ -91,12 +83,6 @@ struct AppFlow {
         }
         prevPauseClick = input.leftClick;
         return action;
-    }
-
-    void updateMainMenuSettings(bool settingsPressed) {
-        if (mode == AppMode::MainMenu && settingsPressed && !prevSettings)
-            enterSettings();
-        prevSettings = settingsPressed;
     }
 
     void enterSettings() {
@@ -228,8 +214,6 @@ static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx)
         clearGameplayInput(input);
         input.saveKey         = false;
         input.quit            = false;
-        input.startKey        = false;
-        input.settingsKey     = false;
     }
 }
 #endif
@@ -294,7 +278,6 @@ int main() {
             const bool wasSettings = app.settings();
             const int menuClickAction = app.consumeMainMenuClick(input);
             const int pauseClickAction = app.consumePauseClick(input);
-            app.updateMainMenuSettings(input.settingsKey);
             if (menuClickAction == 2) {
                 app.enterSettings();
                 settings.syncClickState(input);
@@ -311,7 +294,7 @@ int main() {
                 window.close();
             if (wasSettings && settings.update(input, app.mode))
                 app.leaveSettings();
-            if (app.consumeMainMenuStart(input.startKey) || menuClickAction == 1) {
+            if (menuClickAction == 1) {
                 app.enterLoading();
                 pendingWorldStart = true;
                 clearGameplayInput(input);
