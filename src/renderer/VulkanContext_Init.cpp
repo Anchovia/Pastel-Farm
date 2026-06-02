@@ -731,6 +731,90 @@ void VulkanContext::createObjectMeshes() {
 }
 
 // ============================================================
+//  Procedural grass alpha texture
+// ============================================================
+void VulkanContext::createGrassTexture() {
+    // A small grass-tuft mask: a few tapering vertical blades drawn into alpha, with a
+    // base-dark / tip-light green. Kept isolated so a file-loaded image (stb_image) can
+    // replace just this pixel fill later — pipeline/descriptor/mesh stay identical.
+    const uint32_t W = 64, H = 64;
+    std::vector<uint8_t> pixels((size_t)W * H * 4, 0); // RGBA8, fully transparent
+
+    auto plot = [&](int x, int y, const glm::vec3& c) {
+        if (x < 0 || x >= (int)W || y < 0 || y >= (int)H) return;
+        uint8_t* p = &pixels[((size_t)y * W + x) * 4];
+        p[0] = (uint8_t)(c.r * 255.0f);
+        p[1] = (uint8_t)(c.g * 255.0f);
+        p[2] = (uint8_t)(c.b * 255.0f);
+        p[3] = 255;
+    };
+
+    struct Blade { float baseX, tipX, halfW; };
+    static const Blade blades[] = {
+        {0.50f, 0.50f, 0.085f},
+        {0.34f, 0.20f, 0.060f},
+        {0.66f, 0.82f, 0.060f},
+        {0.43f, 0.34f, 0.050f},
+        {0.58f, 0.68f, 0.050f},
+    };
+    const glm::vec3 baseCol = {0.16f, 0.34f, 0.13f};
+    const glm::vec3 tipCol  = {0.42f, 0.62f, 0.26f};
+
+    for (uint32_t y = 0; y < H; y++) {
+        const float t = 1.0f - (float)y / (float)(H - 1); // 0 at bottom row, 1 at top row
+        const glm::vec3 col = glm::mix(baseCol, tipCol, t);
+        for (const Blade& b : blades) {
+            const float cx    = b.baseX + (b.tipX - b.baseX) * t;
+            const float halfW = b.halfW * (1.0f - t);      // taper to a point at the tip
+            const int x0 = (int)((cx - halfW) * W);
+            const int x1 = (int)((cx + halfW) * W);
+            for (int x = x0; x <= x1; x++) plot(x, y, col);
+        }
+    }
+
+    const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
+    GpuBuffer staging = createBuffer(imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    void* mapped;
+    vkMapMemory(m_device, staging.memory, 0, imgSize, 0, &mapped);
+    memcpy(mapped, pixels.data(), (size_t)imgSize);
+    vkUnmapMemory(m_device, staging.memory);
+
+    createImage(W, H, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_grassTexImage, m_grassTexMemory);
+
+    transitionImageLayout(m_grassTexImage, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(staging.buffer, m_grassTexImage, W, H);
+    transitionImageLayout(m_grassTexImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    // staging frees here (GpuBuffer RAII); all transfers already waited on a fence.
+
+    VkImageViewCreateInfo vi{};
+    vi.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vi.image                       = m_grassTexImage;
+    vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
+    vi.format                      = VK_FORMAT_R8G8B8A8_UNORM;
+    vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vi.subresourceRange.levelCount = 1;
+    vi.subresourceRange.layerCount = 1;
+    if (vkCreateImageView(m_device, &vi, nullptr, &m_grassTexView) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create grass texture view");
+
+    VkSamplerCreateInfo si{};
+    si.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    si.magFilter    = VK_FILTER_LINEAR;
+    si.minFilter    = VK_FILTER_LINEAR;
+    si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    if (vkCreateSampler(m_device, &si, nullptr, &m_grassTexSampler) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create grass sampler");
+}
+
+// ============================================================
 //  Framebuffers
 // ============================================================
 void VulkanContext::createFramebuffers() {

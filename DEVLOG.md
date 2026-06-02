@@ -751,6 +751,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - GTX 1050 Ti 권장 목표라면 투자 가치가 있음. 조건은 shadow 제외, alpha test/clip 우선, 근거리 청크 중심, clump당 card 2장 정도, 거리/밀도 제한.
 - 새 텍스처와 alpha 파이프라인이 들어가므로 구현 전 설계안 필요. 텍스처 0개 원칙의 첫 예외가 될 수 있으나 vegetation은 ROI가 높은 예외로 판단.
 
+### 절차 grass alpha 텍스처 리소스 추가 (Vegetation alpha card Step 1)
+- alpha card 방식으로 전환하기 위한 첫 단계로, 런타임에서 작은 RGBA grass alpha 텍스처를 절차 생성하도록 추가.
+- `createGrassTexture()` 안에 픽셀 채움 로직을 격리해, 이후 이미지 파일 기반 텍스처로 교체하더라도 파이프라인·디스크립터·메시 경로는 그대로 유지할 수 있게 함.
+- staging buffer에서 device-local `VkImage`로 업로드하고, `UNDEFINED → TRANSFER_DST_OPTIMAL → SHADER_READ_ONLY_OPTIMAL` 레이아웃 전환 후 image view와 sampler를 생성.
+- 이미지 전송용 `transitionImageLayout` / `copyBufferToImage` 헬퍼를 추가. 기존 `copyBuffer`와 one-shot command buffer 보일러플레이트가 겹치지만, 이번 기능 커밋에서는 추출 리팩토링을 섞지 않음.
+- 아직 grass 렌더 경로와 셰이더에는 연결하지 않았으므로 시각 변화 없음이 정상. 유저 빌드 검증 결과: 컴파일·실행·종료 정상, Vulkan validation 에러 없음.
+
 ---
 
 ## 게임 설계 메모
