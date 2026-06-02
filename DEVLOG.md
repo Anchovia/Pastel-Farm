@@ -830,6 +830,7 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 목표 그래픽은 고품질 스타일라이즈드 상용 게임과 견줄 만한 화면이다. 로우폴리와 플랫 셰이딩은 저품질 제약이 아니라 미학적 선택이다.
 - 문서 기준을 수정: `README.md`, `DESIGN.md`, `ARCHITECTURE.md`, `VULKAN_REFERENCES.md`에서 GTX 750 Ti/통합 GPU급, 텍스처 최소화, PBR 전면 배제처럼 너무 보수적으로 보이던 문장을 정리.
 - 다음 렌더링 방향은 FXAA/SMAA 실제 적용, terrain/object texture mapping, material-lite, high-quality grass(wind/LOD/variant), shadow quality options, ground dressing 텍스처화로 재정렬.
+- 실행 순서도 정리: 현재 변경분 커밋 → FXAA 실제 적용 → SMAA → TextureResource helper → terrain/object texture mapping → material-lite → high-quality grass. 다음 세션은 PBR/render graph 같은 대형 시스템보다 FXAA부터 시작하는 것이 맞다.
 
 ---
 

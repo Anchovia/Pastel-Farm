@@ -104,6 +104,18 @@ src/
 - terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
 - height fog / vegetation variation / wind / sky tint / LUT
 
+### 다음 실행 순서 — 결정
+다음 세션/작업은 아래 순서를 따른다. 큰 material/PBR 시스템이나 render graph로 먼저 가지 않는다.
+
+1. 현재 변경분(렌더링 품질 기준 문서 재정렬 + Step 9 grass texture/card detail)을 먼저 커밋한다.
+2. **FXAA 실제 적용**: 이미 Settings에 있는 `AA OFF / FXAA / SMAA` 데이터와 post pass를 연결한다. 목표는 grass alpha edge, 지형/오브젝트 edge가 덜 거칠어지는지 확인하는 것.
+3. **SMAA 적용**: FXAA 이후 품질 옵션으로 추가한다. 필요하면 lookup texture/상수 테이블/패스 구성 방식을 별도 설계한다.
+4. **TextureResource 기반**: grass texture 생성/upload 경로를 일반화해 terrain/object texture mapping의 토대를 만든다.
+5. **Terrain/object texture mapping + material-lite**: terrain atlas 또는 단순 albedo texture부터 시작하고, vertex color는 tint/스타일 보정으로 유지한다.
+6. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
+
+이 순서는 "품질을 올리되, 매 단계가 화면에 바로 기여하고 기존 구조와 자연스럽게 맞물리는" 경로다.
+
 ### Vegetation Alpha Card — **방향**
 - 참고 이미지 수준의 자연스러운 풀밭은 단순 삼각형 기하 clump보다 alpha card 방식이 맞다. 기하 blade는 멀리서 삐쭉한 바늘처럼 보이기 쉽다.
 - 목표: 풀 텍스처 1장 + X자/부채꼴 card clump + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.

@@ -110,6 +110,28 @@ SaschaWillems의 debug utils/pipeline statistics 계열은 DevUI와 궁합이 �
 
 ---
 
+## 다음 구현 순서 메모
+
+다음 렌더링 구현은 **FXAA 실제 적용**부터 시작한다. 이유:
+
+1. Settings에는 이미 `AA OFF / FXAA / SMAA` 데이터/UI가 있다.
+2. post pass가 이미 있으므로 FXAA는 구조 변경이 작고 체감이 빠르다.
+3. grass alpha card edge와 지형/오브젝트 edge 품질을 비교할 기준이 생긴다.
+4. SMAA, texture mapping, material-lite로 넘어가기 전에 AA 정책을 먼저 고정할 수 있다.
+
+권장 순서:
+
+1. FXAA 실제 적용
+2. SMAA 적용
+3. TextureResource helper
+4. terrain/object texture mapping
+5. material-lite
+6. high-quality grass(wind/LOD/variant)
+
+PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
+
+---
+
 ## 지금은 참고만 할 영역
 
 - Full PBR / IBL 중심 샘플: 당장 전면 도입은 이르다. 다만 material-lite 이후 재질 수요가 분명해지면 단계적으로 참고한다.
