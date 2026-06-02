@@ -73,7 +73,7 @@
 - 2048² shadow map, 3×3 PCF, 청크/오브젝트/플레이어 shadow caster
 - day/night 기반 sky/fog/light 변화, hemisphere ambient
 - offscreen scene → post pass tone/color grading(exposure/contrast/saturation/split-tone/vignette)
-- grass alpha card 1차: 절차 RGBA grass texture + X자 card + alpha test + 청크별 dirty gate
+- grass alpha card dressing: 절차 RGBA grass texture + X자 card + alpha test + density field + 청크별 dirty gate
 - DevUI(ImGui, `PASTEL_DEV_BUILD`) + GPU timestamp(total/shadow/scene/post/imgui)
 
 > 상세 구현 이력은 `DEVLOG.md`, 구조 판단과 장기 방향은 `ARCHITECTURE.md`를 기준으로 본다.
@@ -82,7 +82,7 @@
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
 - **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
-- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card 1차(풀 clump, alpha test, shadow 제외) · grass density field/variant · height fog · organic dressing layer(잔돌/흙 패치) · wind · **AA(SMAA + FXAA fallback)** · LUT
+- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card 1차 · ✅ grass density field 1차 · height fog · organic dressing layer(잔돌/흙 패치) · visual variant(tint/texture/card) · wind · **AA(SMAA + FXAA fallback)** · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless
 

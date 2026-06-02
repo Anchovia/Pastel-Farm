@@ -163,13 +163,46 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
     const int baseX = coord.x * CHUNK_SIZE;
     const int baseY = coord.y * CHUNK_SIZE;
     std::vector<ObjectInstance> insts;
-    insts.reserve(96);
+    insts.reserve(192);
 
     auto hash01 = [](int wx, int wy, int salt) -> float {
         uint32_t h = (uint32_t)wx * 73856093u ^ (uint32_t)wy * 19349663u ^ (uint32_t)salt * 83492791u;
         h ^= h >> 13;
         h *= 1274126177u;
         return (float)(h & 65535u) / 65535.0f;
+    };
+    auto floorDiv = [](int v, int d) -> int {
+        return v >= 0 ? v / d : -((-v + d - 1) / d);
+    };
+    auto smooth = [](float t) -> float {
+        return t * t * (3.0f - 2.0f * t);
+    };
+    auto lerp = [](float a, float b, float t) -> float {
+        return a + (b - a) * t;
+    };
+    auto clamp01 = [](float v) -> float {
+        return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    };
+    auto valueNoise = [&](int wx, int wy, int scale, int salt) -> float {
+        const int gx = floorDiv(wx, scale);
+        const int gy = floorDiv(wy, scale);
+        const float fx = (float)(wx - gx * scale) / (float)scale;
+        const float fy = (float)(wy - gy * scale) / (float)scale;
+        const float sx = smooth(fx);
+        const float sy = smooth(fy);
+
+        const float a = hash01(gx,     gy,     salt);
+        const float b = hash01(gx + 1, gy,     salt);
+        const float c = hash01(gx,     gy + 1, salt);
+        const float d = hash01(gx + 1, gy + 1, salt);
+        return lerp(lerp(a, b, sx), lerp(c, d, sx), sy);
+    };
+    auto densityField = [&](int wx, int wy) -> float {
+        const float broad = valueNoise(wx, wy, 23, 101);
+        const float local = valueNoise(wx, wy, 9,  137);
+        float d = broad * 0.60f + local * 0.40f;
+        d = clamp01((d - 0.18f) / 0.74f);
+        return smooth(d);
     };
     auto hasObjectAt = [&chunk](int wx, int wy) {
         for (const Object& o : chunk.objects)
@@ -187,11 +220,28 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
         const int wx = baseX + lx;
         const int wy = baseY + ly;
         if (hasObjectAt(wx, wy)) continue;
-        if (hash01(wx, wy, 11) > 0.28f) continue;
 
-        const float ox = (hash01(wx, wy, 23) - 0.5f) * 0.78f;
-        const float oy = (hash01(wx, wy, 37) - 0.5f) * 0.78f;
-        const float sc = 0.80f + hash01(wx, wy, 41) * 0.45f;
+        int openGrass = 0;
+        for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            if (m_world.getTile(wx + dx, wy + dy, z) == TileType::GRASS &&
+                m_world.getTile(wx + dx, wy + dy, z + 1) == TileType::AIR)
+                openGrass++;
+        }
+
+        float density = densityField(wx, wy);
+        density = clamp01(density * (0.72f + ((float)openGrass / 8.0f) * 0.38f));
+
+        const float chance = 0.06f + density * 0.40f;
+        if (hash01(wx, wy, 11) > chance) continue;
+
+        const float jitter = 0.54f + density * 0.30f;
+        const float ox = (hash01(wx, wy, 23) - 0.5f) * jitter;
+        const float oy = (hash01(wx, wy, 37) - 0.5f) * jitter;
+        const float variant = hash01(wx, wy, 67);
+        const float variantScale = variant < 0.28f ? 0.90f : (variant > 0.82f ? 1.08f : 1.0f);
+        const float sc = (0.64f + density * 0.30f + hash01(wx, wy, 41) * (0.20f + density * 0.16f)) * variantScale;
         const float rt = hash01(wx, wy, 53) * 6.2831853f;
         insts.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.51f}, sc, rt});
     }

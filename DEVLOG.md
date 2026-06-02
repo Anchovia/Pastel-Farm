@@ -798,6 +798,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `DESIGN.md`의 현재 구현 상태와 grass alpha card 문구를 최신화.
 - `DEVLOG.md` 하단의 오래된 Minecraft식 설계 메모를 현재 Stardew-style 지형 불변/StaticProp 방향 요약으로 교체. 과거 구현 기록은 시간순 이력으로 보존.
 
+### Grass density field 기반 dressing 1차 (Vegetation alpha card Step 6)
+- `buildGrassDressingBuffer`의 고정 28% 균등 확률 배치를 좌표 기반 density field로 교체.
+- 넓은 patch noise와 작은 local noise를 섞어 grass 밀도가 지역별로 달라지도록 하고, 주변 8칸의 열린 GRASS 비율(`openGrass`)로 열린 잔디 영역에 약한 bias를 줌.
+- `ObjectInstance` 포맷은 유지한 채 density에 따라 배치 확률, 위치 jitter, scale 범위를 다르게 적용. 인스턴스 tint/texture/card variant는 후속으로 보류.
+- 기존 조건(GRASS + open sky + object 회피)과 `grassDirty` 재생성 게이트는 유지해 gameplay/save/object 렌더 경로 영향 없이 grass dressing만 변경.
+- 유저 빌드 검증 결과: 실행 정상, 균등 clump 느낌이 줄고 dense/sparse patch 차이가 생김. 다음 개선은 ground dressing layer, tint/texture/card variant, wind가 핵심.
+
 ---
 
 ## 게임 설계 메모
@@ -828,7 +835,7 @@ World
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop/ui, post pass를 분리해 그린다.
-- 다음 grass 개선은 단순 밀도 증가가 아니라 density field, variant, ground dressing layer가 핵심이다.
+- 다음 grass 개선은 ground dressing layer, tint/texture/card variant, wind가 핵심이다.
 
 ---
 

@@ -66,14 +66,14 @@
 
 ### 2. Instance data 확장
 
-현재 `ObjectInstance`는 `pos / scale / rot`만 가진다. Vegetation Step 6 이후 다음 값이 필요해질 수 있다.
+현재 `ObjectInstance`는 `pos / scale / rot`만 가진다. Vegetation Step 6 1차는 이 포맷을 유지했고, 이후 다음 값이 필요해질 수 있다.
 
 - `tint` 또는 packed color: clump별 초록색 변주
 - `variant`: texture array layer 또는 card mesh variant 선택
 - `windPhase`: vertex shader sway offset
 - `densityClass`: 디버그/튜닝용 분류
 
-우선 Step 6에서는 CPU 배치 규칙만 바꾸고, 색/variant가 실제로 필요해지는 순간 vertex input과 shader를 함께 확장한다.
+Step 6 1차에서는 CPU 배치 규칙만 바꿨다. 색/variant가 실제로 필요해지는 순간 vertex input과 shader를 함께 확장한다.
 
 ### 3. Alpha card 품질 개선
 
@@ -120,14 +120,14 @@ SaschaWillems의 debug utils/pipeline statistics 계열은 DevUI와 궁합이 �
 
 ## Vegetation Step 6에 대한 적용
 
-다음 작업인 `density field + variant 기반 grass dressing`은 Vulkan API 자체보다 **인스턴스 생성 규칙과 인스턴스 데이터 설계**가 핵심이다.
+`density field + variant 기반 grass dressing`은 Vulkan API 자체보다 **인스턴스 생성 규칙과 인스턴스 데이터 설계**가 핵심이다. Step 6 1차에서는 인스턴스 포맷 변경 없이 density field와 scale/offset variation만 적용했다.
 
-권장 순서:
+적용 결과:
 
-1. `buildGrassDressingBuffer` 안에 좌표 기반 density field를 추가한다.
-2. 균등 확률 대신 patch 단위 밀도, edge falloff, open grass bias를 사용한다.
-3. `ObjectInstance` 포맷 변경 없이 scale/rotation/offset 범위를 density에 따라 다르게 준다.
-4. 색/texture/card variant가 꼭 필요해지는 시점에만 인스턴스 포맷과 `grass.vert/.frag`를 확장한다.
+1. `buildGrassDressingBuffer` 안에 좌표 기반 density field를 추가했다.
+2. 균등 확률 대신 patch 단위 밀도와 open grass bias를 사용한다.
+3. `ObjectInstance` 포맷 변경 없이 scale/offset 범위를 density에 따라 다르게 준다.
+4. 색/texture/card variant는 실제 필요가 확인될 때 인스턴스 포맷과 `grass.vert/.frag`를 함께 확장한다.
 5. grass 품질 문제가 alpha edge에서 확인되면 `alphatocoverage`, `multisampling`, `texturemipmapgen` 샘플을 다시 본다.
 
 이렇게 하면 Step 6는 수술적으로 작게 시작하면서도, 이후 texture array / wind / LOD / indirect draw로 확장할 길을 막지 않는다.
