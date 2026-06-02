@@ -32,6 +32,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createImageViews();
     createRenderPass();
     createPostRenderPass();
+    createSmaaRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
     createChunkPipeline();
@@ -39,14 +40,17 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createObjectPipeline();
     createGrassPipeline();
     createPostPipeline();
+    createSmaaPipelines();
     createDepthResources();
     createOffscreenResources();
+    createSmaaResources();
     createShadowResources();
     createShadowPipeline();
     createShadowObjectPipeline();
     createShadowPlayerPipeline();
     createFramebuffers();
     createCommandPool();
+    createSmaaLookupTextures();
 #ifdef PASTEL_DEV_BUILD
     createDevTools();
 #endif
@@ -56,6 +60,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createUIBuffer();
     createObjectMeshes();
     createGrassTexture();
+    createTerrainTextureArray();
     createItemMesh();
     createDropInstanceBuffer();
     rebuildDirtyChunks();
@@ -66,6 +71,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createDescriptorPool();
     createDescriptorSets();
     createPostDescriptors();
+    createSmaaDescriptors();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -90,10 +96,12 @@ VulkanContext::~VulkanContext() {
     m_selectorInstBuffer.clear();
     m_selectorIndexBuffer.destroy();
     m_selectorVertexBuffer.destroy();
-    m_chunkBuffers.clear();          // frees each chunk's vertex/index + object groups
+    m_chunkBuffers.clear();          // frees chunk mesh, dressing, and object group buffers
     for (auto& mesh : m_objectMeshes) mesh.vbuf.destroy();
     m_grassClumpMesh.vbuf.destroy();
     m_grassCardMesh.vbuf.destroy();
+    m_groundPatchMesh.vbuf.destroy();
+    m_pebbleMesh.vbuf.destroy();
     m_itemVertexBuffer.destroy();
     m_dropInstBuffer.clear();
     m_indexBuffer.destroy();
@@ -120,11 +128,22 @@ VulkanContext::~VulkanContext() {
     vkDestroyPipelineLayout     (m_device, m_postPipelineLayout,      nullptr);
     vkDestroyDescriptorPool     (m_device, m_postDescriptorPool,      nullptr);
     vkDestroyDescriptorSetLayout(m_device, m_postDescriptorSetLayout, nullptr);
+    vkDestroyPipeline           (m_device, m_smaaNeighborhoodPipeline,       nullptr);
+    vkDestroyPipelineLayout     (m_device, m_smaaNeighborhoodPipelineLayout, nullptr);
+    vkDestroyPipeline           (m_device, m_smaaBlendPipeline,              nullptr);
+    vkDestroyPipelineLayout     (m_device, m_smaaBlendPipelineLayout,        nullptr);
+    vkDestroyPipeline           (m_device, m_smaaEdgePipeline,               nullptr);
+    vkDestroyPipelineLayout     (m_device, m_smaaEdgePipelineLayout,         nullptr);
+    vkDestroyDescriptorPool     (m_device, m_smaaDescriptorPool,             nullptr);
+    vkDestroyDescriptorSetLayout(m_device, m_smaaNeighborhoodDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(m_device, m_smaaBlendDescriptorSetLayout,        nullptr);
+    vkDestroyDescriptorSetLayout(m_device, m_smaaEdgeDescriptorSetLayout,         nullptr);
+    m_smaaAreaTex.destroy();
+    m_smaaSearchTex.destroy();
     vkDestroySampler            (m_device, m_postSampler,             nullptr);
-    vkDestroySampler  (m_device, m_grassTexSampler, nullptr);
-    vkDestroyImageView(m_device, m_grassTexView,    nullptr);
-    vkDestroyImage    (m_device, m_grassTexImage,   nullptr);
-    vkFreeMemory      (m_device, m_grassTexMemory,  nullptr);
+    m_grassTex.destroy();
+    m_terrainTex.destroy();
+    vkDestroyRenderPass         (m_device, m_smaaRenderPass,          nullptr);
     vkDestroyRenderPass         (m_device, m_postRenderPass,          nullptr);
     vkDestroyRenderPass(m_device, m_renderPass, nullptr);
 
@@ -276,8 +295,20 @@ void VulkanContext::cleanupSwapchain() {
         vkDestroyImage    (m_device, m_offscreenImage[i],  nullptr);
         vkFreeMemory      (m_device, m_offscreenMemory[i], nullptr);
     }
+    for (size_t i = 0; i < m_smaaEdgeImage.size(); i++) {
+        vkDestroyImageView(m_device, m_smaaEdgeView[i],   nullptr);
+        vkDestroyImage    (m_device, m_smaaEdgeImage[i],  nullptr);
+        vkFreeMemory      (m_device, m_smaaEdgeMemory[i], nullptr);
+    }
+    for (size_t i = 0; i < m_smaaBlendImage.size(); i++) {
+        vkDestroyImageView(m_device, m_smaaBlendView[i],   nullptr);
+        vkDestroyImage    (m_device, m_smaaBlendImage[i],  nullptr);
+        vkFreeMemory      (m_device, m_smaaBlendMemory[i], nullptr);
+    }
     for (auto fb : m_sceneFramebuffers)    vkDestroyFramebuffer(m_device, fb, nullptr);
     for (auto fb : m_postFramebuffers)     vkDestroyFramebuffer(m_device, fb, nullptr);
+    for (auto fb : m_smaaEdgeFramebuffers) vkDestroyFramebuffer(m_device, fb, nullptr);
+    for (auto fb : m_smaaBlendFramebuffers) vkDestroyFramebuffer(m_device, fb, nullptr);
     for (auto iv : m_swapchainImageViews)  vkDestroyImageView  (m_device, iv, nullptr);
     vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
 }
@@ -295,8 +326,10 @@ void VulkanContext::recreateSwapchain() {
     createImageViews();
     createDepthResources();
     createOffscreenResources();
+    createSmaaResources();
     createFramebuffers();
     updatePostDescriptors();   // offscreen views were recreated
+    updateSmaaDescriptors();   // SMAA intermediate views were recreated
 
     // Swapchain image count may have changed — recreate per-image present semaphores
     for (auto sem : m_renderFinished)

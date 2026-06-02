@@ -748,7 +748,7 @@ Vulkan 공부 겸 엔진 개발 기록.
 ### Vegetation alpha card 투자 판단 (Tier 2 비주얼 방향)
 - 현재 기하 기반 풀 clump는 풀밭의 방향성 검증에는 유용하지만, 얇은 삼각형 실루엣 때문에 멀리서 삐쭉한 바늘처럼 보이는 한계가 확인됨.
 - 참고 이미지에 가까운 풀은 alpha texture card가 더 적합. 목표는 낮고 풍성한 X자/부채꼴 card clump, 색/높이/회전 variation, 밀도 rule, 약한 wind sway.
-- GTX 1050 Ti 권장 목표라면 투자 가치가 있음. 조건은 shadow 제외, alpha test/clip 우선, 근거리 청크 중심, clump당 card 2장 정도, 거리/밀도 제한.
+- GTX 1050 Ti 최소 기준에서도 grass는 투자 가치가 있음. 조건은 성능 예산을 DevUI/GPU timing으로 보면서 shadow 제외, alpha test/clip 우선, 거리/밀도/LOD를 조절하는 것.
 - 새 텍스처와 alpha 파이프라인이 들어가므로 구현 전 설계안 필요. 텍스처 0개 원칙의 첫 예외가 될 수 있으나 vegetation은 ROI가 높은 예외로 판단.
 
 ### 절차 grass alpha 텍스처 리소스 추가 (Vegetation alpha card Step 1)
@@ -798,6 +798,92 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `DESIGN.md`의 현재 구현 상태와 grass alpha card 문구를 최신화.
 - `DEVLOG.md` 하단의 오래된 Minecraft식 설계 메모를 현재 Stardew-style 지형 불변/StaticProp 방향 요약으로 교체. 과거 구현 기록은 시간순 이력으로 보존.
 
+### Grass density field 기반 dressing 1차 (Vegetation alpha card Step 6)
+- `buildGrassDressingBuffer`의 고정 28% 균등 확률 배치를 좌표 기반 density field로 교체.
+- 넓은 patch noise와 작은 local noise를 섞어 grass 밀도가 지역별로 달라지도록 하고, 주변 8칸의 열린 GRASS 비율(`openGrass`)로 열린 잔디 영역에 약한 bias를 줌.
+- `ObjectInstance` 포맷은 유지한 채 density에 따라 배치 확률, 위치 jitter, scale 범위를 다르게 적용. 인스턴스 tint/texture/card variant는 후속으로 보류.
+- 기존 조건(GRASS + open sky + object 회피)과 `grassDirty` 재생성 게이트는 유지해 gameplay/save/object 렌더 경로 영향 없이 grass dressing만 변경.
+- 유저 빌드 검증 결과: 실행 정상, 균등 clump 느낌이 줄고 dense/sparse patch 차이가 생김. 다음 개선은 ground dressing layer, tint/texture/card variant, wind가 핵심.
+
+### Ground dressing layer 1차와 미학 피드백 (Vegetation Step 7)
+- grass와 별도의 visual-only ground dressing buffer를 추가. 청크별 `groundPatchBuffer` / `pebbleBuffer`를 만들고, object pipeline을 재사용해 지형 렌더 후 grass 렌더 전에 그림.
+- 배치 조건은 GRASS/DIRT + open sky + object 회피를 기준으로 하고, 좌표 기반 noise와 open ground bias로 patch/pebble을 결정론적으로 배치.
+- 저장, 충돌, 채집, shadow caster에는 연결하지 않았다. 의도는 최종 아트가 아니라 나중에 texture/card/decal 기반 지면 디테일로 바꾸기 전 placement layer를 검증하는 것.
+- 유저 빌드/스크린샷 피드백: 구조는 작동하지만 결과가 너무 못생겼다. 갈색 patch와 pebble placeholder가 크고 대비가 강해, 은은한 지면 디테일이 아니라 화면을 어지럽히는 오브젝트처럼 보인다.
+- 결론: Step 7 구조는 유지 가치가 있지만 현재 geometry placeholder는 최종 방향이 아니다. 다음 작업은 patch를 크게 줄이거나 비활성화하고, grass card tint/variant 또는 낮은 대비의 texture 기반 ground detail 쪽으로 전환하는 것이 좋다.
+
+### Ground dressing placeholder 축소 (Vegetation Step 7 cleanup)
+- Step 7의 visual-only ground dressing 구조는 유지하되, 화면을 점령하던 placeholder 강도를 크게 낮춤.
+- GRASS 위 ground patch 생성은 제거하고, DIRT 위에서만 아주 드물게 작은 patch가 나오도록 확률과 scale을 축소.
+- pebble도 밀도와 크기를 크게 줄이고 색 대비를 낮춰 지면에 더 묻히게 조정.
+- 유저 빌드/스크린샷 피드백: 이전보다 훨씬 조용해졌지만 거의 안 보일 정도로 줄었다. 현재 판단은 "없어 보이는 기준 화면"이 "못생긴 placeholder가 화면을 망치는 상태"보다 낫다는 쪽. 최종 디테일은 이후 텍스처/알파 기반 ground detail과 grass tint/card variant로 다시 채운다.
+
+### Grass shader 기반 tint/card variation 1차 (Vegetation Step 8)
+- `ObjectInstance` 포맷(`pos/scale/rot`)은 유지하고, `grass.vert`에서 인스턴스 좌표 기반 hash로 clump별 폭/높이 variation을 계산.
+- `grass.vert`가 clump별 tint를 `fragTint`로 넘기고, `grass.frag`가 grass texture 색에 tint를 곱해 초록색 반복감을 완화.
+- C++ vertex input, descriptor, pipeline, grass placement/density, ground dressing buffer는 변경하지 않았다. 파장은 grass shader에 한정.
+- 유저 빌드 검증 결과: 셰이더 컴파일·실행 정상. grass 반복감이 약간 줄고, ground dressing cleanup 상태도 유지됨.
+
+### 렌더링 품질/성능 기준 재정렬
+- 프로젝트 성능 기준을 **최소 GTX 1050 Ti / 1080p / 60fps**, **권장 GTX 1660 Super급**으로 명확히 정리.
+- Pastel Farm은 초저사양 로우폴리 데모나 플래시게임식 단순화를 목표로 하지 않는다. 최적화·리팩토링·모듈성은 계속 핵심이지만, 품질을 낮추기 위한 보수주의는 피한다.
+- 목표 그래픽은 고품질 스타일라이즈드 상용 게임과 견줄 만한 화면이다. 로우폴리와 플랫 셰이딩은 저품질 제약이 아니라 미학적 선택이다.
+- 문서 기준을 수정: `README.md`, `DESIGN.md`, `ARCHITECTURE.md`, `VULKAN_REFERENCES.md`에서 GTX 750 Ti/통합 GPU급, 텍스처 최소화, PBR 전면 배제처럼 너무 보수적으로 보이던 문장을 정리.
+- 다음 렌더링 방향은 FXAA/SMAA 실제 적용, terrain/object texture mapping, material-lite, high-quality grass(wind/LOD/variant), shadow quality options, ground dressing 텍스처화로 재정렬.
+- 실행 순서도 정리: 현재 변경분 커밋 → FXAA 실제 적용 → SMAA → TextureResource helper → terrain/object texture mapping → material-lite → high-quality grass. 다음 세션은 PBR/render graph 같은 대형 시스템보다 FXAA부터 시작하는 것이 맞다.
+
+### FXAA post AA 실제 적용 + UI 후처리 순서 분리
+- Settings의 `AA OFF / FXAA / SMAA` 중 `FXAA`를 `post.frag`의 실제 FXAA 경로에 연결. `PostPushConstants`로 inverse framebuffer size와 AA mode를 fragment shader에 전달한다.
+- `AA OFF`는 기존 post grading만 수행한다. `AA SMAA`는 아직 별도 SMAA가 아니며 현재는 FXAA fallback으로 동작한다. 다음 단계에서 SMAA edge/blend/neighborhood pass 또는 lookup texture/상수 테이블 방식을 설계해야 한다.
+- 자체 게임 UI(메뉴/핫바/픽셀 폰트)는 scene offscreen pass에서 제거하고 post fullscreen draw 이후 같은 post render pass에서 스왑체인에 직접 렌더링한다. FXAA가 픽셀 폰트 획을 섞어 `BACK` 글자가 깨지는 문제를 해결했다.
+- `createPipeline(PipelineConfig)`에 render pass override를 추가해 기본은 `m_renderPass`, UI만 `m_postRenderPass`를 사용하도록 최소 확장. ImGui DevUI와 자체 UI 모두 AA/color grading 영향 밖에서 선명하게 유지한다.
+- 유저 빌드 검증 결과: `AA OFF`는 미적용, `AA FXAA`는 적용, `AA SMAA`는 현재 FXAA와 동일하게 보임. UI 깨짐 수정도 정상 확인.
+
+### SMAA 1x 1차 후처리 패스 적용
+- `AA SMAA`가 더 이상 FXAA fallback이 아니라 `smaa_edge -> smaa_blend -> smaa_neighborhood` 3-pass 후처리 경로를 사용한다.
+- Iryoku SMAA 공식 LUT인 `AreaTex/SearchTex`와 `SMAA.hlsl` reference를 `third_party/smaa`에 포함했다. 라이선스 고지는 해당 파일의 MIT header를 유지한다.
+- `smaa_edge.frag`는 luma edge detection, `smaa_blend.frag`는 horizontal/vertical search와 blend weight 계산, `smaa_neighborhood.frag`는 scene color와 blend texture를 이용한 neighborhood blending 및 기존 color grade를 담당한다.
+- `VulkanContext`에는 SMAA intermediate render pass, edge/blend framebuffer, descriptor set, pipeline, LUT texture upload path가 추가됐다. `CMakeLists.txt`에는 새 SMAA shader compile/copy 단계가 추가됐다.
+- 현재 품질은 High preset 계열 값(`threshold=0.10`, `search=16`, corner rounding 25)에 가깝지만, diagonal detection/reprojection/T2x/S2x는 제외한 1x 최소형이다.
+- 유저 빌드 검증 결과: `AA SMAA`가 실제 SMAA 경로에 들어갔고 FXAA fallback과 달라졌다. 다만 1x 최소형이고 대각선 검출이 빠져 있어 체감은 아직 크지 않다.
+- 추후 AA 품질을 더 올릴 때는 SMAA diagonal detection, Ultra 계열 튜닝, T2x/S2x, MSAA/alpha-to-coverage 중 어느 축을 먼저 가져갈지 별도 작업으로 결정한다.
+
+### TextureResource RAII helper 도입 (텍스처 업로드 경로 통합)
+- grass alpha 텍스처와 SMAA `AreaTex/SearchTex` LUT가 각각 staging upload → image/layout transition/copy/view 시퀀스를 중복으로 갖던 것을, `GpuBuffer`와 동일한 move-only RAII 구조체 `TextureResource`로 통합.
+- `createTexture(width, height, format, bytes, size, withSampler)` 헬퍼 하나로 업로드 시퀀스를 모음. sampler는 옵션으로 처리(grass는 자체 LINEAR/CLAMP sampler 생성, SMAA LUT는 공유 `m_postSampler`를 쓰므로 sampler 미생성).
+- `m_grassTex*`(4개)와 `m_smaaArea*/m_smaaSearch*`(6개) 멤버를 `m_grassTex / m_smaaAreaTex / m_smaaSearchTex` 3개의 `TextureResource`로 교체. 소멸자의 수동 destroy 블록도 `.destroy()` 호출로 정리.
+- 동작 변경 없는 순수 리팩토링이며 생성 포맷·레이아웃 전환·디스크립터 바인딩·프레임 경로는 이전과 동일. 이후 terrain/object texture mapping에서 같은 헬퍼를 재사용하기 위한 토대.
+- 유저 빌드 검증 결과: 컴파일·실행 정상, grass·SMAA 모두 이전과 동일 동작, Vulkan validation 에러 없음.
+
+### SMAA edge threshold·search step Ultra 계열 튜닝 (Task #5a)
+- SMAA 1x 체감이 "OFF와 차이 거의 없음" 수준이라, AA 강화의 첫 단계로 edge/blend 셰이더 상수만 Ultra 계열로 올림. 셰이더 상수 2개만 변경하고 C++/디스크립터/파이프라인/LUT는 그대로 둠.
+- `smaa_edge.frag`의 `SMAA_THRESHOLD` 0.10 → 0.05 (더 약한 대비의 edge까지 검출).
+- `smaa_blend.frag`의 `SMAA_MAX_SEARCH_STEPS` 16 → 32 (더 긴 edge를 추적).
+- 유저 빌드 검증 결과: SMAA가 OFF 대비 edge 완화가 눈에 띄게 강해졌고 실제 적용이 체감됨.
+- 대각선 계단은 1x + diagonal detection 부재 때문에 남아 있어, 다음 작업(5b)에서 `smaa_blend.frag`에 diagonal detection(`SMAACalculateDiagWeights` 계열)을 포팅해 본질적으로 개선한다.
+
+### SMAA diagonal detection 포팅 + Ultra 프리셋 도달 (Task #5b)
+- `smaa_blend.frag`에 Iryoku SMAA의 diagonal 경로(`SMAACalculateDiagWeights`, `searchDiag1/2`, `areaDiag`, `decodeDiagBilinearAccess`, `movc`)를 GLSL로 포팅. `main()`에서 north edge일 때 대각 패턴을 먼저 계산하고, 검출되면 직교 H/V 처리를 건너뜀(없으면 기존 직교 경로 fallback).
+- diagonal area 데이터는 기존 `AreaTex` 우측 절반(`texcoord.x += 0.5`)에 이미 있어 새 LUT/텍스처/C++/디스크립터 변경 없이 셰이더만 수정. 1x이므로 `subsampleIndices = vec4(0)`로 단순화.
+- `SMAA_MAX_SEARCH_STEPS_DIAG`를 8(High)로 1차 포팅 후 체감이 약해 16(Ultra)로 상향. 이로써 threshold 0.05 / search 32 / corner 25 / diag 16 = **원본 `SMAA_PRESET_ULTRA`와 동일**.
+- 유저 빌드 검증(NO/FXAA/SMAA 비교): SMAA가 대각선 실루엣 계단을 펴주면서 FXAA처럼 뿌예지지 않고 선명도 유지. diagonal detection 동작 확인.
+
+### SMAA edge detection을 perceptual(감마) 공간으로 — 밤 AA 수정
+- 증상: 밤(어두운 장면)이 되면 SMAA가 사실상 적용되지 않음. 원인은 SMAA threshold(0.05)가 perceptual(감마) 입력 기준인데, edge 패스가 sRGB offscreen을 샘플할 때 샘플러가 linear로 디코드해 **linear 값 위에서** 검출하기 때문. linear에선 어두운 영역 대비가 압축돼 threshold 밑으로 깔림.
+- 수정: `smaa_edge.frag`의 `sampleScene`에서 `pow(c, 1/2.2)`로 perceptual 복원 후 luma edge detection. edge 패스는 edge 플래그만 출력하므로 색감·블렌딩(linear 유지)에는 영향 없음.
+- 대안 검토: "grade/tonemap을 AA 앞으로 옮기는 구조 변경(C안)"은 현재 grade가 약한 컬러 그레이딩(톤매퍼 아님)이라 밤을 못 고치고, 감마 인코딩 전체 이동은 swapchain 색공간까지 건드리는 큰 변경이라 보류. 실제 HDR/톤매핑 도입 시 `Scene(HDR)→Tonemap→AA→Present`로 정식 적용 예정.
+- FXAA도 동일하게 linear에서 luma를 보므로 밤에 약했다. 후속 커밋에서 `post.frag`에 `lumaPerceptual()`를 추가해 FXAA의 edge/방향 판단 luma만 perceptual 감마로 계산하고, 블렌딩 출력 색은 linear로 유지(이중 감마 인코딩 방지). 유저 빌드 검증: FXAA 밤 AA 정상, 낮 색감 변화 없음.
+- 유저 빌드 검증: 밤 장면에서도 큐브/타일/오브젝트 경계 AA 정상 적용 확인, 낮 장면 정상.
+
+### Terrain texture array 1차 배선 (Task #3a)
+- `ChunkVertex`에 면별 `uv`와 `layer`를 추가하고, `buildChunkBuffer`에서 각 보이는 면의 0..1 UV와 `tileFaceLayer(TileType, isTop)` 결과를 함께 emit하도록 변경했다.
+- terrain albedo는 atlas 대신 `sampler2DArray`로 시작했다. 경계 mip 번짐을 피하고, 타일 타입/면별 layer 확장이 단순하며, `TextureResource` 수명 모델을 그대로 사용할 수 있기 때문이다.
+- `TERRAIN_TEX_LAYERS = 9`: GRASS top, GRASS side, DIRT, STONE, WOOD, LEAVES, FARMLAND, WHEAT, WATER를 절차 layer로 배정했다. 이번 단계의 layer art는 타입 구분과 경로 검증을 위한 낮은 대비의 seamless grayscale grain이다.
+- `createTextureArray(...)`와 `createTerrainTextureArray()`를 추가하고, `m_terrainTex` 생성/소멸을 `VulkanContext` 수명에 연결했다. descriptor set layout/pool/set update에는 binding 3 terrain texture array를 추가했다.
+- `chunk.vert`는 UV/layer를 fragment로 전달하고, `chunk.frag`는 terrain layer를 샘플해 `fragColor * albedo * lighting`으로 합성한다. 기존 vertex color는 타일 색조와 AO tint로 유지된다.
+- `object.vert`는 `fragLayer = -1.0` sentinel을 출력해 공유 `chunk.frag`에서 텍스처 샘플을 건너뛰게 했다. 따라서 tree/rock/workbench/fence 등 오브젝트 메시와 vertex 포맷은 이번 단계에서 건드리지 않았다.
+- 유저 빌드 검증 결과: 지형 텍스처 배열 경로가 정상 동작하고, 기존 색조/AO와 오브젝트·grass·shadow·UI·AA 경로는 유지되는 것으로 확인했다.
+
 ---
 
 ## 게임 설계 메모
@@ -806,7 +892,7 @@ Vulkan 공부 겸 엔진 개발 기록.
 
 ### 현재 게임 방향
 
-Pastel Farm은 커스텀 Vulkan 엔진 기반의 스타일라이즈드 로우폴리 농사·라이프심이다.
+Pastel Farm은 커스텀 Vulkan 엔진 기반의 고품질 스타일라이즈드 로우폴리 농사·라이프심이다.
 현재 방향은 **Stardew-style 농사/채집/제작/건축 + 고정 아이소메트릭 시점 + authored 느낌의 세계**다.
 
 - 지형은 불변이다. 플레이어는 복셀 블록을 자유 설치/파괴하지 않는다.
@@ -827,8 +913,8 @@ World
 
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
-- 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop/ui, post pass를 분리해 그린다.
-- 다음 grass 개선은 단순 밀도 증가가 아니라 density field, variant, ground dressing layer가 핵심이다.
+- 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass(FXAA/SMAA 1x), post 이후 UI overlay를 분리해 그린다.
+- 다음 비주얼 개선은 terrain texture art 튜닝, object texture mapping, material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
 
 ---
 
@@ -842,7 +928,7 @@ Vulkan은 드라이버가 아무것도 안 해준다. GPU가 뭘 어떻게 할�
 대신 얻는 것:
 - CPU 오버헤드 최소화
 - 멀티스레드 렌더링 지원
-- 예측 가능한 퍼포먼스 (저사양에 특히 중요)
+- 예측 가능한 퍼포먼스 (정해진 성능 예산 안에서 품질을 올리기 위해 중요)
 
 ---
 

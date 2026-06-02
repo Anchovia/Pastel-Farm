@@ -11,8 +11,9 @@
 
 ## 설계 철학
 
-- 로우폴리 / 플랫 셰이딩 / 스타일라이즈드 — 포토리얼·PBR 안 함
-- 저사양 친화 (GTX 750 Ti~1050급 / 통합 GPU 고려), 낮은 CPU 오버헤드, 렌더링 낭비 최소
+- 고품질 스타일라이즈드 / 로우폴리 / 플랫 셰이딩 — 로우폴리는 저품질 제약이 아니라 미학적 선택
+- 성능 기준: 최소 GTX 1050 Ti / 1080p / 60fps, 권장 GTX 1660 Super급. 초저사양 데모가 아니라 **최적화된 고품질 상용 게임**이 목표
+- 최신 기법은 선별적으로 사용한다: 텍스처 매핑, material-lite, 고품질 식생, AA, shadow 품질 옵션, post 효과를 성능 예산 안에서 적극 도입
 - Vulkan 직접 제어, 게임과 엔진 동시 개발
 - 렌더러 원칙: **단순함 + 명시적 제어 + 유지보수성**
 
@@ -35,17 +36,17 @@ src/
 ## 렌더러 [구현됨]
 
 - Vulkan: instance / device / swapchain / render pass / pipelines / sync
-- **파이프라인**: 공유 빌더 `createPipeline(PipelineConfig)`로 scene 계열(player/selector/drop·chunk·object·grass·ui)을 생성하고, post는 별도 fullscreen pipeline으로 처리. shadow 계열(청크/오브젝트/플레이어)은 depth-only 별도 파이프라인.
+- **파이프라인**: 공유 빌더 `createPipeline(PipelineConfig)`로 scene 계열(player/selector/drop·chunk·object·grass)과 UI overlay pipeline을 생성하고, post는 별도 fullscreen pipeline으로 처리. `AA OFF/FXAA`는 기존 post pipeline, `AA SMAA`는 `smaa_edge → smaa_blend → smaa_neighborhood` 3-pass 후처리 체인을 사용한다. UI pipeline은 post render pass에 맞춰 생성되어 AA/color grading 이후 스왑체인 위에 그려진다. shadow 계열(청크/오브젝트/플레이어)은 depth-only 별도 파이프라인.
 - viewport/scissor = **dynamic state** (리사이즈 시 파이프라인 재생성 불필요)
 - **청크 메시**: Hidden Face Culling, 청크별 vertex/index 버퍼, dirty만 리빌드(프레임당 N개 제한)
 - **컬링**: 청크 AABB frustum culling (메인패스 + shadow 라이트 프러스텀)
 - **오브젝트**: `ObjectType`별 공유 메시 + 청크별 타입 그룹 인스턴스 버퍼(tree/rock/workbench/fence/stone fence). 오브젝트 변경 시에만 `objectsDirty`로 재빌드
-- **식생**: 절차 grass alpha texture + X자 card mesh + 청크별 grass instance buffer. 시각 dressing layer이며 shadow caster는 아님
+- **식생/지면 dressing**: 절차 grass alpha texture + X자 card mesh + 청크별 grass instance buffer + 좌표 기반 density field + shader 기반 grass tint/card variation. 별도 ground dressing buffer로 잔돌/패치 placement도 검증 중. 둘 다 저장하지 않는 시각 dressing layer이며 shadow caster는 아님
 - **조명 스택**: ambient + sun diffuse(dayFactor) + shadow + fog (4-layer)
 - **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어, 밤엔 shadow geometry draw 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
-- 색: 지형/오브젝트는 top/side vertex color + per-vertex AO 베이크. 현재 텍스처 예외는 grass alpha card 1장
-- **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
+- 색/재질: 지형은 `sampler2DArray` 기반 terrain albedo layer + vertex color tint + per-vertex AO 베이크를 사용한다. 오브젝트는 아직 vertex color 경로이며, grass는 alpha texture. 다음 단계에서 terrain texture art 튜닝, object texture mapping, material-lite(albedo + tint + roughness/specular 계열 상수)를 확장한다
+- **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. 자체 게임 UI도 post AA 이후에 렌더링해 픽셀 폰트가 AA에 의해 깨지지 않게 한다. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
 
 ---
 
@@ -70,21 +71,22 @@ src/
 
 ## 기술 방향 [계획]
 
-> **중간점검 (아크 ①~⑥ 완료 후 재설정).** 핵심 판단: 기술 기반은 이미 충분 — 이제 "기능 추가"보다 **iteration speed · 비주얼 정체성 · app-flow**가 ROI가 높다. 비주얼은 **다시 만들기가 아니라 조율하기**(grading·fog·shadow·AO 이미 존재).
+> **렌더링 목표 재정렬.** Pastel Farm은 초저사양 로우폴리 데모가 아니라, GTX 1050 Ti 최소 / GTX 1660 Super 권장 기준에서 고품질 스타일라이즈드 화면을 목표로 한다. 최적화·모듈성은 계속 핵심이지만, 품질을 낮추기 위한 보수주의는 피한다.
 
 ### 우선순위 Tier (현재)
 **Tier 1 — 가속기 + 부채 상환 (app-flow 토대)**
 - ✅ DevUI(ImGui, `PASTEL_DEV_BUILD` 게이트) + Dev 빌드 구성 + GPU timestamp 프로파일링 — 비주얼 튜닝의 전제조건. **완료**
 - ✅ `FrameRenderData` 스냅샷 — `drawFrame` 인자 10개 → 구조체 1개(`VulkanContext.h`). 렌더러는 public 경계에서 스냅샷만 소비. **완료**
 - ✅ `GpuBuffer` RAII 래퍼 — `VkBuffer+VkDeviceMemory`(+mapped) move-only RAII로 통합, `createBuffer` 반환형화. `operator VkBuffer()`로 읽기 무변경. **완료**
-- App-state 머신(MainMenu/Settings/Loading/Gameplay/Pause) + 입력 정책 + world session start/end. **MainMenu 클릭 UI + Settings 클릭 UI(+VSync 적용/AA 데이터) + Loading 1차 + Pause 클릭 메뉴 완료**: 시작 시 MainMenu 표시, `START` / `SETTINGS` row 클릭으로 Gameplay 시작 또는 Settings 진입(키보드 백업 없이 클릭 전용), 설정 row 클릭으로 VSync ON/OFF(swapchain present mode 재생성 적용)·AA OFF/FXAA/SMAA(데이터/UI) 변경, 시작 시 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글, Pause에서는 `RESUME` / `SETTINGS` / `QUIT`(세션 정리 후 타이틀 복귀) row 클릭 제공. Settings는 진입 위치(MainMenu/Pause)에 따라 `BACK`/`ESC` 복귀 위치가 달라짐. 인벤토리가 열린 Gameplay에서는 `ESC`가 Pause보다 인벤토리 닫기를 우선. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단. AA 실제 렌더 적용·해상도·볼륨 등 추가 옵션은 예정
+- App-state 머신(MainMenu/Settings/Loading/Gameplay/Pause) + 입력 정책 + world session start/end. **MainMenu 클릭 UI + Settings 클릭 UI(+VSync 적용/AA 데이터) + Loading 1차 + Pause 클릭 메뉴 완료**: 시작 시 MainMenu 표시, `START` / `SETTINGS` row 클릭으로 Gameplay 시작 또는 Settings 진입(키보드 백업 없이 클릭 전용), 설정 row 클릭으로 VSync ON/OFF(swapchain present mode 재생성 적용)·AA OFF/FXAA/SMAA(UI/데이터) 변경, FXAA 실제 post AA 적용 완료, SMAA 1x 1차 적용 완료, 시작 시 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글, Pause에서는 `RESUME` / `SETTINGS` / `QUIT`(세션 정리 후 타이틀 복귀) row 클릭 제공. Settings는 진입 위치(MainMenu/Pause)에 따라 `BACK`/`ESC` 복귀 위치가 달라짐. 인벤토리가 열린 Gameplay에서는 `ESC`가 Pause보다 인벤토리 닫기를 우선. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단. 해상도·볼륨 등 추가 옵션은 예정
 
 **Tier 2 — 비주얼 정체성 (DevUI로 실시간 튜닝)**
 - ✅ 카메라 follow 댐핑 — `Camera` 내부 `m_followTarget` 지수 보간 + Loading 후 `snapToTarget`으로 저장 위치 스냅. 플레이어 추적감 개선, 회전은 기존 즉시 반응 유지
 - ✅ hemisphere/colored ambient — `chunk.frag`/`triangle.frag`에서 법선 방향 기반 warm/cool ambient tint 적용. 밤 ambient 바닥값은 0.10으로 낮춰 야간을 더 어둡게 조율
 - height fog
 - ✅ vegetation alpha card 1차 — 절차 grass texture + X자 card clump + alpha test + shadow 제외 + 청크별 dirty gate. **완료**
-- 다음 비주얼 후보: density field 기반 grass dressing · organic dressing layer(잔돌/흙 패치/길 가장자리) · vegetation/object variation(스케일/회전/tint) · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
+- ✅ density field 기반 grass dressing 1차 — 균등 확률 대신 patch density + open grass bias + density 기반 offset/scale variation 적용. **완료**
+- 다음 비주얼 후보: terrain texture art 튜닝 · object texture mapping · material-lite · high-quality grass(wind/LOD/density 옵션) · ground dressing 텍스처화 · shadow quality options · height fog · SMAA T2x/S2x 또는 MSAA/alpha-to-coverage
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -92,19 +94,36 @@ src/
 
 > ✅ 즉시 가능한 작은 완성도: **오브젝트 충돌** — `collidable`이 이미 `ObjectDef` 데이터로 존재 → `World::isCollidableAt` + `canOccupy` 한 줄로 배선 완료. 건축이 장식에서 기능으로.
 
-### 그림자 / 비주얼 로드맵 (Tier 2 세부)
+### 렌더링 품질 로드맵 (Tier 2 세부)
 - ✅ color grading / tone mapping (post 1패스: exposure/contrast/saturation/split-tone/vignette)
 - ✅ 그림자 접지 튜닝 (피터패닝 — bias 축소 + cull 조정 완료)
-- contact / blob shadow (접지감 추가, 거의 무료)
+- ✅ FXAA 실제 적용: post pass에서 화면 edge를 완화. 자체 게임 UI는 FXAA 이후에 그려 픽셀 폰트 선명도 유지
+- ✅ SMAA 1x = 원본 `SMAA_PRESET_ULTRA`: `AreaTex/SearchTex` LUT 기반 `edge detection → blend weight(+diagonal) → neighborhood blending` 3-pass. 값은 `threshold=0.05`, `search=32`, `diag=16`, corner rounding 25. edge detection은 **perceptual(감마) 공간**에서 수행한다 — sRGB offscreen이 샘플 시 linear로 디코드되므로 `pow(.,1/2.2)`로 복원(밤 장면에서도 AA 유지). reprojection/T2x/S2x는 제외. AA를 grade/tonemap 뒤 최종 색 위에서 돌리는 구조 전환은 실제 HDR/톤매핑 도입 시로 보류
+- ✅ terrain texture mapping 1차: 청크 정점에 면별 UV/layer를 추가하고, `sampler2DArray` binding 3의 9개 절차 albedo layer를 샘플한다. vertex color는 tint/스타일 보정 + AO로 유지
+- object texture mapping: 현재 오브젝트는 `layer < 0` sentinel로 텍스처를 건너뛰고 vertex color만 사용한다. object albedo는 별도 단계에서 추가
+- material-lite: full PBR 전환 전, albedo + tint + roughness/specular 상수로 재질 차이를 표현
+- shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
 - terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
-- height fog / vegetation variation / wind / sky tint
+- height fog / vegetation variation / wind / sky tint / LUT
+
+### 다음 실행 순서 — 결정
+다음 세션/작업은 아래 순서를 따른다. 큰 material/PBR 시스템이나 render graph로 먼저 가지 않는다.
+
+1. ✅ 현재 SMAA 1x 1차 변경분을 커밋한다. **완료**
+2. ✅ **TextureResource 기반**: grass texture 생성/upload 경로, SMAA LUT 업로드 경로를 `GpuBuffer`식 move-only RAII `TextureResource` + `createTexture(...)` 헬퍼로 통합. terrain texture array에서는 같은 수명 모델을 `createTextureArray(...)`로 확장. **완료**
+3. ✅ **Terrain texture mapping 3a**: `sampler2DArray` 기반 terrain albedo layer, 청크 vertex UV/layer, descriptor binding 3, vertex color tint 유지. **완료**
+4. **Terrain texture art 3b + object texture mapping 3c + material-lite**: 절차 layer를 실제 머티리얼 아트로 튜닝하고, 오브젝트 albedo와 material-lite는 별도 단계로 확장한다.
+5. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
+6. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
+
+이 순서는 "품질을 올리되, 매 단계가 화면에 바로 기여하고 기존 구조와 자연스럽게 맞물리는" 경로다.
 
 ### Vegetation Alpha Card — **방향**
 - 참고 이미지 수준의 자연스러운 풀밭은 단순 삼각형 기하 clump보다 alpha card 방식이 맞다. 기하 blade는 멀리서 삐쭉한 바늘처럼 보이기 쉽다.
 - 목표: 풀 텍스처 1장 + X자/부채꼴 card clump + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.
-- 성능 제약: GTX 1050 Ti 권장 기준을 목표로, 근거리 청크 중심, clump당 card 2장(quad 2개, 4 triangles), shadow caster 제외, alpha blend보다 alpha test/clip 우선, 거리/밀도 제한.
-- 이후 확장: DevUI density/거리/scale 튜닝, wind sway(vertex shader), LOD 또는 원거리 밀도 감소.
-- 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, X자 card mesh, 청크별 instance buffer까지 1차 연결 완료. 다음 개선은 단순 밀도 증가가 아니라 density field, variant, ground dressing layer 중심.
+- 성능 기준: GTX 1050 Ti 최소 60fps 안에서 grass는 핵심 비주얼 투자처다. clump당 card 수, density, texture 품질, wind, LOD/fade를 DevUI/GPU timing으로 보며 적극적으로 올린다.
+- 이후 확장: DevUI density/거리/scale 튜닝, wind sway(vertex shader), card/texture variant, 거리 LOD 또는 원거리 density fade. 필요하면 단순 X-card를 넘어 부채꼴 card나 다중 card clump도 검토.
+- 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, X자 card mesh, 청크별 instance buffer, 좌표 기반 density field, shader 기반 tint/card variation까지 1차 연결 완료. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 거의 안 보이는 수준으로 축소했다. 다음 개선은 texture/card detail, wind, 낮은 대비의 ground texture/card detail 방향.
 
 ### Grid 규칙 vs Organic 표현 — **결정**
 - 농사·설치/철거·충돌·저장 좌표는 grid 기반으로 유지한다. 플레이어 규칙은 예측 가능해야 한다.
@@ -137,18 +156,18 @@ src/
 - **지금부터 지킬 제약 3가지(비용 0, 이미 준수 중)**: ① 랜덤은 시드·좌표 기반 결정론 유지, ② 모든 상태 변경은 `World`/`GameState` 경유(렌더러에 권위 상태 두지 않기), ③ 게임 동작을 직렬화 가능한 이산 명령으로 모델링.
 - **규모감**: 협동 멀티 = 수 주~수 개월 독립 서브시스템(지금까지 작업 전체와 맞먹는 별도 챕터). 렌더링은 거의 불변, 일은 로직 재배선·동기화·테스트에 집중.
 
-### 보류 (월드 대규모화 시점에만)
+### 보류 (실제 필요가 생긴 뒤)
 - 청크 메모리 풀링(VMA/서브할로케이터) — 할당 개수 한계 대비
-- 청크 메시 DEVICE_LOCAL — 디스크리트 GPU 정점 페치 가속 (GTX 1050급엔 체감 미미라 보류)
+- 청크 메시 DEVICE_LOCAL — 현재도 staging path가 존재하나, 동적 청크 메시/식생 규모가 커지고 GPU vertex fetch 병목이 보이면 우선순위 상승
 
 ### 명시적 비목표 (Anti-goals) — rule of 3 / 실제 병목 전엔 **안 함**
-개인 Vulkan 엔진이 "AAA 체크리스트"에 빠져 게임을 못 내는 함정 방어선. 아래는 매력적이지만 현재 스코프(저사양·플랫셰이딩·소수 콘텐츠)에서 ROI가 낮거나 철학과 충돌:
+개인 Vulkan 엔진이 "AAA 체크리스트"에 빠져 게임을 못 내는 함정 방어선. 단, 이것은 저품질을 목표로 하자는 뜻이 아니다. 품질에 직접 기여하는 텍스처, AA, shadow 옵션, material-lite는 적극 검토한다.
 - **ECS 전면 전환** — 오브젝트가 sparse, OOP로 충분. (필요 시 hybrid SoA만 국소 적용)
 - **Render Graph / FrameGraph** — 풀 그래프 X. 경량 `IRenderPass`까지만.
-- **Asset DB / Material 시스템 / Material 노드그래프** — 텍스처는 아직 grass 1장 수준(대부분 절차 메시 + vertex color). 추상화 역순.
+- **Asset DB / Material 노드그래프** — 에셋 수가 늘기 전엔 보류. 단, TextureResource/helper와 material-lite는 반복이 생기는 즉시 도입 가능.
 - **Job/Async 시스템** — 청크 리빌드는 `MAX_CHUNK_BUILDS_PER_FRAME` throttle로 이미 완화. 식생 대량화 시점에.
 - **VulkanContext 빅뱅 분할** — 한 번에 쪼개지 말 것. 작은 것부터(GpuBuffer→FrameRenderData→파이프라인 생성 점진 추출).
-- **RTX/GI · mesh shader · bindless · full PBR** — 저사양·스타일라이즈드 목표와 정반대.
+- **RTX/GI · mesh shader · bindless 대규모 시스템 · full PBR 전면 전환** — 지금 당장 필요하지 않다. PBR은 에셋/재질 수요가 실제로 생긴 뒤 material-lite에서 단계적으로 판단.
 > 기준: **rule of 3**(세 번 반복되면 추상화) + **전면 rewrite 금지, 국소 리팩토링만**. (`CLAUDE.md` 단순함·수술적 변경과 일치)
 
 ### 불변식 (Invariants) — 깨지 말 것
@@ -162,6 +181,6 @@ src/
 
 ## 알려진 이슈 / 메모
 
-- **grass dressing**: alpha card 전환은 완료됐지만 아직 실제 잔디밭보다 균등한 clump 분포에 가깝다. 다음 핵심은 density field, variant, ground dressing layer.
+- **grass/ground dressing**: alpha card + density field + shader 기반 tint/card variation 1차는 완료. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 현재는 거의 안 보이는 기준 화면으로 두고, 다음 핵심은 텍스처/알파 기반 디테일 전환과 wind.
 - **작물**: 현재 voxel 타일(`WHEAT` + `TileState`)로 처리. 장기적으로 별도 `Crop` 인스턴스 레이어 분리 검토.
 - 그림자 최소 밝기 `max(shadow, 0.4)` 는 파스텔 톤 유지를 위한 **의도된 스타일**(버그 아님).

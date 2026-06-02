@@ -102,11 +102,14 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
             if (neighbor != TileType::AIR) continue;
 
             const glm::vec3 color = face.isTop ? topColor : sideColor;
+            const float     layer = (float)tileFaceLayer(t, face.isTop);
             const uint32_t  base  = (uint32_t)vertices.size();
 
+            // Per-face UV matching the 4 corner order of FaceDef::verts.
+            static const glm::vec2 faceUV[4] = { {0,0}, {1,0}, {1,1}, {0,1} };
             for (int i = 0; i < 4; i++) {
                 float ao = vertexAO(lx, ly, z, face.normal, face.verts[i]);
-                vertices.push_back({ center + face.verts[i], face.normal, color * ao });
+                vertices.push_back({ center + face.verts[i], face.normal, color * ao, faceUV[i], layer });
             }
 
             indices.insert(indices.end(), {
@@ -141,8 +144,9 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
     memcpy(iMapped, indices.data(), iSize);
     vkUnmapMemory(m_device, data.indexBuffer.memory);
 
-    // Grass instances change only when terrain/open sky or blocking objects change.
+    // Visual dressing instances change only when terrain/open sky or blocking objects change.
     if (chunk.grassDirty) {
+        buildGroundDressingBuffer(coord, chunk);
         buildGrassDressingBuffer(coord, chunk);
         chunk.grassDirty = false;
     }
@@ -163,13 +167,46 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
     const int baseX = coord.x * CHUNK_SIZE;
     const int baseY = coord.y * CHUNK_SIZE;
     std::vector<ObjectInstance> insts;
-    insts.reserve(96);
+    insts.reserve(192);
 
     auto hash01 = [](int wx, int wy, int salt) -> float {
         uint32_t h = (uint32_t)wx * 73856093u ^ (uint32_t)wy * 19349663u ^ (uint32_t)salt * 83492791u;
         h ^= h >> 13;
         h *= 1274126177u;
         return (float)(h & 65535u) / 65535.0f;
+    };
+    auto floorDiv = [](int v, int d) -> int {
+        return v >= 0 ? v / d : -((-v + d - 1) / d);
+    };
+    auto smooth = [](float t) -> float {
+        return t * t * (3.0f - 2.0f * t);
+    };
+    auto lerp = [](float a, float b, float t) -> float {
+        return a + (b - a) * t;
+    };
+    auto clamp01 = [](float v) -> float {
+        return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    };
+    auto valueNoise = [&](int wx, int wy, int scale, int salt) -> float {
+        const int gx = floorDiv(wx, scale);
+        const int gy = floorDiv(wy, scale);
+        const float fx = (float)(wx - gx * scale) / (float)scale;
+        const float fy = (float)(wy - gy * scale) / (float)scale;
+        const float sx = smooth(fx);
+        const float sy = smooth(fy);
+
+        const float a = hash01(gx,     gy,     salt);
+        const float b = hash01(gx + 1, gy,     salt);
+        const float c = hash01(gx,     gy + 1, salt);
+        const float d = hash01(gx + 1, gy + 1, salt);
+        return lerp(lerp(a, b, sx), lerp(c, d, sx), sy);
+    };
+    auto densityField = [&](int wx, int wy) -> float {
+        const float broad = valueNoise(wx, wy, 23, 101);
+        const float local = valueNoise(wx, wy, 9,  137);
+        float d = broad * 0.60f + local * 0.40f;
+        d = clamp01((d - 0.18f) / 0.74f);
+        return smooth(d);
     };
     auto hasObjectAt = [&chunk](int wx, int wy) {
         for (const Object& o : chunk.objects)
@@ -187,11 +224,28 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
         const int wx = baseX + lx;
         const int wy = baseY + ly;
         if (hasObjectAt(wx, wy)) continue;
-        if (hash01(wx, wy, 11) > 0.28f) continue;
 
-        const float ox = (hash01(wx, wy, 23) - 0.5f) * 0.78f;
-        const float oy = (hash01(wx, wy, 37) - 0.5f) * 0.78f;
-        const float sc = 0.80f + hash01(wx, wy, 41) * 0.45f;
+        int openGrass = 0;
+        for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            if (m_world.getTile(wx + dx, wy + dy, z) == TileType::GRASS &&
+                m_world.getTile(wx + dx, wy + dy, z + 1) == TileType::AIR)
+                openGrass++;
+        }
+
+        float density = densityField(wx, wy);
+        density = clamp01(density * (0.72f + ((float)openGrass / 8.0f) * 0.38f));
+
+        const float chance = 0.06f + density * 0.40f;
+        if (hash01(wx, wy, 11) > chance) continue;
+
+        const float jitter = 0.54f + density * 0.30f;
+        const float ox = (hash01(wx, wy, 23) - 0.5f) * jitter;
+        const float oy = (hash01(wx, wy, 37) - 0.5f) * jitter;
+        const float variant = hash01(wx, wy, 67);
+        const float variantScale = variant < 0.28f ? 0.90f : (variant > 0.82f ? 1.08f : 1.0f);
+        const float sc = (0.64f + density * 0.30f + hash01(wx, wy, 41) * (0.20f + density * 0.16f)) * variantScale;
         const float rt = hash01(wx, wy, 53) * 6.2831853f;
         insts.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.51f}, sc, rt});
     }
@@ -206,6 +260,132 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
     vkMapMemory(m_device, data.grassBuffer.memory, 0, size, 0, &mapped);
     memcpy(mapped, insts.data(), size);
     vkUnmapMemory(m_device, data.grassBuffer.memory);
+}
+
+// ============================================================
+//  Per-chunk visual ground dressing
+// ============================================================
+void VulkanContext::buildGroundDressingBuffer(const glm::ivec2& coord, Chunk& chunk) {
+    auto& data = m_chunkBuffers[coord];
+    deferDestroy(std::move(data.groundPatchBuffer));
+    deferDestroy(std::move(data.pebbleBuffer));
+    data.groundPatchCount = 0;
+    data.pebbleCount = 0;
+
+    const int baseX = coord.x * CHUNK_SIZE;
+    const int baseY = coord.y * CHUNK_SIZE;
+    std::vector<ObjectInstance> patches;
+    std::vector<ObjectInstance> pebbles;
+    patches.reserve(64);
+    pebbles.reserve(32);
+
+    auto hash01 = [](int wx, int wy, int salt) -> float {
+        uint32_t h = (uint32_t)wx * 73856093u ^ (uint32_t)wy * 19349663u ^ (uint32_t)salt * 83492791u;
+        h ^= h >> 13;
+        h *= 1274126177u;
+        return (float)(h & 65535u) / 65535.0f;
+    };
+    auto floorDiv = [](int v, int d) -> int {
+        return v >= 0 ? v / d : -((-v + d - 1) / d);
+    };
+    auto smooth = [](float t) -> float {
+        return t * t * (3.0f - 2.0f * t);
+    };
+    auto lerp = [](float a, float b, float t) -> float {
+        return a + (b - a) * t;
+    };
+    auto clamp01 = [](float v) -> float {
+        return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    };
+    auto valueNoise = [&](int wx, int wy, int scale, int salt) -> float {
+        const int gx = floorDiv(wx, scale);
+        const int gy = floorDiv(wy, scale);
+        const float fx = (float)(wx - gx * scale) / (float)scale;
+        const float fy = (float)(wy - gy * scale) / (float)scale;
+        const float sx = smooth(fx);
+        const float sy = smooth(fy);
+
+        const float a = hash01(gx,     gy,     salt);
+        const float b = hash01(gx + 1, gy,     salt);
+        const float c = hash01(gx,     gy + 1, salt);
+        const float d = hash01(gx + 1, gy + 1, salt);
+        return lerp(lerp(a, b, sx), lerp(c, d, sx), sy);
+    };
+    auto hasObjectAt = [&chunk](int wx, int wy) {
+        for (const Object& o : chunk.objects)
+            if ((int)o.pos.x == wx && (int)o.pos.y == wy)
+                return true;
+        return false;
+    };
+
+    for (int z  = 0; z  < CHUNK_DEPTH - 1; z++)
+    for (int ly = 0; ly < CHUNK_SIZE;      ly++)
+    for (int lx = 0; lx < CHUNK_SIZE;      lx++) {
+        const TileType ground = chunk.tiles[z][ly][lx];
+        if (ground != TileType::GRASS && ground != TileType::DIRT) continue;
+        if (chunk.tiles[z + 1][ly][lx] != TileType::AIR) continue;
+
+        const int wx = baseX + lx;
+        const int wy = baseY + ly;
+        if (hasObjectAt(wx, wy)) continue;
+
+        int openGround = 0;
+        for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            const TileType t = m_world.getTile(wx + dx, wy + dy, z);
+            if ((t == TileType::GRASS || t == TileType::DIRT) &&
+                m_world.getTile(wx + dx, wy + dy, z + 1) == TileType::AIR)
+                openGround++;
+        }
+
+        const float patchField = smooth(clamp01((valueNoise(wx, wy, 19, 211) - 0.22f) / 0.70f));
+        const float openBias = 0.65f + ((float)openGround / 8.0f) * 0.35f;
+        const float patchChance = (ground == TileType::DIRT ? 0.006f : 0.0f) +
+                                  patchField * (ground == TileType::DIRT ? 0.014f : 0.0f);
+        bool patchPlaced = false;
+        if (hash01(wx, wy, 223) < patchChance * openBias) {
+            const float ox = (hash01(wx, wy, 227) - 0.5f) * 0.24f;
+            const float oy = (hash01(wx, wy, 229) - 0.5f) * 0.24f;
+            const float sc = 0.28f + hash01(wx, wy, 233) * 0.18f;
+            const float rt = hash01(wx, wy, 239) * 6.2831853f;
+            patches.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.500f}, sc, rt});
+            patchPlaced = true;
+        }
+
+        const float pebbleField = 1.0f - valueNoise(wx, wy, 15, 251);
+        const float pebbleChance = (ground == TileType::DIRT ? 0.006f : 0.001f) +
+                                   pebbleField * (ground == TileType::DIRT ? 0.012f : 0.003f);
+        if (!patchPlaced && hash01(wx, wy, 257) < pebbleChance * openBias) {
+            const float ox = (hash01(wx, wy, 263) - 0.5f) * 0.38f;
+            const float oy = (hash01(wx, wy, 269) - 0.5f) * 0.38f;
+            const float sc = 0.20f + hash01(wx, wy, 271) * 0.16f;
+            const float rt = hash01(wx, wy, 277) * 6.2831853f;
+            pebbles.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.505f}, sc, rt});
+        }
+    }
+
+    if (!patches.empty()) {
+        data.groundPatchCount = (uint32_t)patches.size();
+        VkDeviceSize size = sizeof(ObjectInstance) * patches.size();
+        data.groundPatchBuffer = createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        void* mapped;
+        vkMapMemory(m_device, data.groundPatchBuffer.memory, 0, size, 0, &mapped);
+        memcpy(mapped, patches.data(), size);
+        vkUnmapMemory(m_device, data.groundPatchBuffer.memory);
+    }
+
+    if (!pebbles.empty()) {
+        data.pebbleCount = (uint32_t)pebbles.size();
+        VkDeviceSize size = sizeof(ObjectInstance) * pebbles.size();
+        data.pebbleBuffer = createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        void* mapped;
+        vkMapMemory(m_device, data.pebbleBuffer.memory, 0, size, 0, &mapped);
+        memcpy(mapped, pebbles.data(), size);
+        vkUnmapMemory(m_device, data.pebbleBuffer.memory);
+    }
 }
 
 // ============================================================
@@ -257,6 +437,8 @@ void VulkanContext::rebuildDirtyChunks() {
             deferDestroy(std::move(d.vertexBuffer));
             deferDestroy(std::move(d.indexBuffer));
             deferDestroy(std::move(d.grassBuffer));
+            deferDestroy(std::move(d.groundPatchBuffer));
+            deferDestroy(std::move(d.pebbleBuffer));
             for (auto& g : d.objGroups)
                 deferDestroy(std::move(g.buffer));
             it = m_chunkBuffers.erase(it);

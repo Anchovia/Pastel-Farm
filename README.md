@@ -1,6 +1,6 @@
 # Game Engine (C++ / Vulkan)
 
-저사양 PC에서도 부드럽게 돌아가는 **로우폴리 / 플랫 셰이딩** 스타일 게임을 만들기 위한 커스텀 게임 엔진입니다.
+중저사양 PC에서도 안정적으로 60fps를 유지하면서 **고품질 스타일라이즈드 / 로우폴리 디오라마** 룩을 목표로 하는 커스텀 게임 엔진입니다.
 상용 엔진(Unity·Unreal) 대신 C++과 Vulkan으로 처음부터 직접 구축하며, **게임 완성**과 **엔진 개발** 두 가지를 동시에 목표로 합니다.
 
 ---
@@ -21,10 +21,10 @@
 
 ## 목표
 
-- **저사양 친화적**: GTX 750 Ti / Intel UHD 급에서 60fps
-- **로우폴리 + 플랫 셰이딩**: 단순하고 스타일리시한 그래픽 (텍스처 의존도 최소화)
+- **성능 기준**: 최소 GTX 1050 Ti / 1080p / 60fps, 권장 GTX 1660 Super급
+- **고품질 스타일라이즈드 그래픽**: 로우폴리·플랫 셰이딩은 미학적 기반이며, 저품질/초저사양 제약이 아님
 - **Vulkan 직접 사용**: 낮은 CPU 오버헤드, 렌더링 제어권 확보
-- **무거운 PBR / 포토리얼리즘은 하지 않음**
+- **최적화된 최신 기법 사용**: 텍스처 매핑, 고품질 식생, AA, 그림자 품질 옵션, material-lite를 적극 검토
 
 ---
 
@@ -50,7 +50,9 @@
 ### App Flow / 입력
 - `MainMenu / Settings / Loading / Gameplay / Pause` 상태 흐름
 - 클릭형 `START`, `SETTINGS`, `RESUME`, `QUIT`, `BACK` UI
-- VSync ON/OFF 실제 present mode 적용, AA OFF/FXAA/SMAA 선택 데이터/UI
+- VSync ON/OFF 실제 present mode 적용, AA OFF/FXAA/SMAA 선택 UI
+- FXAA 실제 post AA 적용 완료
+- SMAA 1x 1차 적용 완료: edge detection → blend weight → neighborhood blending 3-pass, `AreaTex/SearchTex` LUT 사용
 - 메뉴/settings/loading/pause 중 게임 입력·월드 업데이트 차단
 - `ESC`: Gameplay↔Pause, 인벤토리가 열려 있으면 인벤토리 닫기 우선
 
@@ -67,13 +69,14 @@
 
 ### 렌더링 / 비주얼
 - Vulkan swapchain, depth, descriptor, sync, dynamic viewport/scissor
-- 청크 메시 hidden face culling + per-vertex AO + top/side vertex color
+- 청크 메시 hidden face culling + per-vertex AO + terrain texture array + vertex color tint
 - 청크 AABB frustum culling, shadow light frustum culling
 - 제네릭 오브젝트 인스턴싱(`ObjectType`별 mesh + 청크별 instance group)
 - 2048² shadow map, 3×3 PCF, 청크/오브젝트/플레이어 shadow caster
 - day/night 기반 sky/fog/light 변화, hemisphere ambient
-- offscreen scene → post pass tone/color grading(exposure/contrast/saturation/split-tone/vignette)
-- grass alpha card 1차: 절차 RGBA grass texture + X자 card + alpha test + 청크별 dirty gate
+- offscreen scene → post pass tone/color grading(exposure/contrast/saturation/split-tone/vignette) + FXAA/SMAA
+- 자체 게임 UI는 post AA 이후 스왑체인에 직접 렌더링해 픽셀 폰트 선명도 유지
+- grass alpha card dressing: 절차 RGBA grass texture + X자 card + alpha test + density field + 청크별 dirty gate
 - DevUI(ImGui, `PASTEL_DEV_BUILD`) + GPU timestamp(total/shadow/scene/post/imgui)
 
 > 상세 구현 이력은 `DEVLOG.md`, 구조 판단과 장기 방향은 `ARCHITECTURE.md`를 기준으로 본다.
@@ -82,9 +85,9 @@
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
 - **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
-- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card 1차(풀 clump, alpha test, shadow 제외) · grass density field/variant · height fog · organic dressing layer(잔돌/흙 패치) · wind · **AA(SMAA + FXAA fallback)** · LUT
+- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · ✅ FXAA · ✅ SMAA 1x 1차 · ✅ terrain texture array 1차 · height fog · object texture mapping/material-lite · high-quality grass(wind/LOD/variant) · ground dressing texture · shadow quality options · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
-- **비목표**(당분간 X): ECS rewrite · render graph · asset DB · material graph · RTX/PBR/mesh shader/bindless
+- **비목표**(당분간 X): ECS rewrite · full render graph · material node graph · RTX/full GI · full PBR 전면 전환 · mesh shader/bindless 대규모 시스템
 
 ---
 
@@ -142,7 +145,7 @@ pastelfarm/
 - 플레이어가 아닌 카메라가 돌아가는 방식
 
 ### 게임 성격
-- 스타일라이즈드 로우폴리 농사·라이프심
+- 고품질 스타일라이즈드 로우폴리 농사·라이프심
 - Stardew-style 농사/채집/제작/건축 + 고정 아이소메트릭 시점
 - Minecraft식 복셀 설치/파괴는 은퇴. 지형은 불변이고 건축은 오브젝트 레이어에서 처리
 
@@ -158,9 +161,9 @@ pastelfarm/
 - 오브젝트 레이어 — 나무/돌/작업대/울타리/돌담은 복셀이 아닌 `Chunk::objects` StaticProp으로 관리
 
 ### 렌더링 전략
-- **청크 메시 생성** — 청크별로 보이는 면만 골라 버텍스+인덱스 버퍼 직접 생성 (Hidden Face Culling), 인스턴싱보다 GPU 부하 대폭 감소
+- **청크 메시 생성** — 청크별로 보이는 면만 골라 버텍스+인덱스 버퍼 직접 생성 (Hidden Face Culling), 면별 UV/layer로 terrain texture array 샘플링
 - **오브젝트 인스턴싱** — `ObjectType`별 공유 메시 + 청크별 인스턴스 그룹
-- **grass alpha card** — 절차 텍스처 + X자 카드 mesh + 청크별 인스턴스 버퍼
+- **grass alpha card** — 절차 텍스처 + X자 카드 mesh + 청크별 인스턴스 버퍼 + density/tint/card variation
 - **플랫 셰이딩** — 면마다 단색 + 디렉셔널 라이트로 명암
 - **top/side 색상 분기** — 지형 윗면과 옆면 색상 분리
 - **Ambient Occlusion** — 꼭짓점별 복셀 AO로 모서리·구석 음영, 청크 빌드 시 베이크 (추가 렌더패스 없음)

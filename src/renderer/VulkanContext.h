@@ -49,6 +49,46 @@ struct GpuBuffer {
     }
 };
 
+// RAII wrapper for an uploaded sampled texture: image + memory + view (+ optional
+// sampler). Mirrors GpuBuffer's move-only ownership so it self-frees and can be
+// stored as a member or returned by value. The sampler stays VK_NULL_HANDLE when
+// the texture is sampled through a shared sampler owned elsewhere (e.g. SMAA LUTs).
+struct TextureResource {
+    VkImage        image   = VK_NULL_HANDLE;
+    VkDeviceMemory memory  = VK_NULL_HANDLE;
+    VkImageView    view    = VK_NULL_HANDLE;
+    VkSampler      sampler = VK_NULL_HANDLE;
+    VkDevice       device  = VK_NULL_HANDLE; // owner device, for self-destruction
+
+    TextureResource() = default;
+    TextureResource(const TextureResource&)            = delete;
+    TextureResource& operator=(const TextureResource&) = delete;
+    TextureResource(TextureResource&& o) noexcept
+        : image(o.image), memory(o.memory), view(o.view), sampler(o.sampler), device(o.device) {
+        o.image = VK_NULL_HANDLE; o.memory = VK_NULL_HANDLE; o.view = VK_NULL_HANDLE;
+        o.sampler = VK_NULL_HANDLE; o.device = VK_NULL_HANDLE;
+    }
+    TextureResource& operator=(TextureResource&& o) noexcept {
+        if (this != &o) {
+            destroy();
+            image = o.image; memory = o.memory; view = o.view; sampler = o.sampler; device = o.device;
+            o.image = VK_NULL_HANDLE; o.memory = VK_NULL_HANDLE; o.view = VK_NULL_HANDLE;
+            o.sampler = VK_NULL_HANDLE; o.device = VK_NULL_HANDLE;
+        }
+        return *this;
+    }
+    ~TextureResource() { destroy(); }
+
+    void destroy() {
+        if (sampler) vkDestroySampler(device, sampler, nullptr);
+        if (view)    vkDestroyImageView(device, view, nullptr);
+        if (image)   vkDestroyImage(device, image, nullptr);
+        if (memory)  vkFreeMemory(device, memory, nullptr);
+        image = VK_NULL_HANDLE; memory = VK_NULL_HANDLE; view = VK_NULL_HANDLE;
+        sampler = VK_NULL_HANDLE; device = VK_NULL_HANDLE;
+    }
+};
+
 // Per-frame snapshot the renderer consumes. Mirrors the previous drawFrame
 // argument list (by-ref for heavy data, by-value for scalars).
 struct FrameRenderData {
@@ -106,6 +146,7 @@ private:
         bool             depthTest;   // depthTestEnable + depthWriteEnable
         bool             alphaBlend;  // semi-transparent (UI)
         VkPipelineLayout layout;
+        VkRenderPass     renderPass = VK_NULL_HANDLE;
     };
     VkPipeline createPipeline(const PipelineConfig& cfg);
     void createGraphicsPipeline();
@@ -121,6 +162,7 @@ private:
     void buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk);
     void buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk);
     void buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chunk);
+    void buildGroundDressingBuffer(const glm::ivec2& coord, Chunk& chunk);
     void rebuildDirtyChunks();
     void createUIPipeline();
     void createUIBuffer();
@@ -133,8 +175,21 @@ private:
     void createPostSampler();
     void createPostDescriptors();
     void updatePostDescriptors();
+    void createSmaaRenderPass();
+    void createSmaaResources();
+    void createSmaaPipelines();
+    void createSmaaLookupTextures();
+    void createSmaaDescriptors();
+    void updateSmaaDescriptors();
+    // Generic uploaded-texture helper: staging upload + image + view (+ optional sampler).
+    TextureResource createTexture(uint32_t width, uint32_t height, VkFormat format,
+        const void* bytes, VkDeviceSize size, bool withSampler);
+    // Layered variant for a sampler2DArray (bytes laid out layer-major, all same size).
+    TextureResource createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
+        VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler);
     void createObjectMeshes();
     void createGrassTexture();
+    void createTerrainTextureArray();
     void createItemMesh();
     void createDropInstanceBuffer();
     void updateDropInstanceBuffer(const std::vector<DroppedItem>& drops);
@@ -212,7 +267,7 @@ private:
     VkPipeline               m_chunkPipeline     = VK_NULL_HANDLE;  // Chunk mesh
     VkPipeline               m_uiPipeline        = VK_NULL_HANDLE;  // 2D UI overlay
     VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
-    VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props (trees)
+    VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props and dressing
     VkPipeline               m_grassPipeline     = VK_NULL_HANDLE;  // Instanced alpha-card grass
 
     // Post-process: scene → offscreen color, then fullscreen pass → swapchain
@@ -226,6 +281,33 @@ private:
     std::vector<VkImage>        m_offscreenImage;   // per frame in flight
     std::vector<VkDeviceMemory> m_offscreenMemory;
     std::vector<VkImageView>    m_offscreenView;
+
+    // SMAA 1x: scene color -> edge weights -> blend weights -> swapchain
+    VkRenderPass             m_smaaRenderPass                 = VK_NULL_HANDLE;
+    VkPipeline               m_smaaEdgePipeline               = VK_NULL_HANDLE;
+    VkPipelineLayout         m_smaaEdgePipelineLayout         = VK_NULL_HANDLE;
+    VkPipeline               m_smaaBlendPipeline              = VK_NULL_HANDLE;
+    VkPipelineLayout         m_smaaBlendPipelineLayout        = VK_NULL_HANDLE;
+    VkPipeline               m_smaaNeighborhoodPipeline       = VK_NULL_HANDLE;
+    VkPipelineLayout         m_smaaNeighborhoodPipelineLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout    m_smaaEdgeDescriptorSetLayout    = VK_NULL_HANDLE;
+    VkDescriptorSetLayout    m_smaaBlendDescriptorSetLayout   = VK_NULL_HANDLE;
+    VkDescriptorSetLayout    m_smaaNeighborhoodDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool         m_smaaDescriptorPool             = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> m_smaaEdgeDescriptorSets;
+    std::vector<VkDescriptorSet> m_smaaBlendDescriptorSets;
+    std::vector<VkDescriptorSet> m_smaaNeighborhoodDescriptorSets;
+    std::vector<VkFramebuffer>   m_smaaEdgeFramebuffers;
+    std::vector<VkFramebuffer>   m_smaaBlendFramebuffers;
+    std::vector<VkImage>        m_smaaEdgeImage;
+    std::vector<VkDeviceMemory> m_smaaEdgeMemory;
+    std::vector<VkImageView>    m_smaaEdgeView;
+    std::vector<VkImage>        m_smaaBlendImage;
+    std::vector<VkDeviceMemory> m_smaaBlendMemory;
+    std::vector<VkImageView>    m_smaaBlendView;
+    // SMAA precomputed LUTs (sampled through the shared m_postSampler, no own sampler).
+    TextureResource m_smaaAreaTex;
+    TextureResource m_smaaSearchTex;
 
     GpuBuffer                m_vertexBuffer;
     GpuBuffer                m_indexBuffer;
@@ -242,6 +324,10 @@ private:
         std::vector<ObjGroup> objGroups;
         GpuBuffer      grassBuffer;
         uint32_t       grassCount = 0;
+        GpuBuffer      groundPatchBuffer;
+        uint32_t       groundPatchCount = 0;
+        GpuBuffer      pebbleBuffer;
+        uint32_t       pebbleCount = 0;
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;
@@ -254,13 +340,15 @@ private:
     std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
     ObjectMesh m_grassClumpMesh;
     ObjectMesh m_grassCardMesh;
+    ObjectMesh m_groundPatchMesh;
+    ObjectMesh m_pebbleMesh;
 
     // Procedural grass alpha texture (sampled by the grass card pipeline). Creation is
     // isolated in createGrassTexture so a file-loaded image can swap in later.
-    VkImage        m_grassTexImage   = VK_NULL_HANDLE;
-    VkDeviceMemory m_grassTexMemory  = VK_NULL_HANDLE;
-    VkImageView    m_grassTexView    = VK_NULL_HANDLE;
-    VkSampler      m_grassTexSampler = VK_NULL_HANDLE;
+    TextureResource m_grassTex;
+
+    // Terrain material texture array (sampler2DArray, one layer per tile material).
+    TextureResource m_terrainTex;
 
     // Dropped items — shared small cube mesh + per-frame instance buffer (reuses m_indexBuffer + m_pipeline)
     static constexpr uint32_t   MAX_DROPS = 256;

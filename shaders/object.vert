@@ -20,6 +20,8 @@ layout(location = 0) flat out vec3 fragNormal;
 layout(location = 1)      out vec3 fragColor;
 layout(location = 2)      out vec4 fragPosLightSpace;
 layout(location = 3)      out float fragViewDepth;
+layout(location = 4)      out vec2 fragUV;
+layout(location = 5) flat out float fragLayer;
 
 void main() {
     float s = sin(instanceRot);
@@ -34,4 +36,6 @@ void main() {
     fragColor         = inColor;
     fragPosLightSpace = ubo.lightMVP * vec4(worldPos, 1.0);
     fragViewDepth     = -viewPos.z;
+    fragUV            = vec2(0.0);
+    fragLayer         = -1.0; // objects are untextured (vertex color only)
 }

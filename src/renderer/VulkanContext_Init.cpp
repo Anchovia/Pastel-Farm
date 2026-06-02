@@ -5,6 +5,9 @@
 #include "world/World.h"
 #include "game/Camera.h"
 
+#include "AreaTex.h"
+#include "SearchTex.h"
+
 #include <stdexcept>
 #include <iostream>
 #include <set>
@@ -13,6 +16,7 @@
 #include <cstring>
 #include <chrono>
 #include <cmath>
+#include <string>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -350,7 +354,7 @@ void VulkanContext::createRenderPass() {
 // ============================================================
 //  Graphics pipelines
 // ============================================================
-// Shared graphics-pipeline builder for the main render pass. Fills all common
+// Shared graphics-pipeline builder. Fills all common
 // fixed-function state; per-pipeline differences come from PipelineConfig.
 VkPipeline VulkanContext::createPipeline(const PipelineConfig& cfg) {
     auto vertCode = readFile(cfg.vertPath);
@@ -445,7 +449,7 @@ VkPipeline VulkanContext::createPipeline(const PipelineConfig& cfg) {
     pipelineInfo.pDepthStencilState  = &depthStencil;
     pipelineInfo.pDynamicState       = &dynamicState;
     pipelineInfo.layout              = cfg.layout;
-    pipelineInfo.renderPass          = m_renderPass;
+    pipelineInfo.renderPass          = (cfg.renderPass != VK_NULL_HANDLE) ? cfg.renderPass : m_renderPass;
     pipelineInfo.subpass             = 0;
 
     VkPipeline pipeline;
@@ -498,6 +502,8 @@ void VulkanContext::createChunkPipeline() {
         { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, pos)    },
         { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, normal) },
         { 2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, color)  },
+        { 3, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(ChunkVertex, uv)     },
+        { 4, 0, VK_FORMAT_R32_SFLOAT,       offsetof(ChunkVertex, layer)  },
     };
     cfg.cullMode   = VK_CULL_MODE_BACK_BIT;
     cfg.depthTest  = true;
@@ -527,6 +533,7 @@ void VulkanContext::createUIPipeline() {
     cfg.depthTest  = false;   // UI draws on top — no depth test/write
     cfg.alphaBlend = true;    // semi-transparent panels
     cfg.layout     = m_uiPipelineLayout;
+    cfg.renderPass = m_postRenderPass;
     m_uiPipeline = createPipeline(cfg);
 }
 
@@ -742,6 +749,58 @@ void VulkanContext::createObjectMeshes() {
     upload(ObjectType::STONE_FENCE, verts);
     }
 
+    // ---- GROUND PATCH: thin visual-only dirt/dry-grass breakup decal ----
+    {
+    std::vector<ChunkVertex> verts;
+    const glm::vec3 n = {0.0f, 0.0f, 1.0f};
+    const glm::vec3 center = {0.0f, 0.0f, 0.006f};
+    const glm::vec3 ring[7] = {
+        { 0.46f,  0.02f, 0.006f},
+        { 0.24f,  0.25f, 0.006f},
+        {-0.06f,  0.33f, 0.006f},
+        {-0.40f,  0.12f, 0.006f},
+        {-0.30f, -0.22f, 0.006f},
+        { 0.05f, -0.31f, 0.006f},
+        { 0.35f, -0.17f, 0.006f},
+    };
+    const glm::vec3 dryGrass = {0.42f, 0.46f, 0.24f};
+    const glm::vec3 dirt     = {0.34f, 0.30f, 0.18f};
+    for (int i = 0; i < 7; i++) {
+        const glm::vec3 col = (i % 2 == 0) ? dryGrass : dirt;
+        verts.push_back({center, n, col});
+        verts.push_back({ring[i], n, col});
+        verts.push_back({ring[(i + 1) % 7], n, col});
+    }
+    uploadMesh(m_groundPatchMesh, verts);
+    }
+
+    // ---- PEBBLE: tiny visual-only low-poly stone, not a collidable object ----
+    {
+    std::vector<ChunkVertex> verts;
+    const glm::vec3 pebbleColor = {0.42f, 0.42f, 0.40f};
+    const glm::vec3 center = {0.0f, 0.0f, 0.035f};
+    const glm::vec3 top    = {0.0f, 0.0f, 0.11f};
+    const glm::vec3 ring[5] = {
+        { 0.16f,  0.00f, 0.025f},
+        { 0.04f,  0.12f, 0.030f},
+        {-0.14f,  0.08f, 0.020f},
+        {-0.11f, -0.10f, 0.030f},
+        { 0.08f, -0.13f, 0.022f},
+    };
+    auto tri = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
+        glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
+        if (glm::dot(n, (a + b + c) / 3.0f - center) < 0.0f) n = -n;
+        verts.push_back({a, n, pebbleColor});
+        verts.push_back({b, n, pebbleColor});
+        verts.push_back({c, n, pebbleColor});
+    };
+    for (int i = 0; i < 5; i++) {
+        tri(top, ring[i], ring[(i + 1) % 5]);
+        tri({0.0f, 0.0f, 0.0f}, ring[(i + 1) % 5], ring[i]);
+    }
+    uploadMesh(m_pebbleMesh, verts);
+    }
+
     // ---- GRASS CLUMP: visual-only dressing mesh, instanced by the renderer ----
     {
     std::vector<ChunkVertex> verts;
@@ -766,8 +825,8 @@ void VulkanContext::createObjectMeshes() {
     {
     std::vector<GrassCardVertex> verts;
     auto card = [&](float angle) {
-        const float halfW = 0.34f;
-        const float h     = 0.42f;
+        const float halfW = 0.31f;
+        const float h     = 0.48f;
         const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
         const glm::vec3 side = dir * halfW;
         const glm::vec3 n    = {-dir.y, dir.x, 0.0f};
@@ -789,87 +848,237 @@ void VulkanContext::createObjectMeshes() {
 //  Procedural grass alpha texture
 // ============================================================
 void VulkanContext::createGrassTexture() {
-    // A small grass-tuft mask: a few tapering vertical blades drawn into alpha, with a
+    // A small grass-tuft mask: curved tapering blades drawn into alpha, with a
     // base-dark / tip-light green. Kept isolated so a file-loaded image (stb_image) can
     // replace just this pixel fill later — pipeline/descriptor/mesh stay identical.
     const uint32_t W = 64, H = 64;
     std::vector<uint8_t> pixels((size_t)W * H * 4, 0); // RGBA8, fully transparent
 
-    auto plot = [&](int x, int y, const glm::vec3& c) {
+    auto clamp01 = [](float v) {
+        return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    };
+    auto smooth = [](float t) {
+        return t * t * (3.0f - 2.0f * t);
+    };
+    auto writePixel = [&](int x, int y, const glm::vec3& c, float alpha) {
         if (x < 0 || x >= (int)W || y < 0 || y >= (int)H) return;
         uint8_t* p = &pixels[((size_t)y * W + x) * 4];
+        const float a = clamp01(alpha);
+        const float oldA = (float)p[3] / 255.0f;
+        if (a < oldA * 0.85f) return;
         p[0] = (uint8_t)(c.r * 255.0f);
         p[1] = (uint8_t)(c.g * 255.0f);
         p[2] = (uint8_t)(c.b * 255.0f);
-        p[3] = 255;
+        p[3] = (uint8_t)(std::max(oldA, a) * 255.0f);
     };
 
-    struct Blade { float baseX, tipX, halfW; };
+    struct Blade { float baseX, midX, tipX, height, halfW, shade; };
     static const Blade blades[] = {
-        {0.50f, 0.50f, 0.105f},
-        {0.32f, 0.18f, 0.075f},
-        {0.68f, 0.84f, 0.075f},
-        {0.42f, 0.30f, 0.065f},
-        {0.58f, 0.70f, 0.065f},
-        {0.24f, 0.10f, 0.045f},
-        {0.76f, 0.92f, 0.045f},
-        {0.50f, 0.62f, 0.050f},
+        {0.50f, 0.49f, 0.52f, 1.00f, 0.110f, 1.00f},
+        {0.36f, 0.26f, 0.17f, 0.88f, 0.080f, 0.92f},
+        {0.64f, 0.74f, 0.86f, 0.86f, 0.080f, 1.04f},
+        {0.44f, 0.36f, 0.27f, 0.72f, 0.064f, 0.96f},
+        {0.56f, 0.64f, 0.75f, 0.70f, 0.064f, 1.08f},
+        {0.27f, 0.18f, 0.09f, 0.58f, 0.048f, 0.88f},
+        {0.73f, 0.82f, 0.93f, 0.58f, 0.048f, 0.90f},
+        {0.47f, 0.52f, 0.60f, 0.62f, 0.052f, 1.06f},
+        {0.53f, 0.48f, 0.40f, 0.54f, 0.046f, 0.94f},
     };
-    const glm::vec3 baseCol = {0.18f, 0.38f, 0.14f};
-    const glm::vec3 tipCol  = {0.50f, 0.68f, 0.28f};
+    const glm::vec3 baseCol = {0.15f, 0.33f, 0.12f};
+    const glm::vec3 tipCol  = {0.48f, 0.68f, 0.25f};
 
-    for (uint32_t y = 0; y < H; y++) {
-        const float t = 1.0f - (float)y / (float)(H - 1); // 0 at bottom row, 1 at top row
-        const glm::vec3 col = glm::mix(baseCol, tipCol, t);
-        for (const Blade& b : blades) {
-            const float cx    = b.baseX + (b.tipX - b.baseX) * t;
-            const float halfW = b.halfW * (1.0f - t);      // taper to a point at the tip
-            const int x0 = (int)((cx - halfW) * W);
-            const int x1 = (int)((cx + halfW) * W);
-            for (int x = x0; x <= x1; x++) plot(x, y, col);
+    for (const Blade& b : blades) {
+        for (uint32_t y = 0; y < H; y++) {
+            const float t = 1.0f - (float)y / (float)(H - 1); // 0 at bottom row, 1 at top row
+            if (t > b.height) continue;
+
+            const float u = t / b.height;
+            const float su = smooth(u);
+            const float cx = glm::mix(glm::mix(b.baseX, b.midX, su), b.tipX, su * su);
+            const float halfW = b.halfW * powf(1.0f - u, 1.35f);
+            const float feather = 1.35f / (float)W;
+            const glm::vec3 col = glm::mix(baseCol, tipCol, smooth(u)) * b.shade;
+
+            const int x0 = (int)((cx - halfW - feather) * W);
+            const int x1 = (int)((cx + halfW + feather) * W);
+            for (int x = x0; x <= x1; x++) {
+                const float px = ((float)x + 0.5f) / (float)W;
+                const float dist = fabsf(px - cx);
+                const float a = clamp01((halfW + feather - dist) / feather);
+                writePixel(x, (int)y, col, a * (0.72f + 0.28f * u));
+            }
         }
     }
 
+    // Upload the procedural pixels through the shared texture helper. The grass card
+    // pipeline samples this with its own LINEAR/CLAMP sampler (withSampler=true).
     const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
-    GpuBuffer staging = createBuffer(imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), imgSize, /*withSampler=*/true);
+}
+
+TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
+    VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler)
+{
+    TextureResource tex;
+    tex.device = m_device;
+
+    GpuBuffer staging = createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     void* mapped;
-    vkMapMemory(m_device, staging.memory, 0, imgSize, 0, &mapped);
-    memcpy(mapped, pixels.data(), (size_t)imgSize);
+    vkMapMemory(m_device, staging.memory, 0, size, 0, &mapped);
+    memcpy(mapped, bytes, (size_t)size);
     vkUnmapMemory(m_device, staging.memory);
 
-    createImage(W, H, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_grassTexImage, m_grassTexMemory);
+    // createImage hardcodes arrayLayers=1, so build the array image inline here.
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType     = VK_IMAGE_TYPE_2D;
+    imageInfo.extent        = {width, height, 1};
+    imageInfo.mipLevels     = 1;
+    imageInfo.arrayLayers   = layerCount;
+    imageInfo.format        = format;
+    imageInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+    if (vkCreateImage(m_device, &imageInfo, nullptr, &tex.image) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create texture array image");
 
-    transitionImageLayout(m_grassTexImage, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(staging.buffer, m_grassTexImage, W, H);
-    transitionImageLayout(m_grassTexImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    // staging frees here (GpuBuffer RAII); all transfers already waited on a fence.
+    VkMemoryRequirements memReq;
+    vkGetImageMemoryRequirements(m_device, tex.image, &memReq);
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize  = memReq.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (vkAllocateMemory(m_device, &allocInfo, nullptr, &tex.memory) != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate texture array memory");
+    vkBindImageMemory(m_device, tex.image, tex.memory, 0);
+
+    // One-shot upload: transition all layers, copy the contiguous layer-major buffer, transition to read.
+    VkCommandBufferAllocateInfo cbAlloc{};
+    cbAlloc.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cbAlloc.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cbAlloc.commandPool        = m_commandPool;
+    cbAlloc.commandBufferCount = 1;
+    VkCommandBuffer cmd;
+    vkAllocateCommandBuffers(m_device, &cbAlloc, &cmd);
+    VkCommandBufferBeginInfo begin{};
+    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &begin);
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image               = tex.image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = layerCount;
+
+    barrier.oldLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkBufferImageCopy region{};
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.layerCount = layerCount;
+    region.imageExtent                 = {width, height, 1};
+    vkCmdCopyBufferToImage(cmd, staging.buffer, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    barrier.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    vkEndCommandBuffer(cmd);
+    VkSubmitInfo submit{};
+    submit.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers    = &cmd;
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VkFence fence;
+    vkCreateFence(m_device, &fenceInfo, nullptr, &fence);
+    vkQueueSubmit(m_graphicsQueue, 1, &submit, fence);
+    vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(m_device, fence, nullptr);
+    vkFreeCommandBuffers(m_device, m_commandPool, 1, &cmd);
+    // staging frees here (GpuBuffer RAII); the fence already waited on all transfers.
 
     VkImageViewCreateInfo vi{};
     vi.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    vi.image                       = m_grassTexImage;
-    vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
-    vi.format                      = VK_FORMAT_R8G8B8A8_UNORM;
+    vi.image                       = tex.image;
+    vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    vi.format                      = format;
     vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     vi.subresourceRange.levelCount = 1;
-    vi.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(m_device, &vi, nullptr, &m_grassTexView) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create grass texture view");
+    vi.subresourceRange.layerCount = layerCount;
+    if (vkCreateImageView(m_device, &vi, nullptr, &tex.view) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create texture array view");
 
-    VkSamplerCreateInfo si{};
-    si.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    si.magFilter    = VK_FILTER_LINEAR;
-    si.minFilter    = VK_FILTER_LINEAR;
-    si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    if (vkCreateSampler(m_device, &si, nullptr, &m_grassTexSampler) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create grass sampler");
+    if (withSampler) {
+        VkSamplerCreateInfo si{};
+        si.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        si.magFilter    = VK_FILTER_LINEAR;
+        si.minFilter    = VK_FILTER_LINEAR;
+        si.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        if (vkCreateSampler(m_device, &si, nullptr, &tex.sampler) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create texture array sampler");
+    }
+
+    return tex;
+}
+
+void VulkanContext::createTerrainTextureArray() {
+    // Step 3a: per-material layers as seamless grayscale grain, distinct per layer.
+    // Multiplied by the per-tile vertex color so hue + baked AO are preserved (tint).
+    // Per-material art (grass blades, stone speckle, ...) is tuned in a later step.
+    const uint32_t W = 32, H = 32;
+    const uint32_t L = TERRAIN_TEX_LAYERS;
+    std::vector<uint8_t> pixels((size_t)W * H * 4 * L, 255);
+
+    auto smooth = [](float t) { return t * t * (3.0f - 2.0f * t); };
+    auto lerp   = [](float a, float b, float t) { return a + (b - a) * t; };
+    auto hash01 = [](int x, int y, int salt) -> float {
+        uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)salt * 83492791u;
+        h ^= h >> 13; h *= 1274126177u;
+        return (float)(h & 65535u) / 65535.0f;
+    };
+    // Tileable value noise: lattice coords wrap modulo (size/cell) so texture edges match.
+    auto tileNoise = [&](int x, int y, int cell, int salt) -> float {
+        const int cells = (int)W / cell;
+        auto wh = [&](int gx, int gy) { return hash01(((gx % cells) + cells) % cells, ((gy % cells) + cells) % cells, salt); };
+        const int gx = x / cell, gy = y / cell;
+        const float tx = smooth((float)(x - gx * cell) / (float)cell);
+        const float ty = smooth((float)(y - gy * cell) / (float)cell);
+        return lerp(lerp(wh(gx, gy), wh(gx + 1, gy), tx),
+                    lerp(wh(gx, gy + 1), wh(gx + 1, gy + 1), tx), ty);
+    };
+
+    for (uint32_t layer = 0; layer < L; layer++) {
+        const int salt = 100 + (int)layer * 37;
+        for (uint32_t y = 0; y < H; y++)
+        for (uint32_t x = 0; x < W; x++) {
+            float n = tileNoise((int)x, (int)y, 8, salt) * 0.6f + tileNoise((int)x, (int)y, 4, salt + 1) * 0.4f;
+            float g = 0.72f + 0.28f * n; // gentle multiplicative grain
+            uint8_t v = (uint8_t)(g * 255.0f);
+            uint8_t* p = &pixels[(((size_t)layer * H + y) * W + x) * 4];
+            p[0] = v; p[1] = v; p[2] = v; p[3] = 255;
+        }
+    }
+
+    const VkDeviceSize size = (VkDeviceSize)W * H * 4 * L;
+    m_terrainTex = createTextureArray(W, H, L, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), size, /*withSampler=*/true);
 }
 
 // ============================================================
@@ -906,6 +1115,28 @@ void VulkanContext::createFramebuffers() {
         info.layers          = 1;
         if (vkCreateFramebuffer(m_device, &info, nullptr, &m_postFramebuffers[i]) != VK_SUCCESS)
             throw std::runtime_error("Failed to create post framebuffer");
+    }
+
+    m_smaaEdgeFramebuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    m_smaaBlendFramebuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkFramebufferCreateInfo info{};
+        info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        info.renderPass      = m_smaaRenderPass;
+        info.attachmentCount = 1;
+        info.width           = m_swapchainExtent.width;
+        info.height          = m_swapchainExtent.height;
+        info.layers          = 1;
+
+        VkImageView edgeAttachment[] = { m_smaaEdgeView[i] };
+        info.pAttachments = edgeAttachment;
+        if (vkCreateFramebuffer(m_device, &info, nullptr, &m_smaaEdgeFramebuffers[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create SMAA edge framebuffer");
+
+        VkImageView blendAttachment[] = { m_smaaBlendView[i] };
+        info.pAttachments = blendAttachment;
+        if (vkCreateFramebuffer(m_device, &info, nullptr, &m_smaaBlendFramebuffers[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create SMAA blend framebuffer");
     }
 }
 
@@ -952,6 +1183,53 @@ void VulkanContext::createPostRenderPass() {
         throw std::runtime_error("Failed to create post render pass");
 }
 
+void VulkanContext::createSmaaRenderPass() {
+    VkAttachmentDescription color{};
+    color.format         = VK_FORMAT_R8G8B8A8_UNORM;
+    color.samples        = VK_SAMPLE_COUNT_1_BIT;
+    color.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    color.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    color.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference colorRef{};
+    colorRef.attachment = 0;
+    colorRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments    = &colorRef;
+
+    VkSubpassDependency deps[2]{};
+    deps[0].srcSubpass    = VK_SUBPASS_EXTERNAL;
+    deps[0].dstSubpass    = 0;
+    deps[0].srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    deps[0].dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    deps[1].srcSubpass    = 0;
+    deps[1].dstSubpass    = VK_SUBPASS_EXTERNAL;
+    deps[1].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    deps[1].dstStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    VkRenderPassCreateInfo info{};
+    info.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    info.attachmentCount = 1;
+    info.pAttachments    = &color;
+    info.subpassCount    = 1;
+    info.pSubpasses      = &subpass;
+    info.dependencyCount = 2;
+    info.pDependencies   = deps;
+    if (vkCreateRenderPass(m_device, &info, nullptr, &m_smaaRenderPass) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create SMAA render pass");
+}
+
 void VulkanContext::createOffscreenResources() {
     m_offscreenImage.resize(MAX_FRAMES_IN_FLIGHT);
     m_offscreenMemory.resize(MAX_FRAMES_IN_FLIGHT);
@@ -976,6 +1254,96 @@ void VulkanContext::createOffscreenResources() {
     }
 }
 
+void VulkanContext::createSmaaResources() {
+    auto createTarget = [&](std::vector<VkImage>& images,
+                            std::vector<VkDeviceMemory>& memories,
+                            std::vector<VkImageView>& views,
+                            const char* label)
+    {
+        images.resize(MAX_FRAMES_IN_FLIGHT);
+        memories.resize(MAX_FRAMES_IN_FLIGHT);
+        views.resize(MAX_FRAMES_IN_FLIGHT);
+        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            createImage(m_swapchainExtent.width, m_swapchainExtent.height, VK_FORMAT_R8G8B8A8_UNORM,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                images[i], memories[i]);
+
+            VkImageViewCreateInfo v{};
+            v.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            v.image                           = images[i];
+            v.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+            v.format                          = VK_FORMAT_R8G8B8A8_UNORM;
+            v.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+            v.subresourceRange.levelCount     = 1;
+            v.subresourceRange.layerCount     = 1;
+            if (vkCreateImageView(m_device, &v, nullptr, &views[i]) != VK_SUCCESS)
+                throw std::runtime_error(std::string("Failed to create ") + label + " image view");
+        }
+    };
+
+    createTarget(m_smaaEdgeImage, m_smaaEdgeMemory, m_smaaEdgeView, "SMAA edge");
+    createTarget(m_smaaBlendImage, m_smaaBlendMemory, m_smaaBlendView, "SMAA blend");
+}
+
+TextureResource VulkanContext::createTexture(uint32_t width, uint32_t height, VkFormat format,
+    const void* bytes, VkDeviceSize size, bool withSampler)
+{
+    TextureResource tex;
+    tex.device = m_device;
+
+    GpuBuffer staging = createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    void* mapped;
+    vkMapMemory(m_device, staging.memory, 0, size, 0, &mapped);
+    memcpy(mapped, bytes, (size_t)size);
+    vkUnmapMemory(m_device, staging.memory);
+
+    createImage(width, height, format, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tex.image, tex.memory);
+
+    transitionImageLayout(tex.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(staging.buffer, tex.image, width, height);
+    transitionImageLayout(tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    // staging frees here (GpuBuffer RAII); all transfers already waited on a fence.
+
+    VkImageViewCreateInfo vi{};
+    vi.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vi.image                       = tex.image;
+    vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
+    vi.format                      = format;
+    vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vi.subresourceRange.levelCount = 1;
+    vi.subresourceRange.layerCount = 1;
+    if (vkCreateImageView(m_device, &vi, nullptr, &tex.view) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create texture view");
+
+    if (withSampler) {
+        VkSamplerCreateInfo si{};
+        si.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        si.magFilter    = VK_FILTER_LINEAR;
+        si.minFilter    = VK_FILTER_LINEAR;
+        si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        if (vkCreateSampler(m_device, &si, nullptr, &tex.sampler) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create texture sampler");
+    }
+
+    return tex;
+}
+
+void VulkanContext::createSmaaLookupTextures() {
+    // SMAA LUTs are sampled through m_postSampler, so no per-texture sampler.
+    m_smaaAreaTex = createTexture(AREATEX_WIDTH, AREATEX_HEIGHT, VK_FORMAT_R8G8_UNORM,
+        areaTexBytes, AREATEX_SIZE, /*withSampler=*/false);
+    m_smaaSearchTex = createTexture(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, VK_FORMAT_R8_UNORM,
+        searchTexBytes, SEARCHTEX_SIZE, /*withSampler=*/false);
+}
+
 void VulkanContext::createPostPipeline() {
     VkDescriptorSetLayoutBinding binding{};
     binding.binding         = 0;
@@ -990,9 +1358,15 @@ void VulkanContext::createPostPipeline() {
         throw std::runtime_error("Failed to create post descriptor set layout");
 
     VkPipelineLayoutCreateInfo pl{};
-    pl.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pl.setLayoutCount = 1;
-    pl.pSetLayouts    = &m_postDescriptorSetLayout;
+    VkPushConstantRange postPush{};
+    postPush.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    postPush.offset     = 0;
+    postPush.size       = sizeof(PostPushConstants);
+    pl.sType                   = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pl.setLayoutCount          = 1;
+    pl.pSetLayouts             = &m_postDescriptorSetLayout;
+    pl.pushConstantRangeCount  = 1;
+    pl.pPushConstantRanges     = &postPush;
     if (vkCreatePipelineLayout(m_device, &pl, nullptr, &m_postPipelineLayout) != VK_SUCCESS)
         throw std::runtime_error("Failed to create post pipeline layout");
 
@@ -1081,6 +1455,166 @@ void VulkanContext::createPostPipeline() {
     vkDestroyShaderModule(m_device, fragMod, nullptr);
 }
 
+void VulkanContext::createSmaaPipelines() {
+    auto createSetLayout = [&](std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
+                               VkDescriptorSetLayout& outLayout,
+                               const char* label)
+    {
+        std::vector<VkDescriptorSetLayoutBinding> bindingVec(bindings);
+        VkDescriptorSetLayoutCreateInfo info{};
+        info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        info.bindingCount = (uint32_t)bindingVec.size();
+        info.pBindings    = bindingVec.data();
+        if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &outLayout) != VK_SUCCESS)
+            throw std::runtime_error(std::string("Failed to create ") + label + " descriptor set layout");
+    };
+
+    VkDescriptorSetLayoutBinding sampled{};
+    sampled.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    sampled.descriptorCount = 1;
+    sampled.stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding edgeScene = sampled;
+    edgeScene.binding = 0;
+    createSetLayout({ edgeScene }, m_smaaEdgeDescriptorSetLayout, "SMAA edge");
+
+    VkDescriptorSetLayoutBinding blendEdges = sampled;
+    blendEdges.binding = 0;
+    VkDescriptorSetLayoutBinding blendArea = sampled;
+    blendArea.binding = 1;
+    VkDescriptorSetLayoutBinding blendSearch = sampled;
+    blendSearch.binding = 2;
+    createSetLayout({ blendEdges, blendArea, blendSearch }, m_smaaBlendDescriptorSetLayout, "SMAA blend");
+
+    VkDescriptorSetLayoutBinding neighborhoodScene = sampled;
+    neighborhoodScene.binding = 0;
+    VkDescriptorSetLayoutBinding neighborhoodBlend = sampled;
+    neighborhoodBlend.binding = 1;
+    createSetLayout({ neighborhoodScene, neighborhoodBlend },
+        m_smaaNeighborhoodDescriptorSetLayout, "SMAA neighborhood");
+
+    auto createLayout = [&](VkDescriptorSetLayout setLayout,
+                            VkPipelineLayout& outLayout,
+                            const char* label)
+    {
+        VkPushConstantRange push{};
+        push.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        push.offset     = 0;
+        push.size       = sizeof(PostPushConstants);
+
+        VkPipelineLayoutCreateInfo info{};
+        info.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        info.setLayoutCount         = 1;
+        info.pSetLayouts            = &setLayout;
+        info.pushConstantRangeCount = 1;
+        info.pPushConstantRanges    = &push;
+        if (vkCreatePipelineLayout(m_device, &info, nullptr, &outLayout) != VK_SUCCESS)
+            throw std::runtime_error(std::string("Failed to create ") + label + " pipeline layout");
+    };
+
+    createLayout(m_smaaEdgeDescriptorSetLayout, m_smaaEdgePipelineLayout, "SMAA edge");
+    createLayout(m_smaaBlendDescriptorSetLayout, m_smaaBlendPipelineLayout, "SMAA blend");
+    createLayout(m_smaaNeighborhoodDescriptorSetLayout, m_smaaNeighborhoodPipelineLayout, "SMAA neighborhood");
+
+    auto createFullscreenPipeline = [&](const char* fragPath,
+                                        VkPipelineLayout layout,
+                                        VkRenderPass renderPass,
+                                        VkPipeline& outPipeline,
+                                        const char* label)
+    {
+        auto vertCode = readFile("shaders/post.vert.spv");
+        auto fragCode = readFile(fragPath);
+        VkShaderModule vertMod = createShaderModule(vertCode);
+        VkShaderModule fragMod = createShaderModule(fragCode);
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = vertMod;
+        stages[0].pName  = "main";
+        stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = fragMod;
+        stages[1].pName  = "main";
+
+        VkPipelineVertexInputStateCreateInfo vertexInput{};
+        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+        VkViewport viewport{ 0, 0, (float)m_swapchainExtent.width, (float)m_swapchainExtent.height, 0.0f, 1.0f };
+        VkRect2D scissor{ {0, 0}, m_swapchainExtent };
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.pViewports    = &viewport;
+        viewportState.scissorCount  = 1;
+        viewportState.pScissors     = &scissor;
+
+        VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = 2;
+        dynamicState.pDynamicStates    = dynamicStates;
+
+        VkPipelineRasterizationStateCreateInfo raster{};
+        raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        raster.polygonMode = VK_POLYGON_MODE_FILL;
+        raster.cullMode    = VK_CULL_MODE_NONE;
+        raster.frontFace   = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        raster.lineWidth   = 1.0f;
+
+        VkPipelineMultisampleStateCreateInfo msaa{};
+        msaa.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        msaa.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineColorBlendAttachmentState blendAttach{};
+        blendAttach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                     VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo blend{};
+        blend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        blend.attachmentCount = 1;
+        blend.pAttachments    = &blendAttach;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable  = VK_FALSE;
+        depthStencil.depthWriteEnable = VK_FALSE;
+        depthStencil.depthCompareOp   = VK_COMPARE_OP_ALWAYS;
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount          = 2;
+        pipelineInfo.pStages             = stages;
+        pipelineInfo.pVertexInputState   = &vertexInput;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState      = &viewportState;
+        pipelineInfo.pRasterizationState = &raster;
+        pipelineInfo.pMultisampleState   = &msaa;
+        pipelineInfo.pColorBlendState    = &blend;
+        pipelineInfo.pDepthStencilState  = &depthStencil;
+        pipelineInfo.pDynamicState       = &dynamicState;
+        pipelineInfo.layout              = layout;
+        pipelineInfo.renderPass          = renderPass;
+        pipelineInfo.subpass             = 0;
+
+        if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outPipeline) != VK_SUCCESS)
+            throw std::runtime_error(std::string("Failed to create ") + label + " pipeline");
+
+        vkDestroyShaderModule(m_device, vertMod, nullptr);
+        vkDestroyShaderModule(m_device, fragMod, nullptr);
+    };
+
+    createFullscreenPipeline("shaders/smaa_edge.frag.spv",
+        m_smaaEdgePipelineLayout, m_smaaRenderPass, m_smaaEdgePipeline, "SMAA edge");
+    createFullscreenPipeline("shaders/smaa_blend.frag.spv",
+        m_smaaBlendPipelineLayout, m_smaaRenderPass, m_smaaBlendPipeline, "SMAA blend");
+    createFullscreenPipeline("shaders/smaa_neighborhood.frag.spv",
+        m_smaaNeighborhoodPipelineLayout, m_postRenderPass, m_smaaNeighborhoodPipeline, "SMAA neighborhood");
+}
+
 void VulkanContext::createPostSampler() {
     VkSamplerCreateInfo info{};
     info.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -1134,6 +1668,101 @@ void VulkanContext::createPostDescriptors() {
         throw std::runtime_error("Failed to allocate post descriptor sets");
 
     updatePostDescriptors();
+}
+
+void VulkanContext::updateSmaaDescriptors() {
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorImageInfo edgeScene{};
+        edgeScene.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        edgeScene.imageView   = m_offscreenView[i];
+        edgeScene.sampler     = m_postSampler;
+
+        VkWriteDescriptorSet edgeWrite{};
+        edgeWrite.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        edgeWrite.dstSet          = m_smaaEdgeDescriptorSets[i];
+        edgeWrite.dstBinding      = 0;
+        edgeWrite.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        edgeWrite.descriptorCount = 1;
+        edgeWrite.pImageInfo      = &edgeScene;
+
+        VkDescriptorImageInfo blendImages[3]{};
+        blendImages[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        blendImages[0].imageView   = m_smaaEdgeView[i];
+        blendImages[0].sampler     = m_postSampler;
+        blendImages[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        blendImages[1].imageView   = m_smaaAreaTex.view;
+        blendImages[1].sampler     = m_postSampler;
+        blendImages[2].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        blendImages[2].imageView   = m_smaaSearchTex.view;
+        blendImages[2].sampler     = m_postSampler;
+
+        VkWriteDescriptorSet blendWrites[3]{};
+        for (uint32_t b = 0; b < 3; b++) {
+            blendWrites[b].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            blendWrites[b].dstSet          = m_smaaBlendDescriptorSets[i];
+            blendWrites[b].dstBinding      = b;
+            blendWrites[b].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            blendWrites[b].descriptorCount = 1;
+            blendWrites[b].pImageInfo      = &blendImages[b];
+        }
+
+        VkDescriptorImageInfo neighborhoodImages[2]{};
+        neighborhoodImages[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        neighborhoodImages[0].imageView   = m_offscreenView[i];
+        neighborhoodImages[0].sampler     = m_postSampler;
+        neighborhoodImages[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        neighborhoodImages[1].imageView   = m_smaaBlendView[i];
+        neighborhoodImages[1].sampler     = m_postSampler;
+
+        VkWriteDescriptorSet neighborhoodWrites[2]{};
+        for (uint32_t b = 0; b < 2; b++) {
+            neighborhoodWrites[b].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            neighborhoodWrites[b].dstSet          = m_smaaNeighborhoodDescriptorSets[i];
+            neighborhoodWrites[b].dstBinding      = b;
+            neighborhoodWrites[b].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            neighborhoodWrites[b].descriptorCount = 1;
+            neighborhoodWrites[b].pImageInfo      = &neighborhoodImages[b];
+        }
+
+        vkUpdateDescriptorSets(m_device, 1, &edgeWrite, 0, nullptr);
+        vkUpdateDescriptorSets(m_device, 3, blendWrites, 0, nullptr);
+        vkUpdateDescriptorSets(m_device, 2, neighborhoodWrites, 0, nullptr);
+    }
+}
+
+void VulkanContext::createSmaaDescriptors() {
+    VkDescriptorPoolSize ps{};
+    ps.type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    ps.descriptorCount = MAX_FRAMES_IN_FLIGHT * (1 + 3 + 2);
+
+    VkDescriptorPoolCreateInfo pi{};
+    pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pi.poolSizeCount = 1;
+    pi.pPoolSizes    = &ps;
+    pi.maxSets       = MAX_FRAMES_IN_FLIGHT * 3;
+    if (vkCreateDescriptorPool(m_device, &pi, nullptr, &m_smaaDescriptorPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create SMAA descriptor pool");
+
+    auto allocate = [&](VkDescriptorSetLayout layout,
+                        std::vector<VkDescriptorSet>& sets,
+                        const char* label)
+    {
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, layout);
+        VkDescriptorSetAllocateInfo ai{};
+        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        ai.descriptorPool     = m_smaaDescriptorPool;
+        ai.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
+        ai.pSetLayouts        = layouts.data();
+        sets.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(m_device, &ai, sets.data()) != VK_SUCCESS)
+            throw std::runtime_error(std::string("Failed to allocate ") + label + " descriptor sets");
+    };
+
+    allocate(m_smaaEdgeDescriptorSetLayout, m_smaaEdgeDescriptorSets, "SMAA edge");
+    allocate(m_smaaBlendDescriptorSetLayout, m_smaaBlendDescriptorSets, "SMAA blend");
+    allocate(m_smaaNeighborhoodDescriptorSetLayout, m_smaaNeighborhoodDescriptorSets, "SMAA neighborhood");
+
+    updateSmaaDescriptors();
 }
 
 // ============================================================
@@ -1716,7 +2345,7 @@ void VulkanContext::createShadowSampler() {
 //  Descriptor set layout
 // ============================================================
 void VulkanContext::createDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding bindings[3]{};
+    VkDescriptorSetLayoutBinding bindings[4]{};
 
     bindings[0].binding         = 0;
     bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1733,9 +2362,14 @@ void VulkanContext::createDescriptorSetLayout() {
     bindings[2].descriptorCount = 1;
     bindings[2].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    bindings[3].binding         = 3; // terrain texture array (sampler2DArray)
+    bindings[3].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[3].descriptorCount = 1;
+    bindings[3].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
     VkDescriptorSetLayoutCreateInfo info{};
     info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    info.bindingCount = 3;
+    info.bindingCount = 4;
     info.pBindings    = bindings;
 
     if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
@@ -1765,7 +2399,7 @@ void VulkanContext::createDescriptorPool() {
     poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
     poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT * 2;
+    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT * 3; // shadow + grass + terrain array
 
     VkDescriptorPoolCreateInfo info{};
     info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1802,10 +2436,15 @@ void VulkanContext::createDescriptorSets() {
 
         VkDescriptorImageInfo grassInfo{};
         grassInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        grassInfo.imageView   = m_grassTexView;
-        grassInfo.sampler     = m_grassTexSampler;
+        grassInfo.imageView   = m_grassTex.view;
+        grassInfo.sampler     = m_grassTex.sampler;
 
-        VkWriteDescriptorSet writes[3]{};
+        VkDescriptorImageInfo terrainInfo{};
+        terrainInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        terrainInfo.imageView   = m_terrainTex.view;
+        terrainInfo.sampler     = m_terrainTex.sampler;
+
+        VkWriteDescriptorSet writes[4]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet          = m_descriptorSets[i];
         writes[0].dstBinding      = 0;
@@ -1827,7 +2466,14 @@ void VulkanContext::createDescriptorSets() {
         writes[2].descriptorCount = 1;
         writes[2].pImageInfo      = &grassInfo;
 
-        vkUpdateDescriptorSets(m_device, 3, writes, 0, nullptr);
+        writes[3].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[3].dstSet          = m_descriptorSets[i];
+        writes[3].dstBinding      = 3;
+        writes[3].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[3].descriptorCount = 1;
+        writes[3].pImageInfo      = &terrainInfo;
+
+        vkUpdateDescriptorSets(m_device, 4, writes, 0, nullptr);
     }
 }
 
