@@ -899,6 +899,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `chunk.frag`와 `ChunkVertex` 주석은 terrain 전용이 아니라 material texture-array layer 의미로 정리했다. shadow object pass는 position만 읽으므로 변경하지 않았다.
 - 유저 스크린샷 검증 결과: 나무/울타리/작업대의 wood grain, 바위/돌담의 stone layer가 정상적으로 보이고, 지형·grass·shadow·UI·AA 경로는 유지되는 것으로 확인했다.
 
+### Authored texture loading 토대 추가 (Task #4a)
+- `third_party/stb/stb_image.h`를 추가해 PNG/JPG 등 이미지 파일을 RGBA8 픽셀로 읽을 수 있게 했다. 새 런타임 DLL이나 패키지 매니저 의존성 없이 단일 헤더만 저장소에 포함한다.
+- `CMakeLists.txt`에 `assets` post-build copy를 추가했다. 빌드 후 실행 파일 옆에 `assets/textures` 경로가 생기며, 이후 실제 텍스처 이미지를 넣어도 실행 기준 상대 경로가 유지된다.
+- `createTextureFromFile(path, withSampler)`를 추가해 파일 로드 결과를 기존 `TextureResource`/`createTexture(...)` 업로드 경로로 연결했다. Vulkan image/view/sampler 수명 모델은 기존과 동일하다.
+- `createGrassTexture()`는 `assets/textures/grass.png`가 있으면 파일 텍스처를 먼저 사용하고, 없으면 기존 절차 grass alpha texture를 그대로 생성한다. 따라서 이번 단계만으로 화면 변화는 없어야 한다.
+- 유저 빌드 검증 결과: `out/build/x64-Debug/assets` 폴더가 생성되어 asset copy 토대가 정상 동작하는 것을 확인했다. 실제 texture map 선정과 material-lite 상수, mipmap/sampler 정책은 후속 작업으로 남긴다.
+
 ---
 
 ## 게임 설계 메모

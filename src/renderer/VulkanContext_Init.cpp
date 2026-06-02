@@ -8,15 +8,20 @@
 #include "AreaTex.h"
 #include "SearchTex.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include <stdexcept>
 #include <iostream>
 #include <set>
 #include <algorithm>
+#include <cstdint>
 #include <fstream>
 #include <cstring>
 #include <chrono>
 #include <cmath>
 #include <string>
+#include <vector>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -27,6 +32,40 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 #endif
+
+namespace {
+struct LoadedImageRGBA8 {
+    int width = 0;
+    int height = 0;
+    std::vector<uint8_t> pixels;
+};
+
+LoadedImageRGBA8 loadImageRGBA8(const std::string& path) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* data = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+    if (!data || width <= 0 || height <= 0) {
+        const char* reason = stbi_failure_reason();
+        std::string message = "Failed to load texture image: " + path;
+        if (reason) {
+            message += " (";
+            message += reason;
+            message += ")";
+        }
+        if (data) stbi_image_free(data);
+        throw std::runtime_error(message);
+    }
+
+    const size_t size = (size_t)width * (size_t)height * 4;
+    LoadedImageRGBA8 image;
+    image.width = width;
+    image.height = height;
+    image.pixels.assign(data, data + size);
+    stbi_image_free(data);
+    return image;
+}
+}
 
 // ============================================================
 //  Instance
@@ -857,6 +896,12 @@ void VulkanContext::createObjectMeshes() {
 //  Procedural grass alpha texture
 // ============================================================
 void VulkanContext::createGrassTexture() {
+    const std::string authoredGrassPath = "assets/textures/grass.png";
+    if (std::ifstream(authoredGrassPath, std::ios::binary).good()) {
+        m_grassTex = createTextureFromFile(authoredGrassPath, /*withSampler=*/true);
+        return;
+    }
+
     // A small grass-tuft mask: curved tapering blades drawn into alpha, with a
     // base-dark / tip-light green. Kept isolated so a file-loaded image (stb_image) can
     // replace just this pixel fill later — pipeline/descriptor/mesh stay identical.
@@ -923,6 +968,13 @@ void VulkanContext::createGrassTexture() {
     // pipeline samples this with its own LINEAR/CLAMP sampler (withSampler=true).
     const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
     m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), imgSize, /*withSampler=*/true);
+}
+
+TextureResource VulkanContext::createTextureFromFile(const std::string& path, bool withSampler) {
+    LoadedImageRGBA8 image = loadImageRGBA8(path);
+    const VkDeviceSize imgSize = (VkDeviceSize)image.width * (VkDeviceSize)image.height * 4;
+    return createTexture((uint32_t)image.width, (uint32_t)image.height,
+        VK_FORMAT_R8G8B8A8_UNORM, image.pixels.data(), imgSize, withSampler);
 }
 
 TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
