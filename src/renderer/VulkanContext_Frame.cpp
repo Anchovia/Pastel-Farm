@@ -344,6 +344,53 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     writeDevTimestamp(cmd, 2);
 #endif
 
+    PostPushConstants postPc{};
+    postPc.params = glm::vec4(
+        1.0f / (float)m_swapchainExtent.width,
+        1.0f / (float)m_swapchainExtent.height,
+        (float)m_aaModeHud,
+        0.0f
+    );
+
+    if (m_aaModeHud == 2) {
+        VkClearValue clear{};
+        clear.color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+
+        auto recordSmaaPass = [&](VkFramebuffer framebuffer,
+                                  VkPipeline pipeline,
+                                  VkPipelineLayout layout,
+                                  VkDescriptorSet descriptorSet)
+        {
+            VkRenderPassBeginInfo rp{};
+            rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            rp.renderPass      = m_smaaRenderPass;
+            rp.framebuffer     = framebuffer;
+            rp.renderArea      = {{0, 0}, m_swapchainExtent};
+            rp.clearValueCount = 1;
+            rp.pClearValues    = &clear;
+            vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
+
+            VkViewport vp{ 0.0f, 0.0f, (float)m_swapchainExtent.width, (float)m_swapchainExtent.height, 0.0f, 1.0f };
+            VkRect2D sc{ {0, 0}, m_swapchainExtent };
+            vkCmdSetViewport(cmd, 0, 1, &vp);
+            vkCmdSetScissor(cmd, 0, 1, &sc);
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                layout, 0, 1, &descriptorSet, 0, nullptr);
+            vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT,
+                0, sizeof(PostPushConstants), &postPc);
+            vkCmdDraw(cmd, 3, 1, 0, 0);
+
+            vkCmdEndRenderPass(cmd);
+        };
+
+        recordSmaaPass(m_smaaEdgeFramebuffers[m_currentFrame],
+            m_smaaEdgePipeline, m_smaaEdgePipelineLayout, m_smaaEdgeDescriptorSets[m_currentFrame]);
+        recordSmaaPass(m_smaaBlendFramebuffers[m_currentFrame],
+            m_smaaBlendPipeline, m_smaaBlendPipelineLayout, m_smaaBlendDescriptorSets[m_currentFrame]);
+    }
+
     // Post-process pass — sample offscreen scene, output to swapchain
     {
         VkRenderPassBeginInfo postRp{};
@@ -359,17 +406,19 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdSetViewport(cmd, 0, 1, &pvp);
         vkCmdSetScissor(cmd, 0, 1, &psc);
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_postPipeline);
+        VkPipeline postPipeline = m_postPipeline;
+        VkPipelineLayout postLayout = m_postPipelineLayout;
+        VkDescriptorSet postDescriptorSet = m_postDescriptorSets[m_currentFrame];
+        if (m_aaModeHud == 2) {
+            postPipeline = m_smaaNeighborhoodPipeline;
+            postLayout = m_smaaNeighborhoodPipelineLayout;
+            postDescriptorSet = m_smaaNeighborhoodDescriptorSets[m_currentFrame];
+        }
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-            m_postPipelineLayout, 0, 1, &m_postDescriptorSets[m_currentFrame], 0, nullptr);
-        PostPushConstants postPc{};
-        postPc.params = glm::vec4(
-            1.0f / (float)m_swapchainExtent.width,
-            1.0f / (float)m_swapchainExtent.height,
-            (float)m_aaModeHud,
-            0.0f
-        );
-        vkCmdPushConstants(cmd, m_postPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT,
+            postLayout, 0, 1, &postDescriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, postLayout, VK_SHADER_STAGE_FRAGMENT_BIT,
             0, sizeof(PostPushConstants), &postPc);
         vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
 

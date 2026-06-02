@@ -41,8 +41,8 @@
 | Mipmap generation | [`examples/texturemipmapgen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturemipmapgen) | alpha card, terrain texture, object texture의 원거리 shimmer를 줄이기 위한 품질 후보 |
 | Instancing | [`examples/instancing`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/instancing) | 현재 object/grass instancing과 직접 관련. `ObjectInstance` 확장, variant index, tint, wind phase를 넣을 때 비교 |
 | Indirect draw | [`examples/indirectdraw`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/indirectdraw) | 식생/오브젝트 종류와 draw 수가 크게 늘어난 뒤 후보. 지금은 청크별 직접 draw가 단순하고 충분함 |
-| Alpha to coverage | [`examples/alphatocoverage`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/alphatocoverage) | grass alpha card 품질 개선 후보. SMAA/FXAA 이후에도 alpha edge가 거칠면 MSAA 정책과 함께 검토 |
-| Multisampling | [`examples/multisampling`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/multisampling) | AA 품질 옵션 확장 시 참고. FXAA는 post pass로 적용 완료. MSAA/alpha-to-coverage는 SMAA 이후에도 alpha edge 품질이 부족할 때 검토 |
+| Alpha to coverage | [`examples/alphatocoverage`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/alphatocoverage) | grass alpha card 품질 개선 후보. FXAA/SMAA 이후에도 alpha edge가 거칠면 MSAA 정책과 함께 검토 |
+| Multisampling | [`examples/multisampling`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/multisampling) | AA 품질 옵션 확장 시 참고. FXAA/SMAA는 post AA로 적용 완료. MSAA/alpha-to-coverage는 alpha edge 품질이 부족할 때 별도 검토 |
 | Shadow mapping | [`examples/shadowmapping`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmapping) | 이미 구현된 shadow pass의 bias/PCF/descriptor 비교용. 구조 전환 목적은 아님 |
 | Cascaded shadow mapping | [`examples/shadowmappingcascade`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmappingcascade) | 권장 사양/품질 옵션에서 원거리 그림자 품질이 문제가 될 때 후보. 지금은 단일 shadow map 유지 |
 | Offscreen rendering | [`examples/offscreen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/offscreen) | 현재 post pass와 같은 계열. 추가 후처리, 미니맵, 반사 같은 기능 전 참고 |
@@ -112,26 +112,28 @@ SaschaWillems의 debug utils/pipeline statistics 계열은 DevUI와 궁합이 �
 
 ## 다음 구현 순서 메모
 
-FXAA 실제 적용은 완료됐다. 현재 상태:
+FXAA와 SMAA 1x 1차 적용은 완료됐다. 현재 상태:
 
 1. Settings의 `AA OFF / FXAA / SMAA` 중 `FXAA`는 실제 post AA 경로에 연결됐다.
 2. `AA OFF`는 기존 post grading만 수행한다.
-3. `AA SMAA`는 아직 실제 SMAA가 아니며 현재 FXAA fallback으로 동작한다.
+3. `AA SMAA`는 Iryoku SMAA 구조를 참고한 1x 3-pass 경로로 연결됐다.
 4. 자체 게임 UI는 post AA 이후 스왑체인에 직접 그려 픽셀 폰트 깨짐을 피한다.
 
-다음 렌더링 구현은 **SMAA 실제 적용**부터 시작한다. 이유:
+SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한 AA 샘플은 MSAA/alpha-to-coverage 계열이다. 정식 SMAA는 Iryoku SMAA의 `AreaTex/SearchTex` LUT와 `edge detection → blend weight → neighborhood blending` 구조를 기준으로 삼는다.
 
-1. FXAA는 빠르고 구조 변경이 작지만, 픽셀 아트/얇은 alpha edge에서 한계가 있다.
-2. Settings에는 이미 `SMAA` 선택지가 있어 실제 품질 옵션만 연결하면 된다.
-3. SMAA 구현 방식을 정하면 이후 texture mapping, material-lite, grass 품질 튜닝의 비교 기준이 안정된다.
+현재 SMAA 1차는 High preset 계열 값(`threshold=0.10`, `search=16`, corner rounding 25)에 가깝지만, diagonal detection/reprojection/T2x/S2x는 아직 제외했다. 체감이 부족하면 다음을 별도 작업으로 본다.
+
+1. diagonal detection 포팅
+2. Ultra 계열 threshold/search 튜닝
+3. T2x/S2x 또는 MSAA/alpha-to-coverage 연계
 
 권장 순서:
 
-1. SMAA 적용
-2. TextureResource helper
-3. terrain/object texture mapping
-4. material-lite
-5. high-quality grass(wind/LOD/variant)
+1. TextureResource helper
+2. terrain/object texture mapping
+3. material-lite
+4. high-quality grass(wind/LOD/variant)
+5. SMAA diagonal/T2x/S2x 또는 MSAA/alpha-to-coverage 품질 확장
 
 PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
 

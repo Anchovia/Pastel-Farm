@@ -839,6 +839,15 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `createPipeline(PipelineConfig)`에 render pass override를 추가해 기본은 `m_renderPass`, UI만 `m_postRenderPass`를 사용하도록 최소 확장. ImGui DevUI와 자체 UI 모두 AA/color grading 영향 밖에서 선명하게 유지한다.
 - 유저 빌드 검증 결과: `AA OFF`는 미적용, `AA FXAA`는 적용, `AA SMAA`는 현재 FXAA와 동일하게 보임. UI 깨짐 수정도 정상 확인.
 
+### SMAA 1x 1차 후처리 패스 적용
+- `AA SMAA`가 더 이상 FXAA fallback이 아니라 `smaa_edge -> smaa_blend -> smaa_neighborhood` 3-pass 후처리 경로를 사용한다.
+- Iryoku SMAA 공식 LUT인 `AreaTex/SearchTex`와 `SMAA.hlsl` reference를 `third_party/smaa`에 포함했다. 라이선스 고지는 해당 파일의 MIT header를 유지한다.
+- `smaa_edge.frag`는 luma edge detection, `smaa_blend.frag`는 horizontal/vertical search와 blend weight 계산, `smaa_neighborhood.frag`는 scene color와 blend texture를 이용한 neighborhood blending 및 기존 color grade를 담당한다.
+- `VulkanContext`에는 SMAA intermediate render pass, edge/blend framebuffer, descriptor set, pipeline, LUT texture upload path가 추가됐다. `CMakeLists.txt`에는 새 SMAA shader compile/copy 단계가 추가됐다.
+- 현재 품질은 High preset 계열 값(`threshold=0.10`, `search=16`, corner rounding 25)에 가깝지만, diagonal detection/reprojection/T2x/S2x는 제외한 1x 최소형이다.
+- 유저 빌드 검증 결과: `AA SMAA`가 실제 SMAA 경로에 들어갔고 FXAA fallback과 달라졌다. 다만 1x 최소형이고 대각선 검출이 빠져 있어 체감은 아직 크지 않다.
+- 추후 AA 품질을 더 올릴 때는 SMAA diagonal detection, Ultra 계열 튜닝, T2x/S2x, MSAA/alpha-to-coverage 중 어느 축을 먼저 가져갈지 별도 작업으로 결정한다.
+
 ---
 
 ## 게임 설계 메모
@@ -868,8 +877,8 @@ World
 
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
-- 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass, post 이후 UI overlay를 분리해 그린다.
-- 다음 비주얼 개선은 SMAA 실제 적용, texture mapping/material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다.
+- 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass(FXAA/SMAA 1x), post 이후 UI overlay를 분리해 그린다.
+- 다음 비주얼 개선은 TextureResource helper, terrain/object texture mapping, material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다. 필요하면 SMAA diagonal/T2x/S2x 튜닝은 별도 품질 작업으로 분리한다.
 
 ---
 

@@ -106,7 +106,7 @@ Explore → Gather → Farm/Build → Progress → Unlock → Return to world
 **레퍼런스: 스타일라이즈드 로우폴리 "디오라마" 룩 (예: 덕코프류) — 단, 그래픽만 참고하고 게임 시스템(전투 등)은 차용하지 않는다.**
 - 핵심은 **art-directed lighting + 분위기 + 구도 + 세밀한 시각 레이어**다. 로우폴리는 저품질 제약이 아니라 스타일 선택이다.
 - 추구: warm/cool 분리 조명, 따뜻한 톤, 읽히는 실루엣, 고품질 식생, 텍스처 기반 지면 디테일, 부드러운 후처리(과한 bloom·sharpen 회피), composition.
-- **현 엔진은 이미 토대를 갖춤**(top/side vertex color + AO + shadow/PCF + day-night + fog + post-grading[exposure/contrast/saturation/split-tone/vignette] + FXAA). 자체 게임 UI는 후처리 이후에 그려 픽셀 폰트 선명도를 유지한다. 남은 격차는 **품질 패스와 에셋/텍스처 레이어**다. height fog, SMAA, 텍스처 매핑, material-lite, 고품질 grass, wind, shadow 품질 옵션을 성능 예산 안에서 적극 도입한다. (기술 단계는 `ARCHITECTURE.md` 비주얼 로드맵)
+- **현 엔진은 이미 토대를 갖춤**(top/side vertex color + AO + shadow/PCF + day-night + fog + post-grading[exposure/contrast/saturation/split-tone/vignette] + FXAA + SMAA 1x). 자체 게임 UI는 후처리 이후에 그려 픽셀 폰트 선명도를 유지한다. 남은 격차는 **품질 패스와 에셋/텍스처 레이어**다. height fog, 텍스처 매핑, material-lite, 고품질 grass, wind, shadow 품질 옵션, SMAA diagonal/T2x/S2x 같은 고급 AA 품질 옵션을 성능 예산 안에서 단계적으로 도입한다. (기술 단계는 `ARCHITECTURE.md` 비주얼 로드맵)
 - 지형이 내부적으로 voxel/grid 기반이어도 최종 화면은 grid를 과시하지 않는다. 농사/건축의 규칙성은 유지하되, 자연 환경은 dressing layer로 경계를 흐린다.
 - 풀/식생은 Pastel Farm의 grid감을 줄이는 핵심 투자처다. 얇은 삼각형 몇 개를 세운 기하 풀은 멀리서 바늘처럼 보이기 쉬우므로 최종 방향이 아니다. 현재 alpha card 기반 clump와 density field 1차는 들어갔고, ground dressing 1차는 placement layer 검증과 placeholder 축소까지 완료했다. 다음 목표는 색/텍스처/card variation, 낮은 대비의 ground texture/detail, 약한 wind sway로 참고 이미지에 가까운 자연스러운 풀밭을 만드는 것.
 - 전투 중심 연출(hit feedback, attack anticipation 등)은 **차용 안 함** — 코지 농사/라이프심엔 환경 연출(grass sway·leaf drift·발걸음/상호작용 피드백·ambient wildlife)만 가져온다.

@@ -52,7 +52,7 @@ add_executable(engine
     src/world/TerrainGen.cpp
  "src/game/Camera.h" "src/platform/InputManager.h" "src/platform/InputManager.cpp")
 
-target_include_directories(engine PRIVATE src ${Vulkan_INCLUDE_DIRS})
+target_include_directories(engine PRIVATE src third_party/smaa ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(engine PRIVATE Vulkan::Vulkan glfw glm::glm)
 target_compile_definitions(engine PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
@@ -101,6 +101,9 @@ set(SHADERS
     ${SHADER_SRC_DIR}/shadow_player.vert
     ${SHADER_SRC_DIR}/post.vert
     ${SHADER_SRC_DIR}/post.frag
+    ${SHADER_SRC_DIR}/smaa_edge.frag
+    ${SHADER_SRC_DIR}/smaa_blend.frag
+    ${SHADER_SRC_DIR}/smaa_neighborhood.frag
 )
 
 set(SPIRV_OUTPUTS)
@@ -137,4 +140,7 @@ add_custom_command(TARGET engine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/shadow_player.vert.spv ${SHADER_OUT_DIR}/shadow_player.vert.spv
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/post.vert.spv ${SHADER_OUT_DIR}/post.vert.spv
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/post.frag.spv ${SHADER_OUT_DIR}/post.frag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/smaa_edge.frag.spv ${SHADER_OUT_DIR}/smaa_edge.frag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/smaa_blend.frag.spv ${SHADER_OUT_DIR}/smaa_blend.frag.spv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/smaa_neighborhood.frag.spv ${SHADER_OUT_DIR}/smaa_neighborhood.frag.spv
 )

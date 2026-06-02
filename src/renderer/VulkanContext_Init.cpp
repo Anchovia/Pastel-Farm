@@ -5,6 +5,9 @@
 #include "world/World.h"
 #include "game/Camera.h"
 
+#include "AreaTex.h"
+#include "SearchTex.h"
+
 #include <stdexcept>
 #include <iostream>
 #include <set>
@@ -13,6 +16,7 @@
 #include <cstring>
 #include <chrono>
 #include <cmath>
+#include <string>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -981,6 +985,28 @@ void VulkanContext::createFramebuffers() {
         if (vkCreateFramebuffer(m_device, &info, nullptr, &m_postFramebuffers[i]) != VK_SUCCESS)
             throw std::runtime_error("Failed to create post framebuffer");
     }
+
+    m_smaaEdgeFramebuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    m_smaaBlendFramebuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkFramebufferCreateInfo info{};
+        info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        info.renderPass      = m_smaaRenderPass;
+        info.attachmentCount = 1;
+        info.width           = m_swapchainExtent.width;
+        info.height          = m_swapchainExtent.height;
+        info.layers          = 1;
+
+        VkImageView edgeAttachment[] = { m_smaaEdgeView[i] };
+        info.pAttachments = edgeAttachment;
+        if (vkCreateFramebuffer(m_device, &info, nullptr, &m_smaaEdgeFramebuffers[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create SMAA edge framebuffer");
+
+        VkImageView blendAttachment[] = { m_smaaBlendView[i] };
+        info.pAttachments = blendAttachment;
+        if (vkCreateFramebuffer(m_device, &info, nullptr, &m_smaaBlendFramebuffers[i]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create SMAA blend framebuffer");
+    }
 }
 
 // ============================================================
@@ -1026,6 +1052,53 @@ void VulkanContext::createPostRenderPass() {
         throw std::runtime_error("Failed to create post render pass");
 }
 
+void VulkanContext::createSmaaRenderPass() {
+    VkAttachmentDescription color{};
+    color.format         = VK_FORMAT_R8G8B8A8_UNORM;
+    color.samples        = VK_SAMPLE_COUNT_1_BIT;
+    color.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    color.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    color.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference colorRef{};
+    colorRef.attachment = 0;
+    colorRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments    = &colorRef;
+
+    VkSubpassDependency deps[2]{};
+    deps[0].srcSubpass    = VK_SUBPASS_EXTERNAL;
+    deps[0].dstSubpass    = 0;
+    deps[0].srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    deps[0].dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    deps[1].srcSubpass    = 0;
+    deps[1].dstSubpass    = VK_SUBPASS_EXTERNAL;
+    deps[1].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    deps[1].dstStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    VkRenderPassCreateInfo info{};
+    info.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    info.attachmentCount = 1;
+    info.pAttachments    = &color;
+    info.subpassCount    = 1;
+    info.pSubpasses      = &subpass;
+    info.dependencyCount = 2;
+    info.pDependencies   = deps;
+    if (vkCreateRenderPass(m_device, &info, nullptr, &m_smaaRenderPass) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create SMAA render pass");
+}
+
 void VulkanContext::createOffscreenResources() {
     m_offscreenImage.resize(MAX_FRAMES_IN_FLIGHT);
     m_offscreenMemory.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1048,6 +1121,77 @@ void VulkanContext::createOffscreenResources() {
         if (vkCreateImageView(m_device, &v, nullptr, &m_offscreenView[i]) != VK_SUCCESS)
             throw std::runtime_error("Failed to create offscreen image view");
     }
+}
+
+void VulkanContext::createSmaaResources() {
+    auto createTarget = [&](std::vector<VkImage>& images,
+                            std::vector<VkDeviceMemory>& memories,
+                            std::vector<VkImageView>& views,
+                            const char* label)
+    {
+        images.resize(MAX_FRAMES_IN_FLIGHT);
+        memories.resize(MAX_FRAMES_IN_FLIGHT);
+        views.resize(MAX_FRAMES_IN_FLIGHT);
+        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            createImage(m_swapchainExtent.width, m_swapchainExtent.height, VK_FORMAT_R8G8B8A8_UNORM,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                images[i], memories[i]);
+
+            VkImageViewCreateInfo v{};
+            v.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            v.image                           = images[i];
+            v.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+            v.format                          = VK_FORMAT_R8G8B8A8_UNORM;
+            v.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+            v.subresourceRange.levelCount     = 1;
+            v.subresourceRange.layerCount     = 1;
+            if (vkCreateImageView(m_device, &v, nullptr, &views[i]) != VK_SUCCESS)
+                throw std::runtime_error(std::string("Failed to create ") + label + " image view");
+        }
+    };
+
+    createTarget(m_smaaEdgeImage, m_smaaEdgeMemory, m_smaaEdgeView, "SMAA edge");
+    createTarget(m_smaaBlendImage, m_smaaBlendMemory, m_smaaBlendView, "SMAA blend");
+}
+
+void VulkanContext::createSmaaLookupTexture(uint32_t width, uint32_t height, VkFormat format,
+    const unsigned char* bytes, VkDeviceSize size,
+    VkImage& image, VkDeviceMemory& memory, VkImageView& view)
+{
+    GpuBuffer staging = createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    void* mapped;
+    vkMapMemory(m_device, staging.memory, 0, size, 0, &mapped);
+    memcpy(mapped, bytes, (size_t)size);
+    vkUnmapMemory(m_device, staging.memory);
+
+    createImage(width, height, format, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
+
+    transitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(staging.buffer, image, width, height);
+    transitionImageLayout(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    VkImageViewCreateInfo vi{};
+    vi.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vi.image                       = image;
+    vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
+    vi.format                      = format;
+    vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vi.subresourceRange.levelCount = 1;
+    vi.subresourceRange.layerCount = 1;
+    if (vkCreateImageView(m_device, &vi, nullptr, &view) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create SMAA lookup texture view");
+}
+
+void VulkanContext::createSmaaLookupTextures() {
+    createSmaaLookupTexture(AREATEX_WIDTH, AREATEX_HEIGHT, VK_FORMAT_R8G8_UNORM,
+        areaTexBytes, AREATEX_SIZE, m_smaaAreaImage, m_smaaAreaMemory, m_smaaAreaView);
+    createSmaaLookupTexture(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, VK_FORMAT_R8_UNORM,
+        searchTexBytes, SEARCHTEX_SIZE, m_smaaSearchImage, m_smaaSearchMemory, m_smaaSearchView);
 }
 
 void VulkanContext::createPostPipeline() {
@@ -1161,6 +1305,166 @@ void VulkanContext::createPostPipeline() {
     vkDestroyShaderModule(m_device, fragMod, nullptr);
 }
 
+void VulkanContext::createSmaaPipelines() {
+    auto createSetLayout = [&](std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
+                               VkDescriptorSetLayout& outLayout,
+                               const char* label)
+    {
+        std::vector<VkDescriptorSetLayoutBinding> bindingVec(bindings);
+        VkDescriptorSetLayoutCreateInfo info{};
+        info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        info.bindingCount = (uint32_t)bindingVec.size();
+        info.pBindings    = bindingVec.data();
+        if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &outLayout) != VK_SUCCESS)
+            throw std::runtime_error(std::string("Failed to create ") + label + " descriptor set layout");
+    };
+
+    VkDescriptorSetLayoutBinding sampled{};
+    sampled.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    sampled.descriptorCount = 1;
+    sampled.stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding edgeScene = sampled;
+    edgeScene.binding = 0;
+    createSetLayout({ edgeScene }, m_smaaEdgeDescriptorSetLayout, "SMAA edge");
+
+    VkDescriptorSetLayoutBinding blendEdges = sampled;
+    blendEdges.binding = 0;
+    VkDescriptorSetLayoutBinding blendArea = sampled;
+    blendArea.binding = 1;
+    VkDescriptorSetLayoutBinding blendSearch = sampled;
+    blendSearch.binding = 2;
+    createSetLayout({ blendEdges, blendArea, blendSearch }, m_smaaBlendDescriptorSetLayout, "SMAA blend");
+
+    VkDescriptorSetLayoutBinding neighborhoodScene = sampled;
+    neighborhoodScene.binding = 0;
+    VkDescriptorSetLayoutBinding neighborhoodBlend = sampled;
+    neighborhoodBlend.binding = 1;
+    createSetLayout({ neighborhoodScene, neighborhoodBlend },
+        m_smaaNeighborhoodDescriptorSetLayout, "SMAA neighborhood");
+
+    auto createLayout = [&](VkDescriptorSetLayout setLayout,
+                            VkPipelineLayout& outLayout,
+                            const char* label)
+    {
+        VkPushConstantRange push{};
+        push.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        push.offset     = 0;
+        push.size       = sizeof(PostPushConstants);
+
+        VkPipelineLayoutCreateInfo info{};
+        info.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        info.setLayoutCount         = 1;
+        info.pSetLayouts            = &setLayout;
+        info.pushConstantRangeCount = 1;
+        info.pPushConstantRanges    = &push;
+        if (vkCreatePipelineLayout(m_device, &info, nullptr, &outLayout) != VK_SUCCESS)
+            throw std::runtime_error(std::string("Failed to create ") + label + " pipeline layout");
+    };
+
+    createLayout(m_smaaEdgeDescriptorSetLayout, m_smaaEdgePipelineLayout, "SMAA edge");
+    createLayout(m_smaaBlendDescriptorSetLayout, m_smaaBlendPipelineLayout, "SMAA blend");
+    createLayout(m_smaaNeighborhoodDescriptorSetLayout, m_smaaNeighborhoodPipelineLayout, "SMAA neighborhood");
+
+    auto createFullscreenPipeline = [&](const char* fragPath,
+                                        VkPipelineLayout layout,
+                                        VkRenderPass renderPass,
+                                        VkPipeline& outPipeline,
+                                        const char* label)
+    {
+        auto vertCode = readFile("shaders/post.vert.spv");
+        auto fragCode = readFile(fragPath);
+        VkShaderModule vertMod = createShaderModule(vertCode);
+        VkShaderModule fragMod = createShaderModule(fragCode);
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = vertMod;
+        stages[0].pName  = "main";
+        stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = fragMod;
+        stages[1].pName  = "main";
+
+        VkPipelineVertexInputStateCreateInfo vertexInput{};
+        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+        VkViewport viewport{ 0, 0, (float)m_swapchainExtent.width, (float)m_swapchainExtent.height, 0.0f, 1.0f };
+        VkRect2D scissor{ {0, 0}, m_swapchainExtent };
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.pViewports    = &viewport;
+        viewportState.scissorCount  = 1;
+        viewportState.pScissors     = &scissor;
+
+        VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = 2;
+        dynamicState.pDynamicStates    = dynamicStates;
+
+        VkPipelineRasterizationStateCreateInfo raster{};
+        raster.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        raster.polygonMode = VK_POLYGON_MODE_FILL;
+        raster.cullMode    = VK_CULL_MODE_NONE;
+        raster.frontFace   = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        raster.lineWidth   = 1.0f;
+
+        VkPipelineMultisampleStateCreateInfo msaa{};
+        msaa.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        msaa.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineColorBlendAttachmentState blendAttach{};
+        blendAttach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                     VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo blend{};
+        blend.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        blend.attachmentCount = 1;
+        blend.pAttachments    = &blendAttach;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable  = VK_FALSE;
+        depthStencil.depthWriteEnable = VK_FALSE;
+        depthStencil.depthCompareOp   = VK_COMPARE_OP_ALWAYS;
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount          = 2;
+        pipelineInfo.pStages             = stages;
+        pipelineInfo.pVertexInputState   = &vertexInput;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState      = &viewportState;
+        pipelineInfo.pRasterizationState = &raster;
+        pipelineInfo.pMultisampleState   = &msaa;
+        pipelineInfo.pColorBlendState    = &blend;
+        pipelineInfo.pDepthStencilState  = &depthStencil;
+        pipelineInfo.pDynamicState       = &dynamicState;
+        pipelineInfo.layout              = layout;
+        pipelineInfo.renderPass          = renderPass;
+        pipelineInfo.subpass             = 0;
+
+        if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outPipeline) != VK_SUCCESS)
+            throw std::runtime_error(std::string("Failed to create ") + label + " pipeline");
+
+        vkDestroyShaderModule(m_device, vertMod, nullptr);
+        vkDestroyShaderModule(m_device, fragMod, nullptr);
+    };
+
+    createFullscreenPipeline("shaders/smaa_edge.frag.spv",
+        m_smaaEdgePipelineLayout, m_smaaRenderPass, m_smaaEdgePipeline, "SMAA edge");
+    createFullscreenPipeline("shaders/smaa_blend.frag.spv",
+        m_smaaBlendPipelineLayout, m_smaaRenderPass, m_smaaBlendPipeline, "SMAA blend");
+    createFullscreenPipeline("shaders/smaa_neighborhood.frag.spv",
+        m_smaaNeighborhoodPipelineLayout, m_postRenderPass, m_smaaNeighborhoodPipeline, "SMAA neighborhood");
+}
+
 void VulkanContext::createPostSampler() {
     VkSamplerCreateInfo info{};
     info.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -1214,6 +1518,101 @@ void VulkanContext::createPostDescriptors() {
         throw std::runtime_error("Failed to allocate post descriptor sets");
 
     updatePostDescriptors();
+}
+
+void VulkanContext::updateSmaaDescriptors() {
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorImageInfo edgeScene{};
+        edgeScene.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        edgeScene.imageView   = m_offscreenView[i];
+        edgeScene.sampler     = m_postSampler;
+
+        VkWriteDescriptorSet edgeWrite{};
+        edgeWrite.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        edgeWrite.dstSet          = m_smaaEdgeDescriptorSets[i];
+        edgeWrite.dstBinding      = 0;
+        edgeWrite.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        edgeWrite.descriptorCount = 1;
+        edgeWrite.pImageInfo      = &edgeScene;
+
+        VkDescriptorImageInfo blendImages[3]{};
+        blendImages[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        blendImages[0].imageView   = m_smaaEdgeView[i];
+        blendImages[0].sampler     = m_postSampler;
+        blendImages[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        blendImages[1].imageView   = m_smaaAreaView;
+        blendImages[1].sampler     = m_postSampler;
+        blendImages[2].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        blendImages[2].imageView   = m_smaaSearchView;
+        blendImages[2].sampler     = m_postSampler;
+
+        VkWriteDescriptorSet blendWrites[3]{};
+        for (uint32_t b = 0; b < 3; b++) {
+            blendWrites[b].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            blendWrites[b].dstSet          = m_smaaBlendDescriptorSets[i];
+            blendWrites[b].dstBinding      = b;
+            blendWrites[b].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            blendWrites[b].descriptorCount = 1;
+            blendWrites[b].pImageInfo      = &blendImages[b];
+        }
+
+        VkDescriptorImageInfo neighborhoodImages[2]{};
+        neighborhoodImages[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        neighborhoodImages[0].imageView   = m_offscreenView[i];
+        neighborhoodImages[0].sampler     = m_postSampler;
+        neighborhoodImages[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        neighborhoodImages[1].imageView   = m_smaaBlendView[i];
+        neighborhoodImages[1].sampler     = m_postSampler;
+
+        VkWriteDescriptorSet neighborhoodWrites[2]{};
+        for (uint32_t b = 0; b < 2; b++) {
+            neighborhoodWrites[b].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            neighborhoodWrites[b].dstSet          = m_smaaNeighborhoodDescriptorSets[i];
+            neighborhoodWrites[b].dstBinding      = b;
+            neighborhoodWrites[b].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            neighborhoodWrites[b].descriptorCount = 1;
+            neighborhoodWrites[b].pImageInfo      = &neighborhoodImages[b];
+        }
+
+        vkUpdateDescriptorSets(m_device, 1, &edgeWrite, 0, nullptr);
+        vkUpdateDescriptorSets(m_device, 3, blendWrites, 0, nullptr);
+        vkUpdateDescriptorSets(m_device, 2, neighborhoodWrites, 0, nullptr);
+    }
+}
+
+void VulkanContext::createSmaaDescriptors() {
+    VkDescriptorPoolSize ps{};
+    ps.type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    ps.descriptorCount = MAX_FRAMES_IN_FLIGHT * (1 + 3 + 2);
+
+    VkDescriptorPoolCreateInfo pi{};
+    pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pi.poolSizeCount = 1;
+    pi.pPoolSizes    = &ps;
+    pi.maxSets       = MAX_FRAMES_IN_FLIGHT * 3;
+    if (vkCreateDescriptorPool(m_device, &pi, nullptr, &m_smaaDescriptorPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create SMAA descriptor pool");
+
+    auto allocate = [&](VkDescriptorSetLayout layout,
+                        std::vector<VkDescriptorSet>& sets,
+                        const char* label)
+    {
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, layout);
+        VkDescriptorSetAllocateInfo ai{};
+        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        ai.descriptorPool     = m_smaaDescriptorPool;
+        ai.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
+        ai.pSetLayouts        = layouts.data();
+        sets.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(m_device, &ai, sets.data()) != VK_SUCCESS)
+            throw std::runtime_error(std::string("Failed to allocate ") + label + " descriptor sets");
+    };
+
+    allocate(m_smaaEdgeDescriptorSetLayout, m_smaaEdgeDescriptorSets, "SMAA edge");
+    allocate(m_smaaBlendDescriptorSetLayout, m_smaaBlendDescriptorSets, "SMAA blend");
+    allocate(m_smaaNeighborhoodDescriptorSetLayout, m_smaaNeighborhoodDescriptorSets, "SMAA neighborhood");
+
+    updateSmaaDescriptors();
 }
 
 // ============================================================

@@ -135,6 +135,15 @@ private:
     void createPostSampler();
     void createPostDescriptors();
     void updatePostDescriptors();
+    void createSmaaRenderPass();
+    void createSmaaResources();
+    void createSmaaPipelines();
+    void createSmaaLookupTextures();
+    void createSmaaDescriptors();
+    void updateSmaaDescriptors();
+    void createSmaaLookupTexture(uint32_t width, uint32_t height, VkFormat format,
+        const unsigned char* bytes, VkDeviceSize size,
+        VkImage& image, VkDeviceMemory& memory, VkImageView& view);
     void createObjectMeshes();
     void createGrassTexture();
     void createItemMesh();
@@ -228,6 +237,36 @@ private:
     std::vector<VkImage>        m_offscreenImage;   // per frame in flight
     std::vector<VkDeviceMemory> m_offscreenMemory;
     std::vector<VkImageView>    m_offscreenView;
+
+    // SMAA 1x: scene color -> edge weights -> blend weights -> swapchain
+    VkRenderPass             m_smaaRenderPass                 = VK_NULL_HANDLE;
+    VkPipeline               m_smaaEdgePipeline               = VK_NULL_HANDLE;
+    VkPipelineLayout         m_smaaEdgePipelineLayout         = VK_NULL_HANDLE;
+    VkPipeline               m_smaaBlendPipeline              = VK_NULL_HANDLE;
+    VkPipelineLayout         m_smaaBlendPipelineLayout        = VK_NULL_HANDLE;
+    VkPipeline               m_smaaNeighborhoodPipeline       = VK_NULL_HANDLE;
+    VkPipelineLayout         m_smaaNeighborhoodPipelineLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout    m_smaaEdgeDescriptorSetLayout    = VK_NULL_HANDLE;
+    VkDescriptorSetLayout    m_smaaBlendDescriptorSetLayout   = VK_NULL_HANDLE;
+    VkDescriptorSetLayout    m_smaaNeighborhoodDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool         m_smaaDescriptorPool             = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> m_smaaEdgeDescriptorSets;
+    std::vector<VkDescriptorSet> m_smaaBlendDescriptorSets;
+    std::vector<VkDescriptorSet> m_smaaNeighborhoodDescriptorSets;
+    std::vector<VkFramebuffer>   m_smaaEdgeFramebuffers;
+    std::vector<VkFramebuffer>   m_smaaBlendFramebuffers;
+    std::vector<VkImage>        m_smaaEdgeImage;
+    std::vector<VkDeviceMemory> m_smaaEdgeMemory;
+    std::vector<VkImageView>    m_smaaEdgeView;
+    std::vector<VkImage>        m_smaaBlendImage;
+    std::vector<VkDeviceMemory> m_smaaBlendMemory;
+    std::vector<VkImageView>    m_smaaBlendView;
+    VkImage        m_smaaAreaImage   = VK_NULL_HANDLE;
+    VkDeviceMemory m_smaaAreaMemory  = VK_NULL_HANDLE;
+    VkImageView    m_smaaAreaView    = VK_NULL_HANDLE;
+    VkImage        m_smaaSearchImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_smaaSearchMemory = VK_NULL_HANDLE;
+    VkImageView    m_smaaSearchView  = VK_NULL_HANDLE;
 
     GpuBuffer                m_vertexBuffer;
     GpuBuffer                m_indexBuffer;

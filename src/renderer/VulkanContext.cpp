@@ -32,6 +32,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createImageViews();
     createRenderPass();
     createPostRenderPass();
+    createSmaaRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
     createChunkPipeline();
@@ -39,14 +40,17 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createObjectPipeline();
     createGrassPipeline();
     createPostPipeline();
+    createSmaaPipelines();
     createDepthResources();
     createOffscreenResources();
+    createSmaaResources();
     createShadowResources();
     createShadowPipeline();
     createShadowObjectPipeline();
     createShadowPlayerPipeline();
     createFramebuffers();
     createCommandPool();
+    createSmaaLookupTextures();
 #ifdef PASTEL_DEV_BUILD
     createDevTools();
 #endif
@@ -66,6 +70,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createDescriptorPool();
     createDescriptorSets();
     createPostDescriptors();
+    createSmaaDescriptors();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -122,11 +127,28 @@ VulkanContext::~VulkanContext() {
     vkDestroyPipelineLayout     (m_device, m_postPipelineLayout,      nullptr);
     vkDestroyDescriptorPool     (m_device, m_postDescriptorPool,      nullptr);
     vkDestroyDescriptorSetLayout(m_device, m_postDescriptorSetLayout, nullptr);
+    vkDestroyPipeline           (m_device, m_smaaNeighborhoodPipeline,       nullptr);
+    vkDestroyPipelineLayout     (m_device, m_smaaNeighborhoodPipelineLayout, nullptr);
+    vkDestroyPipeline           (m_device, m_smaaBlendPipeline,              nullptr);
+    vkDestroyPipelineLayout     (m_device, m_smaaBlendPipelineLayout,        nullptr);
+    vkDestroyPipeline           (m_device, m_smaaEdgePipeline,               nullptr);
+    vkDestroyPipelineLayout     (m_device, m_smaaEdgePipelineLayout,         nullptr);
+    vkDestroyDescriptorPool     (m_device, m_smaaDescriptorPool,             nullptr);
+    vkDestroyDescriptorSetLayout(m_device, m_smaaNeighborhoodDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(m_device, m_smaaBlendDescriptorSetLayout,        nullptr);
+    vkDestroyDescriptorSetLayout(m_device, m_smaaEdgeDescriptorSetLayout,         nullptr);
+    vkDestroyImageView(m_device, m_smaaAreaView,    nullptr);
+    vkDestroyImage    (m_device, m_smaaAreaImage,   nullptr);
+    vkFreeMemory      (m_device, m_smaaAreaMemory,  nullptr);
+    vkDestroyImageView(m_device, m_smaaSearchView,   nullptr);
+    vkDestroyImage    (m_device, m_smaaSearchImage,  nullptr);
+    vkFreeMemory      (m_device, m_smaaSearchMemory, nullptr);
     vkDestroySampler            (m_device, m_postSampler,             nullptr);
     vkDestroySampler  (m_device, m_grassTexSampler, nullptr);
     vkDestroyImageView(m_device, m_grassTexView,    nullptr);
     vkDestroyImage    (m_device, m_grassTexImage,   nullptr);
     vkFreeMemory      (m_device, m_grassTexMemory,  nullptr);
+    vkDestroyRenderPass         (m_device, m_smaaRenderPass,          nullptr);
     vkDestroyRenderPass         (m_device, m_postRenderPass,          nullptr);
     vkDestroyRenderPass(m_device, m_renderPass, nullptr);
 
@@ -278,8 +300,20 @@ void VulkanContext::cleanupSwapchain() {
         vkDestroyImage    (m_device, m_offscreenImage[i],  nullptr);
         vkFreeMemory      (m_device, m_offscreenMemory[i], nullptr);
     }
+    for (size_t i = 0; i < m_smaaEdgeImage.size(); i++) {
+        vkDestroyImageView(m_device, m_smaaEdgeView[i],   nullptr);
+        vkDestroyImage    (m_device, m_smaaEdgeImage[i],  nullptr);
+        vkFreeMemory      (m_device, m_smaaEdgeMemory[i], nullptr);
+    }
+    for (size_t i = 0; i < m_smaaBlendImage.size(); i++) {
+        vkDestroyImageView(m_device, m_smaaBlendView[i],   nullptr);
+        vkDestroyImage    (m_device, m_smaaBlendImage[i],  nullptr);
+        vkFreeMemory      (m_device, m_smaaBlendMemory[i], nullptr);
+    }
     for (auto fb : m_sceneFramebuffers)    vkDestroyFramebuffer(m_device, fb, nullptr);
     for (auto fb : m_postFramebuffers)     vkDestroyFramebuffer(m_device, fb, nullptr);
+    for (auto fb : m_smaaEdgeFramebuffers) vkDestroyFramebuffer(m_device, fb, nullptr);
+    for (auto fb : m_smaaBlendFramebuffers) vkDestroyFramebuffer(m_device, fb, nullptr);
     for (auto iv : m_swapchainImageViews)  vkDestroyImageView  (m_device, iv, nullptr);
     vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
 }
@@ -297,8 +331,10 @@ void VulkanContext::recreateSwapchain() {
     createImageViews();
     createDepthResources();
     createOffscreenResources();
+    createSmaaResources();
     createFramebuffers();
     updatePostDescriptors();   // offscreen views were recreated
+    updateSmaaDescriptors();   // SMAA intermediate views were recreated
 
     // Swapchain image count may have changed — recreate per-image present semaphores
     for (auto sem : m_renderFinished)
