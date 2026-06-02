@@ -112,6 +112,11 @@ struct AppFlow {
             mode = AppMode::Gameplay;
     }
 
+    void returnToTitle() {
+        if (mode == AppMode::Paused)
+            mode = AppMode::MainMenu;
+    }
+
     void updateEscape(bool escPressed) {
         if (escPressed && !prevEsc) {
             if (mode == AppMode::Gameplay)
@@ -249,6 +254,15 @@ int main() {
             worldSessionStarted = true;
         };
 
+        // Tear down the active world session (quit to title). Drops all chunks so the
+        // renderer frees their buffers, and resets gameplay state for a fresh re-start.
+        auto endWorldSession = [&]() {
+            world.reset();
+            gameState = GameState{};
+            worldSessionStarted = false;
+            pendingWorldStart   = false;
+        };
+
         float  orbitAngle = 45.0f;
         double lastTime   = glfwGetTime();
 
@@ -290,8 +304,10 @@ int main() {
                 app.enterSettings();
                 settings.syncClickState(input);
             }
-            else if (pauseClickAction == 3)
-                window.close();
+            else if (pauseClickAction == 3) {
+                endWorldSession();
+                app.returnToTitle();
+            }
             if (wasSettings && settings.update(input, app.mode))
                 app.leaveSettings();
             if (menuClickAction == 1) {

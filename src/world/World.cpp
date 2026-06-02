@@ -71,6 +71,11 @@ void World::unloadChunksOutside(int cx, int cy, int radius) {
     }
 }
 
+void World::reset() {
+    m_chunks.clear();
+    m_modifiedUnloaded.clear();
+}
+
 Chunk& World::getOrCreateChunk(int cx, int cy) {
     return m_chunks[{cx, cy}];
 }

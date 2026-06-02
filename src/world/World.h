@@ -41,6 +41,9 @@ public:
 
     void loadChunksAround(int cx, int cy, int radius);
     void unloadChunksOutside(int cx, int cy, int radius);
+    // Drops all in-memory chunks (loaded + modified-unsaved). Used when ending a
+    // world session (e.g. quitting to title) so the next session starts from disk.
+    void reset();
 
     void save(const std::string& path, const glm::vec3& playerPos, float gameTime) const;
     bool load(const std::string& path, glm::vec3& outPlayerPos, float& outGameTime);

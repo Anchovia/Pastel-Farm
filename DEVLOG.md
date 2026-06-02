@@ -732,6 +732,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `InputManager`에 `ctrlHeld` 지역값을 두어 `moveBackward = S && !ctrlHeld`로 게이트하고, `saveKey = ctrlHeld && S`로 재사용. 이제 `S`는 후진/저장에만 쓰이고 둘은 Ctrl 유무로 명확히 분리.
 - 검증 결과: MainMenu에서 `Enter`/`S` 무반응·클릭만 동작, gameplay `S` 후진 정상, `Ctrl+S` 저장 시 후진 없음·저장 정상, Settings/Pause 흐름 불변 확인.
 
+### Pause QUIT을 앱 종료에서 타이틀 복귀로 변경
+- 기존 Pause `QUIT`은 `Window::close()`로 앱을 완전히 종료했으나, 타이틀(MainMenu)로 복귀하도록 변경.
+- `World::reset()` 추가 — `m_chunks`와 `m_modifiedUnloaded`를 모두 비움. `load()`가 맵을 비우지 않고 추가만 하므로, 이를 안 비우면 이전 세션의 미저장 편집이 다음 세션에 샐 수 있어 둘 다 clear.
+- `main.cpp`에 `endWorldSession` 람다 추가: `world.reset()` + `gameState = GameState{}`(인벤토리/드롭/시간 fresh) + 세션 플래그 false. 다음 프레임 `rebuildDirtyChunks`가 청크 GPU 버퍼를 해제해 타이틀 뒤 잔상 제거. `AppFlow::returnToTitle()`로 Paused→MainMenu 전이.
+- 재시작(START)은 깨끗해진 맵에 `startWorldSession`이 save를 다시 로드 → 첫 실행과 동일한 fresh 진입. 미저장 변경은 버려짐(의도). 인앱 완전 종료는 창 X 버튼만 남음(`Window::close()`는 호출처 없이 보존 — 추후 타이틀 EXIT/저장확인에 재사용 후보).
+- 검증 결과: Pause QUIT→타이틀 복귀(앱 유지), 청크/플레이어/드롭 잔상 없음, START 재시작 시 save 정상 로드·세션 잔여 없음, 클릭 한 번에 하나만 동작 확인.
+
 ### Grid 규칙 vs Organic 표현 방향 정리 (Tier 2 비주얼 원칙)
 - terrain breakup을 타일별 deterministic vertex color tint로 시도했으나, 잔디 타일마다 색이 바뀌어 grid가 더 강하게 드러나는 문제가 확인됨. 변경은 즉시 되돌림.
 - 결정: **게임 규칙은 grid, 시각 경험은 organic**. 농사, 오브젝트 설치/철거, 충돌, 저장 좌표는 grid 기반을 유지하되 자연 바닥과 숲/풀/흙 표현은 100% grid처럼 보이면 안 됨.
