@@ -123,7 +123,7 @@ FXAA와 SMAA 1x 1차 적용은 완료됐다. 현재 상태:
 
 SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한 AA 샘플은 MSAA/alpha-to-coverage 계열이다. 정식 SMAA는 Iryoku SMAA의 `AreaTex/SearchTex` LUT와 `edge detection → blend weight → neighborhood blending` 구조를 기준으로 삼는다.
 
-현재 SMAA 1차는 High preset 계열 값(`threshold=0.10`, `search=16`, corner rounding 25)에 가깝지만, diagonal detection/reprojection/T2x/S2x는 아직 제외했다. 체감이 부족하면 다음을 별도 작업으로 본다.
+현재 SMAA는 `threshold=0.05`, `search=32`, corner rounding 25 (Ultra 계열 threshold/search, 5a 튜닝)이며 diagonal detection/reprojection/T2x/S2x는 아직 제외했다. 5a로 체감은 살아났고, 대각선 품질을 더 올리려면 다음을 별도 작업으로 본다.
 
 1. diagonal detection 포팅
 2. Ultra 계열 threshold/search 튜닝

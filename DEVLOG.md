@@ -855,6 +855,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 동작 변경 없는 순수 리팩토링이며 생성 포맷·레이아웃 전환·디스크립터 바인딩·프레임 경로는 이전과 동일. 이후 terrain/object texture mapping에서 같은 헬퍼를 재사용하기 위한 토대.
 - 유저 빌드 검증 결과: 컴파일·실행 정상, grass·SMAA 모두 이전과 동일 동작, Vulkan validation 에러 없음.
 
+### SMAA edge threshold·search step Ultra 계열 튜닝 (Task #5a)
+- SMAA 1x 체감이 "OFF와 차이 거의 없음" 수준이라, AA 강화의 첫 단계로 edge/blend 셰이더 상수만 Ultra 계열로 올림. 셰이더 상수 2개만 변경하고 C++/디스크립터/파이프라인/LUT는 그대로 둠.
+- `smaa_edge.frag`의 `SMAA_THRESHOLD` 0.10 → 0.05 (더 약한 대비의 edge까지 검출).
+- `smaa_blend.frag`의 `SMAA_MAX_SEARCH_STEPS` 16 → 32 (더 긴 edge를 추적).
+- 유저 빌드 검증 결과: SMAA가 OFF 대비 edge 완화가 눈에 띄게 강해졌고 실제 적용이 체감됨.
+- 대각선 계단은 1x + diagonal detection 부재 때문에 남아 있어, 다음 작업(5b)에서 `smaa_blend.frag`에 diagonal detection(`SMAACalculateDiagWeights` 계열)을 포팅해 본질적으로 개선한다.
+
 ---
 
 ## 게임 설계 메모

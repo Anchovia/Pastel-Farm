@@ -98,7 +98,7 @@ src/
 - ✅ color grading / tone mapping (post 1패스: exposure/contrast/saturation/split-tone/vignette)
 - ✅ 그림자 접지 튜닝 (피터패닝 — bias 축소 + cull 조정 완료)
 - ✅ FXAA 실제 적용: post pass에서 화면 edge를 완화. 자체 게임 UI는 FXAA 이후에 그려 픽셀 폰트 선명도 유지
-- ✅ SMAA 1x 1차 적용: `AreaTex/SearchTex` LUT 기반 `edge detection → blend weight → neighborhood blending` 3-pass. 현재 값은 High preset 계열(`threshold=0.10`, `search=16`, corner rounding 25)에 가깝지만 diagonal detection/reprojection/T2x/S2x는 아직 제외
+- ✅ SMAA 1x 적용 + Ultra 계열 튜닝(5a): `AreaTex/SearchTex` LUT 기반 `edge detection → blend weight → neighborhood blending` 3-pass. 현재 값은 `threshold=0.05`, `search=32`, corner rounding 25 (Ultra 계열 threshold/search)이며 diagonal detection/reprojection/T2x/S2x는 아직 제외. 다음(5b)은 diagonal detection 포팅
 - texture mapping: terrain atlas/object albedo texture 경로 추가. vertex color는 tint/스타일 보정으로 유지
 - material-lite: full PBR 전환 전, albedo + tint + roughness/specular 상수로 재질 차이를 표현
 - shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
