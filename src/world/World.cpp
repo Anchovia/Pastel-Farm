@@ -100,8 +100,9 @@ void World::setTile(int x, int y, int z, TileType t) {
     Chunk& chunk = getOrCreateChunk(cc.x, cc.y);
     auto lc = localCoord(x, y);
     chunk.tiles[z][lc.y][lc.x] = t;
-    chunk.dirty    = true;
-    chunk.modified = true;
+    chunk.dirty      = true;
+    chunk.grassDirty = true;
+    chunk.modified   = true;
 }
 
 TileState World::getTileState(int x, int y, int z) const {
@@ -302,6 +303,7 @@ World::HarvestResult World::tryHarvestObject(int x, int y, ItemType tool,
         chunk.objects.erase(chunk.objects.begin() + i);
         chunk.dirty        = true;
         chunk.objectsDirty = true;
+        chunk.grassDirty   = true;
         chunk.modified     = true; // keep the harvest across in-session unload/reload
         return HarvestResult::Harvested;
     }
@@ -360,6 +362,7 @@ bool World::placeObject(int x, int y, ObjectType type) {
     chunk.objects.push_back(o);
     chunk.dirty        = true;  // triggers buildChunkBuffer → rebuilds the object buffers
     chunk.objectsDirty = true;
+    chunk.grassDirty   = true;
     chunk.modified     = true;
     return true;
 }

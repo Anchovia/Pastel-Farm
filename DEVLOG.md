@@ -751,6 +751,41 @@ Vulkan 공부 겸 엔진 개발 기록.
 - GTX 1050 Ti 권장 목표라면 투자 가치가 있음. 조건은 shadow 제외, alpha test/clip 우선, 근거리 청크 중심, clump당 card 2장 정도, 거리/밀도 제한.
 - 새 텍스처와 alpha 파이프라인이 들어가므로 구현 전 설계안 필요. 텍스처 0개 원칙의 첫 예외가 될 수 있으나 vegetation은 ROI가 높은 예외로 판단.
 
+### 절차 grass alpha 텍스처 리소스 추가 (Vegetation alpha card Step 1)
+- alpha card 방식으로 전환하기 위한 첫 단계로, 런타임에서 작은 RGBA grass alpha 텍스처를 절차 생성하도록 추가.
+- `createGrassTexture()` 안에 픽셀 채움 로직을 격리해, 이후 이미지 파일 기반 텍스처로 교체하더라도 파이프라인·디스크립터·메시 경로는 그대로 유지할 수 있게 함.
+- staging buffer에서 device-local `VkImage`로 업로드하고, `UNDEFINED → TRANSFER_DST_OPTIMAL → SHADER_READ_ONLY_OPTIMAL` 레이아웃 전환 후 image view와 sampler를 생성.
+- 이미지 전송용 `transitionImageLayout` / `copyBufferToImage` 헬퍼를 추가. 기존 `copyBuffer`와 one-shot command buffer 보일러플레이트가 겹치지만, 이번 기능 커밋에서는 추출 리팩토링을 섞지 않음.
+- 아직 grass 렌더 경로와 셰이더에는 연결하지 않았으므로 시각 변화 없음이 정상. 유저 빌드 검증 결과: 컴파일·실행·종료 정상, Vulkan validation 에러 없음.
+
+### Grass alpha card 메시와 셰이더 준비 (Vegetation alpha card Step 2)
+- alpha card 렌더링을 위한 전용 `GrassCardVertex`(`pos`, `normal`, `uv`)를 추가. 기존 `ChunkVertex`에는 UV가 없으므로 지형/오브젝트 정점 포맷을 건드리지 않고 grass 전용 포맷으로 분리.
+- `m_grassCardMesh`에 X자로 교차한 quad 2장(총 4 triangles)을 생성. 기존 기하 grass clump 메시와 렌더 경로는 아직 유지해 시각 결과를 바꾸지 않음.
+- `grass.vert` / `grass.frag` 추가. 인스턴스 위치·스케일·회전을 적용하고, grass 텍스처 alpha를 기준으로 `discard`하는 alpha test 셰이더를 준비.
+- grass fragment shader는 기존 `chunk.frag`의 ambient·diffuse·shadow·fog 흐름을 최대한 맞춰 이후 렌더 경로 연결 시 조명 톤이 크게 튀지 않도록 함.
+- CMake 셰이더 컴파일/복사 목록에 grass 셰이더를 추가. 유저 빌드 검증 결과: 셰이더 컴파일·앱 실행 정상, 기존 grass clump 시각 유지.
+
+### Grass alpha card 파이프라인과 디스크립터 준비 (Vegetation alpha card Step 3)
+- grass 전용 `m_grassPipeline`을 추가. 정점 입력은 `GrassCardVertex + ObjectInstance`, 셰이더는 `grass.vert` / `grass.frag`, 양면 카드 렌더링을 위해 cull mode는 `NONE`으로 설정.
+- alpha는 블렌딩이 아니라 fragment shader의 alpha test(`discard`)로 처리하므로 `alphaBlend=false`, depth test/write는 기존 월드 오브젝트처럼 켜둠.
+- 기존 scene descriptor layout을 `UBO(binding 0) + shadow map(binding 1) + grass texture(binding 2)`로 확장. 기존 청크/오브젝트/플레이어 셰이더는 binding 2를 사용하지 않으므로 같은 descriptor set을 계속 공유.
+- descriptor pool과 descriptor set update에 grass texture sampler write를 추가. 텍스처는 프레임별로 변하지 않지만, 기존 프레임별 scene descriptor set 구조에 맞춰 각 set에 같은 grass texture를 기록.
+- 아직 렌더 경로는 기존 기하 grass clump를 유지하므로 시각 변화 없음이 정상. 유저 빌드 검증 결과: 컴파일·실행·종료 정상, 기존 grass clump 시각 유지, Vulkan validation 에러 없음.
+
+### Grass alpha card 렌더 경로 연결 (Vegetation alpha card Step 4)
+- 메인 scene pass에서 기존 기하 grass clump draw를 `m_grassCardMesh + m_grassPipeline` draw로 교체해 alpha card grass가 실제 화면에 나오도록 연결.
+- 기존 per-chunk grass instance buffer(`data.grassBuffer`, `grassCount`)는 그대로 재사용. 배치 좌표, 밀도, 스케일, 회전은 좌표 해시 기반 결정론을 유지.
+- grass draw를 object draw와 분리해 먼저 `m_grassPipeline`으로 카드 식생을 그리고, 이후 나무·돌·작업대·울타리는 기존 `m_objectPipeline`으로 계속 렌더링.
+- shadow pass에는 grass를 추가하지 않음. 식생은 시각 dressing layer로 유지하고, shadow caster는 기존 청크·오브젝트·플레이어 범위 그대로 둠.
+- 유저 빌드 검증 결과: 컴파일·실행 정상, 기존 바늘형 clump보다 개선된 alpha card grass 표시 확인. 레퍼런스 수준의 풍성한 잔디까지는 밀도·색·형태·배치 rule 튜닝이 남았으며 Step 5에서 다룸.
+
+### Grass dressing 재생성 게이트와 1차 튜닝 (Vegetation alpha card Step 5)
+- `Chunk::grassDirty` 플래그를 추가해 grass instance buffer 재생성을 terrain/open-sky/object 변화가 있을 때로 제한. `setTile`, 오브젝트 설치/수확은 grass 배치에 영향을 주므로 `grassDirty=true`로 표시.
+- `setTileState`, 작물 성장, 물주기처럼 grass 배치와 무관한 dirty 변경에서는 grass buffer를 재생성하지 않도록 분리. 작물/농지 visual 리빌드는 유지하되 식생 dressing 낭비를 줄임.
+- grass 밀도를 18% → 28%로 올리고, 위치 오프셋과 scale 범위를 약간 키워 듬성한 느낌을 완화.
+- alpha card mesh는 조금 더 낮고 넓게 조정하고, 절차 grass texture의 blade 수·폭·색을 늘려 기존보다 두꺼운 clump로 보이게 함.
+- 검증 결과: 기존보다 두꺼워지고 alpha card 적용은 안정적이나, 아직 레퍼런스처럼 바닥을 덮는 실제 잔디밭 느낌은 부족. 다음 개선은 단순 밀도 증가보다 density field, variant, ground dressing layer가 핵심.
+
 ---
 
 ## 게임 설계 메모

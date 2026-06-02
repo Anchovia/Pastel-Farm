@@ -87,6 +87,8 @@ public:
 
 private:
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+    void transitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
+    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
     void createInstance();
     void setupDebugMessenger();
     void createSurface();
@@ -124,6 +126,7 @@ private:
     void createUIBuffer();
     void updateHotbar();
     void createObjectPipeline();
+    void createGrassPipeline();
     void createPostRenderPass();
     void createOffscreenResources();
     void createPostPipeline();
@@ -131,6 +134,7 @@ private:
     void createPostDescriptors();
     void updatePostDescriptors();
     void createObjectMeshes();
+    void createGrassTexture();
     void createItemMesh();
     void createDropInstanceBuffer();
     void updateDropInstanceBuffer(const std::vector<DroppedItem>& drops);
@@ -209,6 +213,7 @@ private:
     VkPipeline               m_uiPipeline        = VK_NULL_HANDLE;  // 2D UI overlay
     VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
     VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props (trees)
+    VkPipeline               m_grassPipeline     = VK_NULL_HANDLE;  // Instanced alpha-card grass
 
     // Post-process: scene → offscreen color, then fullscreen pass → swapchain
     VkRenderPass             m_postRenderPass          = VK_NULL_HANDLE;
@@ -248,6 +253,14 @@ private:
     };
     std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
     ObjectMesh m_grassClumpMesh;
+    ObjectMesh m_grassCardMesh;
+
+    // Procedural grass alpha texture (sampled by the grass card pipeline). Creation is
+    // isolated in createGrassTexture so a file-loaded image can swap in later.
+    VkImage        m_grassTexImage   = VK_NULL_HANDLE;
+    VkDeviceMemory m_grassTexMemory  = VK_NULL_HANDLE;
+    VkImageView    m_grassTexView    = VK_NULL_HANDLE;
+    VkSampler      m_grassTexSampler = VK_NULL_HANDLE;
 
     // Dropped items — shared small cube mesh + per-frame instance buffer (reuses m_indexBuffer + m_pipeline)
     static constexpr uint32_t   MAX_DROPS = 256;
