@@ -29,6 +29,14 @@ float luminance(vec3 c) {
     return dot(c, vec3(0.299, 0.587, 0.114));
 }
 
+// FXAA edge/direction decisions use perceptual (gamma) luma: the sRGB offscreen is
+// decoded to linear by the sampler, so re-encode before computing luma. Without this,
+// dark night scenes lose luma contrast and FXAA stops smoothing edges. The blended
+// output color stays linear so the later grade + sRGB swapchain write stay correct.
+float lumaPerceptual(vec3 linearC) {
+    return luminance(pow(linearC, vec3(1.0 / 2.2)));
+}
+
 vec3 sampleScene(vec2 p) {
     return texture(sceneColor, clamp(p, vec2(0.0), vec2(1.0))).rgb;
 }
@@ -42,11 +50,11 @@ vec3 applyFxaa(vec2 p) {
     vec3 rgbSW = sampleScene(p + rcpFrame * vec2(-1.0,  1.0));
     vec3 rgbSE = sampleScene(p + rcpFrame * vec2( 1.0,  1.0));
 
-    float lumaM  = luminance(rgbM);
-    float lumaNW = luminance(rgbNW);
-    float lumaNE = luminance(rgbNE);
-    float lumaSW = luminance(rgbSW);
-    float lumaSE = luminance(rgbSE);
+    float lumaM  = lumaPerceptual(rgbM);
+    float lumaNW = lumaPerceptual(rgbNW);
+    float lumaNE = lumaPerceptual(rgbNE);
+    float lumaSW = lumaPerceptual(rgbSW);
+    float lumaSE = lumaPerceptual(rgbSE);
 
     float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
     float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
@@ -72,7 +80,7 @@ vec3 applyFxaa(vec2 p) {
         sampleScene(p + dir *  0.5)
     );
 
-    float lumaB = luminance(rgbB);
+    float lumaB = lumaPerceptual(rgbB);
     if (lumaB < lumaMin || lumaB > lumaMax) {
         return rgbA;
     }

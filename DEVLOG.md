@@ -872,7 +872,7 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 증상: 밤(어두운 장면)이 되면 SMAA가 사실상 적용되지 않음. 원인은 SMAA threshold(0.05)가 perceptual(감마) 입력 기준인데, edge 패스가 sRGB offscreen을 샘플할 때 샘플러가 linear로 디코드해 **linear 값 위에서** 검출하기 때문. linear에선 어두운 영역 대비가 압축돼 threshold 밑으로 깔림.
 - 수정: `smaa_edge.frag`의 `sampleScene`에서 `pow(c, 1/2.2)`로 perceptual 복원 후 luma edge detection. edge 패스는 edge 플래그만 출력하므로 색감·블렌딩(linear 유지)에는 영향 없음.
 - 대안 검토: "grade/tonemap을 AA 앞으로 옮기는 구조 변경(C안)"은 현재 grade가 약한 컬러 그레이딩(톤매퍼 아님)이라 밤을 못 고치고, 감마 인코딩 전체 이동은 swapchain 색공간까지 건드리는 큰 변경이라 보류. 실제 HDR/톤매핑 도입 시 `Scene(HDR)→Tonemap→AA→Present`로 정식 적용 예정.
-- 참고: FXAA도 동일하게 linear에서 luma를 보므로 밤에 약함. 필요 시 `post.frag` FXAA의 luma 계산에만 같은 감마를 적용하는 후속 작업으로 분리.
+- FXAA도 동일하게 linear에서 luma를 보므로 밤에 약했다. 후속 커밋에서 `post.frag`에 `lumaPerceptual()`를 추가해 FXAA의 edge/방향 판단 luma만 perceptual 감마로 계산하고, 블렌딩 출력 색은 linear로 유지(이중 감마 인코딩 방지). 유저 빌드 검증: FXAA 밤 AA 정상, 낮 색감 변화 없음.
 - 유저 빌드 검증: 밤 장면에서도 큐브/타일/오브젝트 경계 AA 정상 적용 확인, 낮 장면 정상.
 
 ---
