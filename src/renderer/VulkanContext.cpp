@@ -60,6 +60,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createUIBuffer();
     createObjectMeshes();
     createGrassTexture();
+    createTerrainTextureArray();
     createItemMesh();
     createDropInstanceBuffer();
     rebuildDirtyChunks();
@@ -141,6 +142,7 @@ VulkanContext::~VulkanContext() {
     m_smaaSearchTex.destroy();
     vkDestroySampler            (m_device, m_postSampler,             nullptr);
     m_grassTex.destroy();
+    m_terrainTex.destroy();
     vkDestroyRenderPass         (m_device, m_smaaRenderPass,          nullptr);
     vkDestroyRenderPass         (m_device, m_postRenderPass,          nullptr);
     vkDestroyRenderPass(m_device, m_renderPass, nullptr);

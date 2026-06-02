@@ -10,11 +10,14 @@ layout(binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(binding = 1) uniform sampler2DShadow shadowMap;
+layout(binding = 3) uniform sampler2DArray terrainTex;
 
 layout(location = 0) flat in vec3 fragNormal;
 layout(location = 1)      in vec3 fragColor;
 layout(location = 2)      in vec4 fragPosLightSpace;
 layout(location = 3)      in float fragViewDepth;
+layout(location = 4)      in vec2 fragUV;
+layout(location = 5) flat in float fragLayer;
 layout(location = 0) out vec4 outColor;
 
 void main() {
@@ -46,7 +49,11 @@ void main() {
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 ambient = ambientTint * mix(0.10, 0.30, dayFactor);
     vec3 direct  = vec3(diff * 0.7 * dayFactor * shadowFactor);
-    vec3 litColor = fragColor * (ambient + direct);
+
+    // Terrain albedo from the texture array (layer < 0 = untextured object: white).
+    // Vertex color stays as a tint, so per-tile hue + baked AO are preserved.
+    vec3 albedo = (fragLayer < 0.0) ? vec3(1.0) : texture(terrainTex, vec3(fragUV, fragLayer)).rgb;
+    vec3 litColor = fragColor * albedo * (ambient + direct);
 
     // Fog
     const float FOG_START = 27.0;

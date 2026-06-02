@@ -184,8 +184,12 @@ private:
     // Generic uploaded-texture helper: staging upload + image + view (+ optional sampler).
     TextureResource createTexture(uint32_t width, uint32_t height, VkFormat format,
         const void* bytes, VkDeviceSize size, bool withSampler);
+    // Layered variant for a sampler2DArray (bytes laid out layer-major, all same size).
+    TextureResource createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
+        VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler);
     void createObjectMeshes();
     void createGrassTexture();
+    void createTerrainTextureArray();
     void createItemMesh();
     void createDropInstanceBuffer();
     void updateDropInstanceBuffer(const std::vector<DroppedItem>& drops);
@@ -342,6 +346,9 @@ private:
     // Procedural grass alpha texture (sampled by the grass card pipeline). Creation is
     // isolated in createGrassTexture so a file-loaded image can swap in later.
     TextureResource m_grassTex;
+
+    // Terrain material texture array (sampler2DArray, one layer per tile material).
+    TextureResource m_terrainTex;
 
     // Dropped items — shared small cube mesh + per-frame instance buffer (reuses m_indexBuffer + m_pipeline)
     static constexpr uint32_t   MAX_DROPS = 256;

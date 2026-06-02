@@ -178,8 +178,27 @@ struct InstanceData {
 struct ChunkVertex {
     glm::vec3 pos;
     glm::vec3 normal;
-    glm::vec3 color;  // top face uses topColor, side/bottom use sideColor
+    glm::vec3 color;  // top face uses topColor, side/bottom use sideColor (kept as tint)
+    glm::vec2 uv;     // per-face 0..1
+    float     layer;  // terrain texture-array layer; < 0 = untextured (objects)
 };
+
+// Terrain texture-array layers — one material per layer. tileFaceLayer maps a tile
+// type + face to its layer index; objects pass layer < 0 (untextured) via the shader.
+static constexpr uint32_t TERRAIN_TEX_LAYERS = 9;
+inline int tileFaceLayer(TileType t, bool isTop) {
+    switch (t) {
+        case TileType::GRASS:    return isTop ? 0 : 1; // grassy top / dirt-ish side
+        case TileType::DIRT:     return 2;
+        case TileType::STONE:    return 3;
+        case TileType::WOOD:     return 4;
+        case TileType::LEAVES:   return 5;
+        case TileType::FARMLAND: return 6;
+        case TileType::WHEAT:    return 7;
+        case TileType::WATER:    return 8;
+        default:                 return -1;
+    }
+}
 
 // Grass alpha-card vertex — local card position + lighting normal + texture UV
 struct GrassCardVertex {

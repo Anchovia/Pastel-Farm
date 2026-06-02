@@ -502,6 +502,8 @@ void VulkanContext::createChunkPipeline() {
         { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, pos)    },
         { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, normal) },
         { 2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ChunkVertex, color)  },
+        { 3, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(ChunkVertex, uv)     },
+        { 4, 0, VK_FORMAT_R32_SFLOAT,       offsetof(ChunkVertex, layer)  },
     };
     cfg.cullMode   = VK_CULL_MODE_BACK_BIT;
     cfg.depthTest  = true;
@@ -912,6 +914,171 @@ void VulkanContext::createGrassTexture() {
     // pipeline samples this with its own LINEAR/CLAMP sampler (withSampler=true).
     const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
     m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), imgSize, /*withSampler=*/true);
+}
+
+TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
+    VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler)
+{
+    TextureResource tex;
+    tex.device = m_device;
+
+    GpuBuffer staging = createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    void* mapped;
+    vkMapMemory(m_device, staging.memory, 0, size, 0, &mapped);
+    memcpy(mapped, bytes, (size_t)size);
+    vkUnmapMemory(m_device, staging.memory);
+
+    // createImage hardcodes arrayLayers=1, so build the array image inline here.
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType     = VK_IMAGE_TYPE_2D;
+    imageInfo.extent        = {width, height, 1};
+    imageInfo.mipLevels     = 1;
+    imageInfo.arrayLayers   = layerCount;
+    imageInfo.format        = format;
+    imageInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+    if (vkCreateImage(m_device, &imageInfo, nullptr, &tex.image) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create texture array image");
+
+    VkMemoryRequirements memReq;
+    vkGetImageMemoryRequirements(m_device, tex.image, &memReq);
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize  = memReq.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (vkAllocateMemory(m_device, &allocInfo, nullptr, &tex.memory) != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate texture array memory");
+    vkBindImageMemory(m_device, tex.image, tex.memory, 0);
+
+    // One-shot upload: transition all layers, copy the contiguous layer-major buffer, transition to read.
+    VkCommandBufferAllocateInfo cbAlloc{};
+    cbAlloc.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cbAlloc.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cbAlloc.commandPool        = m_commandPool;
+    cbAlloc.commandBufferCount = 1;
+    VkCommandBuffer cmd;
+    vkAllocateCommandBuffers(m_device, &cbAlloc, &cmd);
+    VkCommandBufferBeginInfo begin{};
+    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &begin);
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image               = tex.image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = layerCount;
+
+    barrier.oldLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkBufferImageCopy region{};
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.layerCount = layerCount;
+    region.imageExtent                 = {width, height, 1};
+    vkCmdCopyBufferToImage(cmd, staging.buffer, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    barrier.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    vkEndCommandBuffer(cmd);
+    VkSubmitInfo submit{};
+    submit.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers    = &cmd;
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VkFence fence;
+    vkCreateFence(m_device, &fenceInfo, nullptr, &fence);
+    vkQueueSubmit(m_graphicsQueue, 1, &submit, fence);
+    vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(m_device, fence, nullptr);
+    vkFreeCommandBuffers(m_device, m_commandPool, 1, &cmd);
+    // staging frees here (GpuBuffer RAII); the fence already waited on all transfers.
+
+    VkImageViewCreateInfo vi{};
+    vi.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vi.image                       = tex.image;
+    vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    vi.format                      = format;
+    vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vi.subresourceRange.levelCount = 1;
+    vi.subresourceRange.layerCount = layerCount;
+    if (vkCreateImageView(m_device, &vi, nullptr, &tex.view) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create texture array view");
+
+    if (withSampler) {
+        VkSamplerCreateInfo si{};
+        si.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        si.magFilter    = VK_FILTER_LINEAR;
+        si.minFilter    = VK_FILTER_LINEAR;
+        si.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        if (vkCreateSampler(m_device, &si, nullptr, &tex.sampler) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create texture array sampler");
+    }
+
+    return tex;
+}
+
+void VulkanContext::createTerrainTextureArray() {
+    // Step 3a: per-material layers as seamless grayscale grain, distinct per layer.
+    // Multiplied by the per-tile vertex color so hue + baked AO are preserved (tint).
+    // Per-material art (grass blades, stone speckle, ...) is tuned in a later step.
+    const uint32_t W = 32, H = 32;
+    const uint32_t L = TERRAIN_TEX_LAYERS;
+    std::vector<uint8_t> pixels((size_t)W * H * 4 * L, 255);
+
+    auto smooth = [](float t) { return t * t * (3.0f - 2.0f * t); };
+    auto lerp   = [](float a, float b, float t) { return a + (b - a) * t; };
+    auto hash01 = [](int x, int y, int salt) -> float {
+        uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)salt * 83492791u;
+        h ^= h >> 13; h *= 1274126177u;
+        return (float)(h & 65535u) / 65535.0f;
+    };
+    // Tileable value noise: lattice coords wrap modulo (size/cell) so texture edges match.
+    auto tileNoise = [&](int x, int y, int cell, int salt) -> float {
+        const int cells = (int)W / cell;
+        auto wh = [&](int gx, int gy) { return hash01(((gx % cells) + cells) % cells, ((gy % cells) + cells) % cells, salt); };
+        const int gx = x / cell, gy = y / cell;
+        const float tx = smooth((float)(x - gx * cell) / (float)cell);
+        const float ty = smooth((float)(y - gy * cell) / (float)cell);
+        return lerp(lerp(wh(gx, gy), wh(gx + 1, gy), tx),
+                    lerp(wh(gx, gy + 1), wh(gx + 1, gy + 1), tx), ty);
+    };
+
+    for (uint32_t layer = 0; layer < L; layer++) {
+        const int salt = 100 + (int)layer * 37;
+        for (uint32_t y = 0; y < H; y++)
+        for (uint32_t x = 0; x < W; x++) {
+            float n = tileNoise((int)x, (int)y, 8, salt) * 0.6f + tileNoise((int)x, (int)y, 4, salt + 1) * 0.4f;
+            float g = 0.72f + 0.28f * n; // gentle multiplicative grain
+            uint8_t v = (uint8_t)(g * 255.0f);
+            uint8_t* p = &pixels[(((size_t)layer * H + y) * W + x) * 4];
+            p[0] = v; p[1] = v; p[2] = v; p[3] = 255;
+        }
+    }
+
+    const VkDeviceSize size = (VkDeviceSize)W * H * 4 * L;
+    m_terrainTex = createTextureArray(W, H, L, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), size, /*withSampler=*/true);
 }
 
 // ============================================================
@@ -2178,7 +2345,7 @@ void VulkanContext::createShadowSampler() {
 //  Descriptor set layout
 // ============================================================
 void VulkanContext::createDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding bindings[3]{};
+    VkDescriptorSetLayoutBinding bindings[4]{};
 
     bindings[0].binding         = 0;
     bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2195,9 +2362,14 @@ void VulkanContext::createDescriptorSetLayout() {
     bindings[2].descriptorCount = 1;
     bindings[2].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    bindings[3].binding         = 3; // terrain texture array (sampler2DArray)
+    bindings[3].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[3].descriptorCount = 1;
+    bindings[3].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
     VkDescriptorSetLayoutCreateInfo info{};
     info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    info.bindingCount = 3;
+    info.bindingCount = 4;
     info.pBindings    = bindings;
 
     if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
@@ -2227,7 +2399,7 @@ void VulkanContext::createDescriptorPool() {
     poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
     poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT * 2;
+    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT * 3; // shadow + grass + terrain array
 
     VkDescriptorPoolCreateInfo info{};
     info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -2267,7 +2439,12 @@ void VulkanContext::createDescriptorSets() {
         grassInfo.imageView   = m_grassTex.view;
         grassInfo.sampler     = m_grassTex.sampler;
 
-        VkWriteDescriptorSet writes[3]{};
+        VkDescriptorImageInfo terrainInfo{};
+        terrainInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        terrainInfo.imageView   = m_terrainTex.view;
+        terrainInfo.sampler     = m_terrainTex.sampler;
+
+        VkWriteDescriptorSet writes[4]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet          = m_descriptorSets[i];
         writes[0].dstBinding      = 0;
@@ -2289,7 +2466,14 @@ void VulkanContext::createDescriptorSets() {
         writes[2].descriptorCount = 1;
         writes[2].pImageInfo      = &grassInfo;
 
-        vkUpdateDescriptorSets(m_device, 3, writes, 0, nullptr);
+        writes[3].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[3].dstSet          = m_descriptorSets[i];
+        writes[3].dstBinding      = 3;
+        writes[3].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[3].descriptorCount = 1;
+        writes[3].pImageInfo      = &terrainInfo;
+
+        vkUpdateDescriptorSets(m_device, 4, writes, 0, nullptr);
     }
 }
 

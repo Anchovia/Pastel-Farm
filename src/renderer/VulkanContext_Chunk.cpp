@@ -102,11 +102,14 @@ void VulkanContext::buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk) {
             if (neighbor != TileType::AIR) continue;
 
             const glm::vec3 color = face.isTop ? topColor : sideColor;
+            const float     layer = (float)tileFaceLayer(t, face.isTop);
             const uint32_t  base  = (uint32_t)vertices.size();
 
+            // Per-face UV matching the 4 corner order of FaceDef::verts.
+            static const glm::vec2 faceUV[4] = { {0,0}, {1,0}, {1,1}, {0,1} };
             for (int i = 0; i < 4; i++) {
                 float ao = vertexAO(lx, ly, z, face.normal, face.verts[i]);
-                vertices.push_back({ center + face.verts[i], face.normal, color * ao });
+                vertices.push_back({ center + face.verts[i], face.normal, color * ao, faceUV[i], layer });
             }
 
             indices.insert(indices.end(), {

@@ -875,6 +875,15 @@ Vulkan 공부 겸 엔진 개발 기록.
 - FXAA도 동일하게 linear에서 luma를 보므로 밤에 약했다. 후속 커밋에서 `post.frag`에 `lumaPerceptual()`를 추가해 FXAA의 edge/방향 판단 luma만 perceptual 감마로 계산하고, 블렌딩 출력 색은 linear로 유지(이중 감마 인코딩 방지). 유저 빌드 검증: FXAA 밤 AA 정상, 낮 색감 변화 없음.
 - 유저 빌드 검증: 밤 장면에서도 큐브/타일/오브젝트 경계 AA 정상 적용 확인, 낮 장면 정상.
 
+### Terrain texture array 1차 배선 (Task #3a)
+- `ChunkVertex`에 면별 `uv`와 `layer`를 추가하고, `buildChunkBuffer`에서 각 보이는 면의 0..1 UV와 `tileFaceLayer(TileType, isTop)` 결과를 함께 emit하도록 변경했다.
+- terrain albedo는 atlas 대신 `sampler2DArray`로 시작했다. 경계 mip 번짐을 피하고, 타일 타입/면별 layer 확장이 단순하며, `TextureResource` 수명 모델을 그대로 사용할 수 있기 때문이다.
+- `TERRAIN_TEX_LAYERS = 9`: GRASS top, GRASS side, DIRT, STONE, WOOD, LEAVES, FARMLAND, WHEAT, WATER를 절차 layer로 배정했다. 이번 단계의 layer art는 타입 구분과 경로 검증을 위한 낮은 대비의 seamless grayscale grain이다.
+- `createTextureArray(...)`와 `createTerrainTextureArray()`를 추가하고, `m_terrainTex` 생성/소멸을 `VulkanContext` 수명에 연결했다. descriptor set layout/pool/set update에는 binding 3 terrain texture array를 추가했다.
+- `chunk.vert`는 UV/layer를 fragment로 전달하고, `chunk.frag`는 terrain layer를 샘플해 `fragColor * albedo * lighting`으로 합성한다. 기존 vertex color는 타일 색조와 AO tint로 유지된다.
+- `object.vert`는 `fragLayer = -1.0` sentinel을 출력해 공유 `chunk.frag`에서 텍스처 샘플을 건너뛰게 했다. 따라서 tree/rock/workbench/fence 등 오브젝트 메시와 vertex 포맷은 이번 단계에서 건드리지 않았다.
+- 유저 빌드 검증 결과: 지형 텍스처 배열 경로가 정상 동작하고, 기존 색조/AO와 오브젝트·grass·shadow·UI·AA 경로는 유지되는 것으로 확인했다.
+
 ---
 
 ## 게임 설계 메모
@@ -905,7 +914,7 @@ World
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass(FXAA/SMAA 1x), post 이후 UI overlay를 분리해 그린다.
-- 다음 비주얼 개선은 TextureResource helper, terrain/object texture mapping, material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다. 필요하면 SMAA diagonal/T2x/S2x 튜닝은 별도 품질 작업으로 분리한다.
+- 다음 비주얼 개선은 terrain texture art 튜닝, object texture mapping, material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
 
 ---
 

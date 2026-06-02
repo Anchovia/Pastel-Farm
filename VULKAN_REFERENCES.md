@@ -37,7 +37,7 @@
 | 주제 | SaschaWillems 샘플 | Pastel Farm 적용 판단 |
 |------|--------------------|------------------------|
 | Texture upload | [`examples/texture`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texture) | grass/terrain/object texture mapping의 1순위 참고. staging buffer, image layout transition, sampler, descriptor update 패턴 비교 |
-| Texture array | [`examples/texturearray`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturearray) | terrain atlas, grass/flower/ground dressing variant가 많아질 때 후보 |
+| Texture array | [`examples/texturearray`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturearray) | terrain texture mapping 3a에 적용. `sampler2DArray` view, array layer copy, descriptor update 패턴의 비교 기준 |
 | Mipmap generation | [`examples/texturemipmapgen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturemipmapgen) | alpha card, terrain texture, object texture의 원거리 shimmer를 줄이기 위한 품질 후보 |
 | Instancing | [`examples/instancing`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/instancing) | 현재 object/grass instancing과 직접 관련. `ObjectInstance` 확장, variant index, tint, wind phase를 넣을 때 비교 |
 | Indirect draw | [`examples/indirectdraw`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/indirectdraw) | 식생/오브젝트 종류와 draw 수가 크게 늘어난 뒤 후보. 지금은 청크별 직접 draw가 단순하고 충분함 |
@@ -61,11 +61,11 @@
 다음 확장 후보:
 
 - grass texture를 파일에서 로드
-- terrain/object albedo texture 또는 atlas를 추가
+- terrain layer art 튜닝, object albedo texture, 또는 atlas/array variant 추가
 - flower/ground patch 등 dressing texture가 2개 이상 추가
 - UI font/atlas texture가 별도 리소스로 들어옴
 
-terrain/object texture mapping이 들어오는 순간 같은 `createTexture` 경로를 재사용하고, 파일 로드(stb_image)/mipmap/sampler 옵션이 필요해지면 `createTexture` 시그니처를 거기서 확장한다.
+terrain texture mapping 3a에서는 `sampler2DArray`용 `createTextureArray(width, height, layerCount, format, bytes, size, withSampler)`를 추가해 같은 `TextureResource` 수명 모델을 유지했다. 다음 확장은 terrain layer art 튜닝, object texture, 파일 로드(stb_image), mipmap/sampler 옵션이 실제로 필요해지는 시점에 한다.
 
 ### 2. Instance data 확장
 
@@ -133,10 +133,11 @@ SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한
 권장 순서:
 
 1. ✅ TextureResource helper — 완료
-2. terrain/object texture mapping
-3. material-lite
-4. high-quality grass(wind/LOD/variant)
-5. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
+2. ✅ terrain texture mapping 3a — `sampler2DArray` + 청크 UV/layer + vertex color tint 유지 완료
+3. terrain texture art 3b / object texture mapping 3c
+4. material-lite
+5. high-quality grass(wind/LOD/variant)
+6. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
 
 PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
 

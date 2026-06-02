@@ -69,7 +69,7 @@
 
 ### 렌더링 / 비주얼
 - Vulkan swapchain, depth, descriptor, sync, dynamic viewport/scissor
-- 청크 메시 hidden face culling + per-vertex AO + top/side vertex color
+- 청크 메시 hidden face culling + per-vertex AO + terrain texture array + vertex color tint
 - 청크 AABB frustum culling, shadow light frustum culling
 - 제네릭 오브젝트 인스턴싱(`ObjectType`별 mesh + 청크별 instance group)
 - 2048² shadow map, 3×3 PCF, 청크/오브젝트/플레이어 shadow caster
@@ -85,7 +85,7 @@
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
 - **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
-- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · ✅ FXAA · ✅ SMAA 1x 1차 · height fog · texture mapping/material-lite · high-quality grass(wind/LOD/variant) · ground dressing texture · shadow quality options · LUT
+- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · ✅ FXAA · ✅ SMAA 1x 1차 · ✅ terrain texture array 1차 · height fog · object texture mapping/material-lite · high-quality grass(wind/LOD/variant) · ground dressing texture · shadow quality options · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · full render graph · material node graph · RTX/full GI · full PBR 전면 전환 · mesh shader/bindless 대규모 시스템
 
@@ -161,7 +161,7 @@ pastelfarm/
 - 오브젝트 레이어 — 나무/돌/작업대/울타리/돌담은 복셀이 아닌 `Chunk::objects` StaticProp으로 관리
 
 ### 렌더링 전략
-- **청크 메시 생성** — 청크별로 보이는 면만 골라 버텍스+인덱스 버퍼 직접 생성 (Hidden Face Culling), 인스턴싱보다 GPU 부하 대폭 감소
+- **청크 메시 생성** — 청크별로 보이는 면만 골라 버텍스+인덱스 버퍼 직접 생성 (Hidden Face Culling), 면별 UV/layer로 terrain texture array 샘플링
 - **오브젝트 인스턴싱** — `ObjectType`별 공유 메시 + 청크별 인스턴스 그룹
 - **grass alpha card** — 절차 텍스처 + X자 카드 mesh + 청크별 인스턴스 버퍼 + density/tint/card variation
 - **플랫 셰이딩** — 면마다 단색 + 디렉셔널 라이트로 명암
