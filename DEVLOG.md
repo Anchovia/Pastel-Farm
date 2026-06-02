@@ -906,6 +906,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `createGrassTexture()`는 `assets/textures/grass.png`가 있으면 파일 텍스처를 먼저 사용하고, 없으면 기존 절차 grass alpha texture를 그대로 생성한다. 따라서 이번 단계만으로 화면 변화는 없어야 한다.
 - 유저 빌드 검증 결과: `out/build/x64-Debug/assets` 폴더가 생성되어 asset copy 토대가 정상 동작하는 것을 확인했다. 실제 texture map 선정과 material-lite 상수, mipmap/sampler 정책은 후속 작업으로 남긴다.
 
+### Authored terrain texture override 1차 적용 (Task #4b)
+- `createTerrainTextureArray()`가 먼저 절차 material mask를 생성한 뒤, `assets/textures/terrain/*.png`가 있으면 layer별로 RGBA8 파일 이미지를 덮어쓰게 했다.
+- 파일 매핑은 `grass_top`, `grass_side`, `dirt`, `stone`, `wood`, `leaves`, `farmland`, `wheat`, `water` 9개 layer다. 현재 저장소에는 water를 제외한 8개 `1024×1024 PNG` Color texture를 추가했다.
+- 첫 번째로 발견한 authored terrain 이미지 크기를 texture array 크기로 삼고, 크기가 다른 파일은 해당 layer만 건너뛰며 절차 fallback을 유지한다. 모든 layer가 누락되면 기존 64×64 절차 texture array로 동작한다.
+- `water.png`는 의도적으로 추가하지 않았다. 물은 현재 절차 ripple fallback을 유지하고, 이후 전용 water pass/material에서 별도 처리한다.
+- 유저 빌드/스크린샷 검증 결과: terrain authored texture가 실제로 적용됐다. 현재 `fragColor * texture` 구조 때문에 색과 노이즈가 강하게 먹을 수 있으므로, 다음 개선은 texture strength 또는 stylized albedo 보정으로 분리한다.
+
 ---
 
 ## 게임 설계 메모

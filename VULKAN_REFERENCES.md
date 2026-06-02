@@ -64,7 +64,7 @@
 - flower/ground patch 등 dressing texture가 2개 이상 추가
 - UI font/atlas texture가 별도 리소스로 들어옴
 
-terrain texture mapping 3a에서는 `sampler2DArray`용 `createTextureArray(width, height, layerCount, format, bytes, size, withSampler)`를 추가해 같은 `TextureResource` 수명 모델을 유지했다. 4a에서는 `assets/textures/grass.png` 선택적 로드 + 절차 fallback까지 연결했다. 다음 확장은 실제 texture asset 선정, terrain/object file texture 적용, mipmap/sampler 옵션이 실제로 필요해지는 시점에 한다.
+terrain texture mapping 3a에서는 `sampler2DArray`용 `createTextureArray(width, height, layerCount, format, bytes, size, withSampler)`를 추가해 같은 `TextureResource` 수명 모델을 유지했다. 4a에서는 `assets/textures/grass.png` 선택적 로드 + 절차 fallback까지 연결했다. 4b에서는 `assets/textures/terrain/*.png`로 terrain layer별 Color texture override를 적용했고, 누락되거나 크기가 맞지 않는 layer는 절차 fallback을 유지한다. 다음 확장은 texture tone/material-lite, mipmap/sampler 옵션이 실제로 필요해지는 시점에 한다.
 
 ### 2. Instance data 확장
 
@@ -136,9 +136,10 @@ SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한
 3. ✅ terrain texture art 3b — 절차 64×64 material mask 1차 튜닝 완료. 물은 전용 water pass 전 임시 placeholder
 4. ✅ object texture mapping 3c — object vertex UV/layer 배선, WOOD/LEAVES/STONE layer 재사용 완료
 5. ✅ authored texture loading 4a — `stb_image` RGBA8 로더 + `assets/textures` 복사 + `grass.png` 선택적 fallback 완료
-6. material-lite + 실제 texture asset 선정
-7. high-quality grass(wind/LOD/variant)
-8. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
+6. ✅ authored terrain texture override 4b — terrain layer별 Color texture 파일 override + 절차 fallback 완료
+7. texture tone/material-lite — texture strength, stylized albedo 보정, roughness/specular 상수
+8. high-quality grass(wind/LOD/variant)
+9. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
 
 PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
 

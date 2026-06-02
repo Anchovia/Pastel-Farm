@@ -65,6 +65,10 @@ LoadedImageRGBA8 loadImageRGBA8(const std::string& path) {
     stbi_image_free(data);
     return image;
 }
+
+bool fileExists(const std::string& path) {
+    return std::ifstream(path, std::ios::binary).good();
+}
 }
 
 // ============================================================
@@ -1101,8 +1105,32 @@ TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t heigh
 }
 
 void VulkanContext::createTerrainTextureArray() {
-    // Step 3b: low-contrast procedural material masks. Vertex color still owns hue/AO.
-    const uint32_t W = 64, H = 64;
+    struct TerrainLayerFile {
+        uint32_t layer;
+        const char* path;
+    };
+    static const TerrainLayerFile terrainLayerFiles[] = {
+        {0, "assets/textures/terrain/grass_top.png"},
+        {1, "assets/textures/terrain/grass_side.png"},
+        {2, "assets/textures/terrain/dirt.png"},
+        {3, "assets/textures/terrain/stone.png"},
+        {4, "assets/textures/terrain/wood.png"},
+        {5, "assets/textures/terrain/leaves.png"},
+        {6, "assets/textures/terrain/farmland.png"},
+        {7, "assets/textures/terrain/wheat.png"},
+        {8, "assets/textures/terrain/water.png"},
+    };
+
+    // Step 4b: authored terrain images override the procedural material masks per layer.
+    uint32_t W = 64, H = 64;
+    for (const TerrainLayerFile& file : terrainLayerFiles) {
+        if (!fileExists(file.path)) continue;
+        LoadedImageRGBA8 image = loadImageRGBA8(file.path);
+        W = (uint32_t)image.width;
+        H = (uint32_t)image.height;
+        break;
+    }
+
     const uint32_t L = TERRAIN_TEX_LAYERS;
     std::vector<uint8_t> pixels((size_t)W * H * 4 * L, 255);
 
@@ -1222,6 +1250,26 @@ void VulkanContext::createTerrainTextureArray() {
 
             writePixel(layer, x, y, c);
         }
+    }
+
+    auto copyLayerFromFile = [&](const TerrainLayerFile& file) {
+        if (!fileExists(file.path)) return;
+
+        LoadedImageRGBA8 image = loadImageRGBA8(file.path);
+        if ((uint32_t)image.width != W || (uint32_t)image.height != H) {
+            std::cerr << "Skipping terrain texture with mismatched size: " << file.path
+                      << " (" << image.width << "x" << image.height
+                      << ", expected " << W << "x" << H << ")\n";
+            return;
+        }
+
+        const size_t layerOffset = (size_t)file.layer * W * H * 4;
+        const size_t byteCount = (size_t)W * H * 4;
+        memcpy(pixels.data() + layerOffset, image.pixels.data(), byteCount);
+    };
+
+    for (const TerrainLayerFile& file : terrainLayerFiles) {
+        if (file.layer < L) copyLayerFromFile(file);
     }
 
     const VkDeviceSize size = (VkDeviceSize)W * H * 4 * L;

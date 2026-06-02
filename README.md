@@ -70,7 +70,7 @@
 
 ### 렌더링 / 비주얼
 - Vulkan swapchain, depth, descriptor, sync, dynamic viewport/scissor
-- 청크 메시 hidden face culling + per-vertex AO + terrain texture array + vertex color tint
+- 청크 메시 hidden face culling + per-vertex AO + terrain texture array + authored terrain texture override + vertex color tint
 - 청크 AABB frustum culling, shadow light frustum culling
 - 제네릭 오브젝트 인스턴싱(`ObjectType`별 mesh + 청크별 instance group)
 - 2048² shadow map, 3×3 PCF, 청크/오브젝트/플레이어 shadow caster
@@ -78,7 +78,7 @@
 - offscreen scene → post pass tone/color grading(exposure/contrast/saturation/split-tone/vignette) + FXAA/SMAA
 - 자체 게임 UI는 post AA 이후 스왑체인에 직접 렌더링해 픽셀 폰트 선명도 유지
 - grass alpha card dressing: 절차 RGBA grass texture + X자 card + alpha test + density field + 청크별 dirty gate
-- authored texture loading 토대: `assets/textures` post-build 복사 + `stb_image` RGBA8 로딩 + `grass.png` 선택적 파일 텍스처 fallback
+- authored texture loading: `assets/textures` post-build 복사 + `stb_image` RGBA8 로딩 + terrain layer별 파일 override + `grass.png` 선택적 파일 텍스처 fallback
 - DevUI(ImGui, `PASTEL_DEV_BUILD`) + GPU timestamp(total/shadow/scene/post/imgui)
 
 > 상세 구현 이력은 `DEVLOG.md`, 구조 판단과 장기 방향은 `ARCHITECTURE.md`를 기준으로 본다.
@@ -87,7 +87,7 @@
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
 - **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
-- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · ✅ FXAA · ✅ SMAA 1x 1차 · ✅ terrain texture array 1차 · ✅ object texture mapping 1차 · ✅ authored texture loading 토대 · height fog · material-lite · high-quality grass(wind/LOD/variant) · ground dressing texture · shadow quality options · LUT
+- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · ✅ FXAA · ✅ SMAA 1x 1차 · ✅ terrain texture array 1차 · ✅ object texture mapping 1차 · ✅ authored texture loading 토대 · ✅ authored terrain texture override 1차 · height fog · material-lite · high-quality grass(wind/LOD/variant) · ground dressing texture · shadow quality options · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · full render graph · material node graph · RTX/full GI · full PBR 전면 전환 · mesh shader/bindless 대규모 시스템
 
@@ -105,6 +105,7 @@ pastelfarm/
 ├─ VULKAN_REFERENCES.md
 ├─ assets/
 │  └─ textures/                 # authored texture 이미지 배치 경로
+│     └─ terrain/               # terrain texture array layer override
 ├─ shaders/
 │  ├─ triangle.vert/.frag       # player / selector / drop cubes
 │  ├─ chunk.vert/.frag          # terrain chunk mesh + AO + shadow/fog
@@ -171,7 +172,7 @@ pastelfarm/
 - **청크 메시 생성** — 청크별로 보이는 면만 골라 버텍스+인덱스 버퍼 직접 생성 (Hidden Face Culling), 면별 UV/layer로 terrain texture array 샘플링
 - **오브젝트 인스턴싱** — `ObjectType`별 공유 메시 + 청크별 인스턴스 그룹
 - **grass alpha card** — 절차 텍스처 + X자 카드 mesh + 청크별 인스턴스 버퍼 + density/tint/card variation
-- **authored texture loading** — `assets/textures`를 실행 파일 옆으로 복사하고, `stb_image`로 RGBA8 파일 텍스처를 업로드
+- **authored texture loading** — `assets/textures`를 실행 파일 옆으로 복사하고, `stb_image`로 RGBA8 파일 텍스처를 업로드. `assets/textures/terrain/*.png`가 있으면 terrain texture array의 해당 layer를 override
 - **플랫 셰이딩** — 면마다 단색 + 디렉셔널 라이트로 명암
 - **top/side 색상 분기** — 지형 윗면과 옆면 색상 분리
 - **Ambient Occlusion** — 꼭짓점별 복셀 AO로 모서리·구석 음영, 청크 빌드 시 베이크 (추가 렌더패스 없음)
