@@ -20,6 +20,19 @@ layout(location = 4)      in vec2 fragUV;
 layout(location = 5) flat in float fragLayer;
 layout(location = 0) out vec4 outColor;
 
+vec3 sampleMaterialDetail(vec2 uv, float layer) {
+    if (layer < 0.0) return vec3(1.0);
+
+    vec3 tex = texture(terrainTex, vec3(uv, layer)).rgb;
+    float luma = dot(tex, vec3(0.299, 0.587, 0.114));
+
+    float detail = clamp(1.0 + (luma - 0.5) * 0.80, 0.68, 1.26);
+    vec3 chroma = tex / max(luma, 0.08);
+    chroma = clamp(chroma, vec3(0.60), vec3(1.55));
+
+    return mix(vec3(1.0), chroma, 0.24) * detail;
+}
+
 void main() {
     vec3  normal    = normalize(fragNormal);
     vec3  lightDir  = normalize(ubo.lightDir.xyz);
@@ -50,10 +63,9 @@ void main() {
     vec3 ambient = ambientTint * mix(0.10, 0.30, dayFactor);
     vec3 direct  = vec3(diff * 0.7 * dayFactor * shadowFactor);
 
-    // Material albedo from the texture array (layer < 0 = untextured: white).
-    // Vertex color stays as a tint, so authored hue + baked AO are preserved.
-    vec3 albedo = (fragLayer < 0.0) ? vec3(1.0) : texture(terrainTex, vec3(fragUV, fragLayer)).rgb;
-    vec3 litColor = fragColor * albedo * (ambient + direct);
+    // Material texture contributes low-strength detail; vertex color owns the style hue.
+    vec3 materialDetail = sampleMaterialDetail(fragUV, fragLayer);
+    vec3 litColor = fragColor * materialDetail * (ambient + direct);
 
     // Fog
     const float FOG_START = 27.0;

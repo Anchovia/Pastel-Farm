@@ -86,7 +86,7 @@ src/
 - height fog
 - ✅ vegetation alpha card 1차 — 절차 grass texture + X자 card clump + alpha test + shadow 제외 + 청크별 dirty gate. **완료**
 - ✅ density field 기반 grass dressing 1차 — 균등 확률 대신 patch density + open grass bias + density 기반 offset/scale variation 적용. **완료**
-- 다음 비주얼 후보: material-lite · texture strength/stylized albedo 보정 · high-quality grass(wind/LOD/density 옵션) · ground dressing 텍스처화 · water 전용 표현 · shadow quality options · height fog · SMAA T2x/S2x 또는 MSAA/alpha-to-coverage
+- 다음 비주얼 후보: material-lite · layer별 texture strength · high-quality grass(wind/LOD/density 옵션) · ground dressing 텍스처화 · water 전용 표현 · shadow quality options · height fog · SMAA T2x/S2x 또는 MSAA/alpha-to-coverage
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -103,6 +103,7 @@ src/
 - ✅ object texture mapping 1차: object pipeline이 `ChunkVertex.uv/layer`를 받아 공유 material texture array를 샘플한다. tree/workbench/fence는 WOOD, canopy는 LEAVES, rock/stone fence는 STONE layer를 재사용하며, visual-only dressing mesh는 `layer < 0`로 vertex color-only 유지
 - ✅ authored texture loading 토대: `third_party/stb/stb_image.h`, `assets/textures` post-build copy, `createTextureFromFile(...)`를 추가했다. 현재는 `grass.png` 선택적 교체 + 절차 fallback까지만 연결했다
 - ✅ authored terrain texture override 1차: `assets/textures/terrain/*.png`가 있으면 terrain texture array layer를 파일 이미지로 덮어쓴다. water는 전용 pass 전까지 절차 fallback 유지
+- ✅ texture tone 안정화 1차: `chunk.frag`에서 raw texture 곱셈 대신 luma 기반 `materialDetail`을 만들어 vertex color 주 색감 + authored texture 표면 질감 구조로 정리
 - material-lite: full PBR 전환 전, albedo + tint + roughness/specular 상수로 재질 차이를 표현
 - shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
 - terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
@@ -118,9 +119,10 @@ src/
 5. ✅ **Object texture mapping 3c**: object vertex input/mesh UV/layer를 배선하고, terrain material layer(WOOD/LEAVES/STONE)를 StaticProp에 재사용. **완료**
 6. ✅ **Authored texture loading 4a**: `stb_image` RGBA8 로더, `assets/textures` 복사 규칙, `createTextureFromFile(...)`, grass texture 파일 fallback 토대. **완료**
 7. ✅ **Authored terrain texture override 4b**: terrain layer별 Color texture 파일 override, 누락/크기 불일치 layer는 절차 fallback. water는 전용 pass 전까지 fallback. **완료**
-8. **Texture tone/material-lite**: `fragColor * texture`가 너무 강하게 먹는 문제를 texture strength/stylized albedo 보정과 roughness/specular 상수로 정리한다.
-9. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
-10. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
+8. ✅ **Texture tone 4c**: `fragColor * rawTexture`를 luma/chroma 기반 `materialDetail`로 안정화해 texture는 질감, vertex color는 주 색감 역할을 유지. **완료**
+9. **Material-lite / layer별 strength**: roughness/specular 상수, grass/dirt/stone/wood별 texture strength, mipmap/sampler 정책은 필요 확인 후 확장한다.
+10. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
+11. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
 
 이 순서는 "품질을 올리되, 매 단계가 화면에 바로 기여하고 기존 구조와 자연스럽게 맞물리는" 경로다.
 

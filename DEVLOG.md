@@ -913,6 +913,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `water.png`는 의도적으로 추가하지 않았다. 물은 현재 절차 ripple fallback을 유지하고, 이후 전용 water pass/material에서 별도 처리한다.
 - 유저 빌드/스크린샷 검증 결과: terrain authored texture가 실제로 적용됐다. 현재 `fragColor * texture` 구조 때문에 색과 노이즈가 강하게 먹을 수 있으므로, 다음 개선은 texture strength 또는 stylized albedo 보정으로 분리한다.
 
+### Texture tone 안정화 1차 (Task #4c)
+- `chunk.frag`의 terrain/object material 합성을 `fragColor * rawTexture`에서 `fragColor * materialDetail`로 바꿨다.
+- `sampleMaterialDetail()`이 texture luma를 중립 밝기 디테일로 변환하고, texture chroma는 약하게만 섞는다. vertex color가 Pastel Farm의 주 색감을 유지하고, authored texture는 표면 질감 역할에 머물게 하는 목적이다.
+- 첫 조정은 너무 약해 grass/dirt/stone 질감이 덜 읽혔고, 최종값은 detail 강도 0.80, detail clamp 0.68~1.26, chroma mix 0.24로 정했다.
+- 유저 빌드/스크린샷 검증 결과: 첫 authored texture 적용 때처럼 실사 노이즈가 화면을 잡아먹지 않으면서, 흙과 지형 질감은 은은하게 남았다. 전역 안정화 값으로는 유지하고, layer별 strength는 필요가 확인되면 후속 작업으로 분리한다.
+
 ---
 
 ## 게임 설계 메모
