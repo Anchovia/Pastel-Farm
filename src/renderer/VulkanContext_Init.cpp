@@ -8,15 +8,20 @@
 #include "AreaTex.h"
 #include "SearchTex.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include <stdexcept>
 #include <iostream>
 #include <set>
 #include <algorithm>
+#include <cstdint>
 #include <fstream>
 #include <cstring>
 #include <chrono>
 #include <cmath>
 #include <string>
+#include <vector>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -27,6 +32,44 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 #endif
+
+namespace {
+struct LoadedImageRGBA8 {
+    int width = 0;
+    int height = 0;
+    std::vector<uint8_t> pixels;
+};
+
+LoadedImageRGBA8 loadImageRGBA8(const std::string& path) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* data = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+    if (!data || width <= 0 || height <= 0) {
+        const char* reason = stbi_failure_reason();
+        std::string message = "Failed to load texture image: " + path;
+        if (reason) {
+            message += " (";
+            message += reason;
+            message += ")";
+        }
+        if (data) stbi_image_free(data);
+        throw std::runtime_error(message);
+    }
+
+    const size_t size = (size_t)width * (size_t)height * 4;
+    LoadedImageRGBA8 image;
+    image.width = width;
+    image.height = height;
+    image.pixels.assign(data, data + size);
+    stbi_image_free(data);
+    return image;
+}
+
+bool fileExists(const std::string& path) {
+    return std::ifstream(path, std::ios::binary).good();
+}
+}
 
 // ============================================================
 //  Instance
@@ -552,6 +595,8 @@ void VulkanContext::createObjectPipeline() {
         { 3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectInstance, pos)   },
         { 4, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, scale) },
         { 5, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, rot)   },
+        { 6, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(ChunkVertex, uv)       },
+        { 7, 0, VK_FORMAT_R32_SFLOAT,       offsetof(ChunkVertex, layer)    },
     };
     cfg.cullMode   = VK_CULL_MODE_NONE;  // procedural mesh — winding not guaranteed outward
     cfg.depthTest  = true;
@@ -628,6 +673,19 @@ void VulkanContext::createObjectMeshes() {
         ObjectMesh& mesh = m_objectMeshes[(size_t)type];
         uploadMesh(mesh, verts);
     };
+    const float LAYER_NONE  = -1.0f;
+    const float LAYER_STONE = (float)tileFaceLayer(TileType::STONE, true);
+    const float LAYER_WOOD  = (float)tileFaceLayer(TileType::WOOD, true);
+    const float LAYER_LEAF  = (float)tileFaceLayer(TileType::LEAVES, true);
+    auto makeVertex = [](glm::vec3 pos, glm::vec3 normal, glm::vec3 color, glm::vec2 uv, float layer) {
+        return ChunkVertex{pos, normal, color, uv, layer};
+    };
+    auto pushTri = [&](std::vector<ChunkVertex>& v, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
+                       glm::vec3 n, glm::vec3 col, float layer) {
+        v.push_back(makeVertex(a, n, col, {0.0f, 1.0f}, layer));
+        v.push_back(makeVertex(b, n, col, {1.0f, 1.0f}, layer));
+        v.push_back(makeVertex(c, n, col, {0.5f, 0.0f}, layer));
+    };
 
     // ---- TREE: box trunk + 3 stacked cones (pine) ----
     {
@@ -647,12 +705,12 @@ void VulkanContext::createObjectMeshes() {
         glm::vec3 n = glm::normalize(glm::vec3((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f, 0.0f));
         glm::vec3 a0 = {a.x, a.y, t0}, b0 = {b.x, b.y, t0};
         glm::vec3 a1 = {a.x, a.y, t1}, b1 = {b.x, b.y, t1};
-        verts.push_back({a0, n, trunkColor});
-        verts.push_back({b0, n, trunkColor});
-        verts.push_back({b1, n, trunkColor});
-        verts.push_back({a0, n, trunkColor});
-        verts.push_back({b1, n, trunkColor});
-        verts.push_back({a1, n, trunkColor});
+        verts.push_back(makeVertex(a0, n, trunkColor, {0.0f, 1.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(b0, n, trunkColor, {1.0f, 1.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(b1, n, trunkColor, {1.0f, 0.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(a0, n, trunkColor, {0.0f, 1.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(b1, n, trunkColor, {1.0f, 0.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(a1, n, trunkColor, {0.0f, 0.0f}, LAYER_WOOD));
     }
 
     // Canopy: 3 stacked cones
@@ -671,9 +729,7 @@ void VulkanContext::createObjectMeshes() {
             glm::vec3 b1   = {cone.radius * cosf(a1), cone.radius * sinf(a1), cone.baseZ};
             glm::vec3 apex = {0.0f, 0.0f, cone.topZ};
             glm::vec3 n    = glm::normalize(glm::cross(b1 - b0, apex - b0));
-            verts.push_back({b0,   n, leafColor});
-            verts.push_back({b1,   n, leafColor});
-            verts.push_back({apex, n, leafColor});
+            pushTri(verts, b0, b1, apex, n, leafColor, LAYER_LEAF);
         }
     }
 
@@ -695,9 +751,7 @@ void VulkanContext::createObjectMeshes() {
     auto tri = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
         glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
         if (glm::dot(n, (a + b + c) / 3.0f - center) < 0.0f) n = -n;
-        verts.push_back({a, n, rockColor});
-        verts.push_back({b, n, rockColor});
-        verts.push_back({c, n, rockColor});
+        pushTri(verts, a, b, c, n, rockColor, LAYER_STONE);
     };
     for (int i = 0; i < 4; i++) {
         const glm::vec3& p0 = ring[i];
@@ -709,14 +763,18 @@ void VulkanContext::createObjectMeshes() {
     }
 
     // Flat-shaded axis-aligned box helper (cullMode is NONE for objects, so winding is free).
-    auto pushBox = [](std::vector<ChunkVertex>& v, glm::vec3 mn, glm::vec3 mx, glm::vec3 col) {
+    auto pushBox = [&](std::vector<ChunkVertex>& v, glm::vec3 mn, glm::vec3 mx, glm::vec3 col, float layer) {
         const glm::vec3 c[8] = {
             {mn.x,mn.y,mn.z},{mx.x,mn.y,mn.z},{mx.x,mx.y,mn.z},{mn.x,mx.y,mn.z},
             {mn.x,mn.y,mx.z},{mx.x,mn.y,mx.z},{mx.x,mx.y,mx.z},{mn.x,mx.y,mx.z},
         };
         auto quad = [&](int a, int b, int d, int e, glm::vec3 n) {
-            v.push_back({c[a],n,col}); v.push_back({c[b],n,col}); v.push_back({c[d],n,col});
-            v.push_back({c[a],n,col}); v.push_back({c[d],n,col}); v.push_back({c[e],n,col});
+            v.push_back(makeVertex(c[a], n, col, {0.0f, 1.0f}, layer));
+            v.push_back(makeVertex(c[b], n, col, {1.0f, 1.0f}, layer));
+            v.push_back(makeVertex(c[d], n, col, {1.0f, 0.0f}, layer));
+            v.push_back(makeVertex(c[a], n, col, {0.0f, 1.0f}, layer));
+            v.push_back(makeVertex(c[d], n, col, {1.0f, 0.0f}, layer));
+            v.push_back(makeVertex(c[e], n, col, {0.0f, 0.0f}, layer));
         };
         quad(4,5,6,7,{0,0,1});  quad(0,3,2,1,{0,0,-1});
         quad(0,1,5,4,{0,-1,0}); quad(3,7,6,2,{0,1,0});
@@ -726,8 +784,8 @@ void VulkanContext::createObjectMeshes() {
     // ---- WORKBENCH: a simple low table box ----
     {
     std::vector<ChunkVertex> verts;
-    pushBox(verts, {-0.35f, -0.35f, 0.0f}, {0.35f, 0.35f, 0.42f}, {0.52f, 0.36f, 0.18f});
-    pushBox(verts, {-0.40f, -0.40f, 0.42f}, {0.40f, 0.40f, 0.52f}, {0.62f, 0.45f, 0.25f}); // top slab
+    pushBox(verts, {-0.35f, -0.35f, 0.0f}, {0.35f, 0.35f, 0.42f}, {0.52f, 0.36f, 0.18f}, LAYER_WOOD);
+    pushBox(verts, {-0.40f, -0.40f, 0.42f}, {0.40f, 0.40f, 0.52f}, {0.62f, 0.45f, 0.25f}, LAYER_WOOD); // top slab
     upload(ObjectType::WORKBENCH, verts);
     }
 
@@ -735,17 +793,17 @@ void VulkanContext::createObjectMeshes() {
     {
     std::vector<ChunkVertex> verts;
     const glm::vec3 wood = {0.56f, 0.40f, 0.22f};
-    pushBox(verts, {-0.40f, -0.07f, 0.0f}, {-0.24f, 0.07f, 0.6f}, wood); // left post
-    pushBox(verts, { 0.24f, -0.07f, 0.0f}, { 0.40f, 0.07f, 0.6f}, wood); // right post
-    pushBox(verts, {-0.40f, -0.05f, 0.40f}, {0.40f, 0.05f, 0.50f}, wood); // top rail
-    pushBox(verts, {-0.40f, -0.05f, 0.18f}, {0.40f, 0.05f, 0.28f}, wood); // lower rail
+    pushBox(verts, {-0.40f, -0.07f, 0.0f}, {-0.24f, 0.07f, 0.6f}, wood, LAYER_WOOD); // left post
+    pushBox(verts, { 0.24f, -0.07f, 0.0f}, { 0.40f, 0.07f, 0.6f}, wood, LAYER_WOOD); // right post
+    pushBox(verts, {-0.40f, -0.05f, 0.40f}, {0.40f, 0.05f, 0.50f}, wood, LAYER_WOOD); // top rail
+    pushBox(verts, {-0.40f, -0.05f, 0.18f}, {0.40f, 0.05f, 0.28f}, wood, LAYER_WOOD); // lower rail
     upload(ObjectType::FENCE, verts);
     }
 
     // ---- STONE_FENCE: low stone wall ----
     {
     std::vector<ChunkVertex> verts;
-    pushBox(verts, {-0.42f, -0.14f, 0.0f}, {0.42f, 0.14f, 0.45f}, {0.56f, 0.56f, 0.60f});
+    pushBox(verts, {-0.42f, -0.14f, 0.0f}, {0.42f, 0.14f, 0.45f}, {0.56f, 0.56f, 0.60f}, LAYER_STONE);
     upload(ObjectType::STONE_FENCE, verts);
     }
 
@@ -767,9 +825,7 @@ void VulkanContext::createObjectMeshes() {
     const glm::vec3 dirt     = {0.34f, 0.30f, 0.18f};
     for (int i = 0; i < 7; i++) {
         const glm::vec3 col = (i % 2 == 0) ? dryGrass : dirt;
-        verts.push_back({center, n, col});
-        verts.push_back({ring[i], n, col});
-        verts.push_back({ring[(i + 1) % 7], n, col});
+        pushTri(verts, center, ring[i], ring[(i + 1) % 7], n, col, LAYER_NONE);
     }
     uploadMesh(m_groundPatchMesh, verts);
     }
@@ -790,9 +846,7 @@ void VulkanContext::createObjectMeshes() {
     auto tri = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
         glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
         if (glm::dot(n, (a + b + c) / 3.0f - center) < 0.0f) n = -n;
-        verts.push_back({a, n, pebbleColor});
-        verts.push_back({b, n, pebbleColor});
-        verts.push_back({c, n, pebbleColor});
+        pushTri(verts, a, b, c, n, pebbleColor, LAYER_NONE);
     };
     for (int i = 0; i < 5; i++) {
         tri(top, ring[i], ring[(i + 1) % 5]);
@@ -811,9 +865,7 @@ void VulkanContext::createObjectMeshes() {
         glm::vec3 b = side *  width;
         glm::vec3 c = dir * (width * 0.6f) + glm::vec3(0.0f, 0.0f, height);
         glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
-        verts.push_back({a, n, col});
-        verts.push_back({b, n, col});
-        verts.push_back({c, n, col});
+        pushTri(verts, a, b, c, n, col, LAYER_NONE);
     };
     blade(0.0f,      0.055f, 0.30f, {0.22f, 0.42f, 0.17f});
     blade(2.0944f,   0.050f, 0.24f, {0.27f, 0.50f, 0.20f});
@@ -825,8 +877,8 @@ void VulkanContext::createObjectMeshes() {
     {
     std::vector<GrassCardVertex> verts;
     auto card = [&](float angle) {
-        const float halfW = 0.31f;
-        const float h     = 0.48f;
+        const float halfW = 0.34f;
+        const float h     = 0.52f;
         const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
         const glm::vec3 side = dir * halfW;
         const glm::vec3 n    = {-dir.y, dir.x, 0.0f};
@@ -839,7 +891,8 @@ void VulkanContext::createObjectMeshes() {
         verts.insert(verts.end(), {bl, br, tr, bl, tr, tl});
     };
     card(0.0f);
-    card(1.5707963f);
+    card(2.0943951f);
+    card(4.1887902f);
     uploadGrassCardMesh(m_grassCardMesh, verts);
     }
 }
@@ -848,6 +901,12 @@ void VulkanContext::createObjectMeshes() {
 //  Procedural grass alpha texture
 // ============================================================
 void VulkanContext::createGrassTexture() {
+    const std::string authoredGrassPath = "assets/textures/grass.png";
+    if (std::ifstream(authoredGrassPath, std::ios::binary).good()) {
+        m_grassTex = createTextureFromFile(authoredGrassPath, /*withSampler=*/true);
+        return;
+    }
+
     // A small grass-tuft mask: curved tapering blades drawn into alpha, with a
     // base-dark / tip-light green. Kept isolated so a file-loaded image (stb_image) can
     // replace just this pixel fill later — pipeline/descriptor/mesh stay identical.
@@ -914,6 +973,13 @@ void VulkanContext::createGrassTexture() {
     // pipeline samples this with its own LINEAR/CLAMP sampler (withSampler=true).
     const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
     m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), imgSize, /*withSampler=*/true);
+}
+
+TextureResource VulkanContext::createTextureFromFile(const std::string& path, bool withSampler) {
+    LoadedImageRGBA8 image = loadImageRGBA8(path);
+    const VkDeviceSize imgSize = (VkDeviceSize)image.width * (VkDeviceSize)image.height * 4;
+    return createTexture((uint32_t)image.width, (uint32_t)image.height,
+        VK_FORMAT_R8G8B8A8_UNORM, image.pixels.data(), imgSize, withSampler);
 }
 
 TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
@@ -1040,15 +1106,39 @@ TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t heigh
 }
 
 void VulkanContext::createTerrainTextureArray() {
-    // Step 3a: per-material layers as seamless grayscale grain, distinct per layer.
-    // Multiplied by the per-tile vertex color so hue + baked AO are preserved (tint).
-    // Per-material art (grass blades, stone speckle, ...) is tuned in a later step.
-    const uint32_t W = 32, H = 32;
+    struct TerrainLayerFile {
+        uint32_t layer;
+        const char* path;
+    };
+    static const TerrainLayerFile terrainLayerFiles[] = {
+        {0, "assets/textures/terrain/grass_top.png"},
+        {1, "assets/textures/terrain/grass_side.png"},
+        {2, "assets/textures/terrain/dirt.png"},
+        {3, "assets/textures/terrain/stone.png"},
+        {4, "assets/textures/terrain/wood.png"},
+        {5, "assets/textures/terrain/leaves.png"},
+        {6, "assets/textures/terrain/farmland.png"},
+        {7, "assets/textures/terrain/wheat.png"},
+        {8, "assets/textures/terrain/water.png"},
+    };
+
+    // Step 4b: authored terrain images override the procedural material masks per layer.
+    uint32_t W = 64, H = 64;
+    for (const TerrainLayerFile& file : terrainLayerFiles) {
+        if (!fileExists(file.path)) continue;
+        LoadedImageRGBA8 image = loadImageRGBA8(file.path);
+        W = (uint32_t)image.width;
+        H = (uint32_t)image.height;
+        break;
+    }
+
     const uint32_t L = TERRAIN_TEX_LAYERS;
     std::vector<uint8_t> pixels((size_t)W * H * 4 * L, 255);
 
     auto smooth = [](float t) { return t * t * (3.0f - 2.0f * t); };
     auto lerp   = [](float a, float b, float t) { return a + (b - a) * t; };
+    auto clamp01 = [](float v) { return std::clamp(v, 0.0f, 1.0f); };
+    auto fract = [](float v) { return v - std::floor(v); };
     auto hash01 = [](int x, int y, int salt) -> float {
         uint32_t h = (uint32_t)x * 73856093u ^ (uint32_t)y * 19349663u ^ (uint32_t)salt * 83492791u;
         h ^= h >> 13; h *= 1274126177u;
@@ -1064,17 +1154,123 @@ void VulkanContext::createTerrainTextureArray() {
         return lerp(lerp(wh(gx, gy), wh(gx + 1, gy), tx),
                     lerp(wh(gx, gy + 1), wh(gx + 1, gy + 1), tx), ty);
     };
+    auto fbm = [&](int x, int y, int salt) {
+        return tileNoise(x, y, 16, salt) * 0.50f +
+               tileNoise(x, y,  8, salt + 1) * 0.32f +
+               tileNoise(x, y,  4, salt + 2) * 0.18f;
+    };
+    auto wave = [](float t, float freq, float phase = 0.0f) {
+        return 0.5f + 0.5f * std::sin((t * freq + phase) * 6.28318530718f);
+    };
+    auto thinLine = [&](float t, float freq, float phase = 0.0f) {
+        float d = std::abs(fract(t * freq + phase) - 0.5f) * 2.0f;
+        return std::pow(1.0f - d, 9.0f);
+    };
+    auto writePixel = [&](uint32_t layer, uint32_t x, uint32_t y, glm::vec3 c) {
+        uint8_t* p = &pixels[(((size_t)layer * H + y) * W + x) * 4];
+        p[0] = (uint8_t)(clamp01(c.r) * 255.0f);
+        p[1] = (uint8_t)(clamp01(c.g) * 255.0f);
+        p[2] = (uint8_t)(clamp01(c.b) * 255.0f);
+        p[3] = 255;
+    };
 
     for (uint32_t layer = 0; layer < L; layer++) {
         const int salt = 100 + (int)layer * 37;
         for (uint32_t y = 0; y < H; y++)
         for (uint32_t x = 0; x < W; x++) {
-            float n = tileNoise((int)x, (int)y, 8, salt) * 0.6f + tileNoise((int)x, (int)y, 4, salt + 1) * 0.4f;
-            float g = 0.72f + 0.28f * n; // gentle multiplicative grain
-            uint8_t v = (uint8_t)(g * 255.0f);
-            uint8_t* p = &pixels[(((size_t)layer * H + y) * W + x) * 4];
-            p[0] = v; p[1] = v; p[2] = v; p[3] = 255;
+            const float u = ((float)x + 0.5f) / (float)W;
+            const float v = ((float)y + 0.5f) / (float)H;
+            const float n = fbm((int)x, (int)y, salt);
+            const float fine = tileNoise((int)x, (int)y, 2, salt + 7);
+
+            glm::vec3 c(0.9f);
+            switch (layer) {
+                case 0: { // Grass top: soft blades and clumps.
+                    float blades = wave(u + tileNoise((int)x, (int)y, 8, salt + 11) * 0.10f, 18.0f);
+                    float value = 0.78f + n * 0.15f + blades * 0.07f + fine * 0.03f;
+                    c = glm::vec3(value * 0.96f, value * 1.02f, value * 0.93f);
+                    break;
+                }
+                case 1: { // Grass side: dirt strata with a little root breakup.
+                    float strata = wave(v + n * 0.07f, 5.0f);
+                    float value = 0.72f + n * 0.15f + strata * 0.07f;
+                    c = glm::vec3(value * 1.02f, value * 0.93f, value * 0.82f);
+                    break;
+                }
+                case 2: { // Dirt: clods and small darker grains.
+                    float speck = hash01((int)x, (int)y, salt + 19) > 0.78f ? 1.0f : 0.0f;
+                    float value = 0.70f + n * 0.22f + fine * 0.05f - speck * 0.07f;
+                    c = glm::vec3(value * 1.03f, value * 0.92f, value * 0.78f);
+                    break;
+                }
+                case 3: { // Stone: mottled facets and hairline cracks.
+                    float crack = std::max(thinLine(u + n * 0.05f, 4.0f), thinLine(v + n * 0.05f, 4.0f));
+                    float value = 0.72f + n * 0.20f + fine * 0.04f - crack * 0.13f;
+                    c = glm::vec3(value * 0.96f, value * 0.98f, value * 1.02f);
+                    break;
+                }
+                case 4: { // Wood: broad grain lines.
+                    float grain = wave(u + tileNoise((int)x, (int)y, 16, salt + 23) * 0.18f, 9.0f);
+                    float ring = thinLine(u + n * 0.08f, 4.0f);
+                    float value = 0.68f + grain * 0.16f + n * 0.12f - ring * 0.06f;
+                    c = glm::vec3(value * 1.06f, value * 0.91f, value * 0.70f);
+                    break;
+                }
+                case 5: { // Leaves: clustered mottling.
+                    float spot = hash01((int)(x / 2), (int)(y / 2), salt + 31) > 0.70f ? 1.0f : 0.0f;
+                    float value = 0.76f + n * 0.17f + fine * 0.06f - spot * 0.06f;
+                    c = glm::vec3(value * 0.92f, value * 1.03f, value * 0.86f);
+                    break;
+                }
+                case 6: { // Farmland: tilled furrows.
+                    float furrow = wave(v + n * 0.04f, 6.0f);
+                    float darkLine = std::pow(1.0f - furrow, 3.0f);
+                    float value = 0.68f + n * 0.12f + furrow * 0.08f - darkLine * 0.13f;
+                    c = glm::vec3(value * 1.03f, value * 0.88f, value * 0.68f);
+                    break;
+                }
+                case 7: { // Wheat: thin stalk rhythm.
+                    float stalks = std::pow(wave(u + n * 0.07f, 14.0f), 2.5f);
+                    float value = 0.76f + n * 0.12f + stalks * 0.14f;
+                    c = glm::vec3(value * 1.06f, value * 0.98f, value * 0.70f);
+                    break;
+                }
+                case 8: { // Water: subtle placeholder ripples; a dedicated water pass comes later.
+                    float ripple = wave(u + v + n * 0.03f, 2.0f) * 0.55f +
+                                   wave(u - v + n * 0.03f, 3.0f) * 0.45f;
+                    float value = 0.83f + ripple * 0.04f + n * 0.025f;
+                    c = glm::vec3(value * 0.88f, value * 0.98f, value * 1.03f);
+                    break;
+                }
+                default: {
+                    float value = 0.74f + n * 0.24f;
+                    c = glm::vec3(value);
+                    break;
+                }
+            }
+
+            writePixel(layer, x, y, c);
         }
+    }
+
+    auto copyLayerFromFile = [&](const TerrainLayerFile& file) {
+        if (!fileExists(file.path)) return;
+
+        LoadedImageRGBA8 image = loadImageRGBA8(file.path);
+        if ((uint32_t)image.width != W || (uint32_t)image.height != H) {
+            std::cerr << "Skipping terrain texture with mismatched size: " << file.path
+                      << " (" << image.width << "x" << image.height
+                      << ", expected " << W << "x" << H << ")\n";
+            return;
+        }
+
+        const size_t layerOffset = (size_t)file.layer * W * H * 4;
+        const size_t byteCount = (size_t)W * H * 4;
+        memcpy(pixels.data() + layerOffset, image.pixels.data(), byteCount);
+    };
+
+    for (const TerrainLayerFile& file : terrainLayerFiles) {
+        if (file.layer < L) copyLayerFromFile(file);
     }
 
     const VkDeviceSize size = (VkDeviceSize)W * H * 4 * L;

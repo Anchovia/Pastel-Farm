@@ -884,6 +884,52 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `object.vert`는 `fragLayer = -1.0` sentinel을 출력해 공유 `chunk.frag`에서 텍스처 샘플을 건너뛰게 했다. 따라서 tree/rock/workbench/fence 등 오브젝트 메시와 vertex 포맷은 이번 단계에서 건드리지 않았다.
 - 유저 빌드 검증 결과: 지형 텍스처 배열 경로가 정상 동작하고, 기존 색조/AO와 오브젝트·grass·shadow·UI·AA 경로는 유지되는 것으로 확인했다.
 
+### Terrain texture art 절차 패턴 1차 튜닝 (Task #3b)
+- `createTerrainTextureArray()` 내부만 수정해 새 이미지 파일/의존성 없이 9개 terrain layer의 절차 패턴을 구분했다. texture resource, descriptor, shader, vertex format은 그대로 유지했다.
+- texture 크기를 32×32 → 64×64로 올리고, 레이어별로 grass blade/clump, grass side strata, dirt clod/speckle, stone mottling/crack, wood grain, leaves mottling, farmland furrow, wheat stalk, water ripple 계열의 낮은 대비 패턴을 적용했다.
+- 텍스처는 여전히 albedo라기보다 material mask에 가깝게 설계했다. `chunk.frag`의 기존 `fragColor * albedo * lighting` 구조에서 vertex color가 색조와 AO를 계속 주도하도록 했다.
+- 유저 스크린샷 검증 결과: terrain layer 패턴이 보이고 grass/dirt/farmland/water 구분이 살아났다. 물은 패턴이 규칙적으로 보일 수 있어 ripple 대비/빈도를 낮춰 임시 placeholder로 정리했다.
+- water는 이후 별도 water pass 또는 water material 작업에서 다시 다룬다. 이번 단계의 목표는 실제 texture map 도입 전 UV/layer/tint/반복감 기준을 잡는 것이다.
+
+### Object texture mapping 1차 배선 (Task #3c)
+- 새 texture resource나 이미지 파일 없이, 기존 terrain `sampler2DArray`를 공유 material layer로 재사용해 StaticProp 오브젝트에도 텍스처 샘플 경로를 열었다.
+- object pipeline vertex input에 `ChunkVertex.uv`/`layer`를 location 6/7로 추가하고, `object.vert`가 더 이상 `fragLayer = -1` sentinel을 강제하지 않고 정점 UV/layer를 `chunk.frag`로 전달하게 했다.
+- `createObjectMeshes()`에서 tree trunk/workbench/fence는 WOOD layer, tree canopy는 LEAVES layer, rock/stone fence는 STONE layer를 받도록 정점 데이터를 채웠다. vertex color는 기존처럼 색조/tint 역할로 유지한다.
+- ground patch, pebble, legacy grass clump 같은 visual-only dressing mesh는 `layer = -1`로 명시해 기존 vertex color-only 표현을 유지했다.
+- `chunk.frag`와 `ChunkVertex` 주석은 terrain 전용이 아니라 material texture-array layer 의미로 정리했다. shadow object pass는 position만 읽으므로 변경하지 않았다.
+- 유저 스크린샷 검증 결과: 나무/울타리/작업대의 wood grain, 바위/돌담의 stone layer가 정상적으로 보이고, 지형·grass·shadow·UI·AA 경로는 유지되는 것으로 확인했다.
+
+### Authored texture loading 토대 추가 (Task #4a)
+- `third_party/stb/stb_image.h`를 추가해 PNG/JPG 등 이미지 파일을 RGBA8 픽셀로 읽을 수 있게 했다. 새 런타임 DLL이나 패키지 매니저 의존성 없이 단일 헤더만 저장소에 포함한다.
+- `CMakeLists.txt`에 `assets` post-build copy를 추가했다. 빌드 후 실행 파일 옆에 `assets/textures` 경로가 생기며, 이후 실제 텍스처 이미지를 넣어도 실행 기준 상대 경로가 유지된다.
+- `createTextureFromFile(path, withSampler)`를 추가해 파일 로드 결과를 기존 `TextureResource`/`createTexture(...)` 업로드 경로로 연결했다. Vulkan image/view/sampler 수명 모델은 기존과 동일하다.
+- `createGrassTexture()`는 `assets/textures/grass.png`가 있으면 파일 텍스처를 먼저 사용하고, 없으면 기존 절차 grass alpha texture를 그대로 생성한다. 따라서 이번 단계만으로 화면 변화는 없어야 한다.
+- 유저 빌드 검증 결과: `out/build/x64-Debug/assets` 폴더가 생성되어 asset copy 토대가 정상 동작하는 것을 확인했다. 실제 texture map 선정과 material-lite 상수, mipmap/sampler 정책은 후속 작업으로 남긴다.
+
+### Authored terrain texture override 1차 적용 (Task #4b)
+- `createTerrainTextureArray()`가 먼저 절차 material mask를 생성한 뒤, `assets/textures/terrain/*.png`가 있으면 layer별로 RGBA8 파일 이미지를 덮어쓰게 했다.
+- 파일 매핑은 `grass_top`, `grass_side`, `dirt`, `stone`, `wood`, `leaves`, `farmland`, `wheat`, `water` 9개 layer다. 현재 저장소에는 water를 제외한 8개 `1024×1024 PNG` Color texture를 추가했다.
+- 첫 번째로 발견한 authored terrain 이미지 크기를 texture array 크기로 삼고, 크기가 다른 파일은 해당 layer만 건너뛰며 절차 fallback을 유지한다. 모든 layer가 누락되면 기존 64×64 절차 texture array로 동작한다.
+- `water.png`는 의도적으로 추가하지 않았다. 물은 현재 절차 ripple fallback을 유지하고, 이후 전용 water pass/material에서 별도 처리한다.
+- 유저 빌드/스크린샷 검증 결과: terrain authored texture가 실제로 적용됐다. 현재 `fragColor * texture` 구조 때문에 색과 노이즈가 강하게 먹을 수 있으므로, 다음 개선은 texture strength 또는 stylized albedo 보정으로 분리한다.
+
+### Texture tone 안정화 1차 (Task #4c)
+- `chunk.frag`의 terrain/object material 합성을 `fragColor * rawTexture`에서 `fragColor * materialDetail`로 바꿨다.
+- `sampleMaterialDetail()`이 texture luma를 중립 밝기 디테일로 변환하고, texture chroma는 약하게만 섞는다. vertex color가 Pastel Farm의 주 색감을 유지하고, authored texture는 표면 질감 역할에 머물게 하는 목적이다.
+- 첫 조정은 너무 약해 grass/dirt/stone 질감이 덜 읽혔고, 최종값은 detail 강도 0.80, detail clamp 0.68~1.26, chroma mix 0.24로 정했다.
+- 유저 빌드/스크린샷 검증 결과: 첫 authored texture 적용 때처럼 실사 노이즈가 화면을 잡아먹지 않으면서, 흙과 지형 질감은 은은하게 남았다. 전역 안정화 값으로는 유지하고, layer별 strength는 필요가 확인되면 후속 작업으로 분리한다.
+
+### Layer별 texture strength 1차 (Task #4d)
+- `chunk.frag`에 `materialTextureStrength(layer)`를 추가해 terrain/object가 공유하는 material layer별 texture 영향도를 다르게 조절했다.
+- grass top/leaves는 낮게 유지해 바닥과 캐노피가 실사 노이즈로 지저분해지지 않게 하고, dirt/farmland/stone은 조금 더 높여 질감이 읽히게 했다. wood/wheat는 중간값, water fallback은 낮은 값으로 둔다.
+- 현재 값: grass top 0.62, grass side 0.82, dirt 1.05, stone 1.15, wood 0.90, leaves 0.58, farmland 1.05, wheat 0.90, water 0.35.
+- 유저 빌드/스크린샷 검증 결과: 흙/밭/돌의 texture 존재감은 살아났고 grass top은 조용하게 유지됐다. grass 바닥은 이후 grass card density/variant/wind와 ground dressing으로 채우는 방향이라, 현재 값은 유지한다.
+
+### High-quality grass 1차 튜닝 (Task #5a)
+- 기존 grass alpha card 경로를 유지한 채, X자 2-card clump를 120도 간격의 3-card clump로 바꿨다. 인스턴스 포맷, descriptor, shadow caster, 저장/충돌 규칙은 변경하지 않았다.
+- `buildGrassDressingBuffer()`에서 grass 배치 확률을 `0.06 + density * 0.40` → `0.08 + density * 0.48`로 올리고, scale/jitter/variant 범위를 조금 넓혀 빈 잔디 바닥을 card가 더 채우게 했다.
+- 유저 빌드/스크린샷 검증 결과: grass가 이전보다 풍성해졌고, DevUI 기준 scene GPU 시간이 약 1.0ms 수준으로 유지됐다. 일부 균등 배치 느낌은 남아 있으므로 다음 개선은 density patch 대비, wind sway, 거리 LOD/fade, card/tint variant로 본다.
+
 ---
 
 ## 게임 설계 메모
@@ -914,7 +960,7 @@ World
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass(FXAA/SMAA 1x), post 이후 UI overlay를 분리해 그린다.
-- 다음 비주얼 개선은 terrain texture art 튜닝, object texture mapping, material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
+- 다음 비주얼 개선은 material-lite, 실제 texture file loading/authored texture, high-quality grass(wind/LOD/variant), ground dressing 텍스처화, water 전용 표현이 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
 
 ---
 

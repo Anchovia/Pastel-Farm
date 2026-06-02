@@ -20,6 +20,38 @@ layout(location = 4)      in vec2 fragUV;
 layout(location = 5) flat in float fragLayer;
 layout(location = 0) out vec4 outColor;
 
+float materialTextureStrength(float layer) {
+    int materialLayer = int(floor(layer + 0.5));
+    switch (materialLayer) {
+        case 0: return 0.62; // grass top
+        case 1: return 0.82; // grass side
+        case 2: return 1.05; // dirt
+        case 3: return 1.15; // stone
+        case 4: return 0.90; // wood
+        case 5: return 0.58; // leaves
+        case 6: return 1.05; // farmland
+        case 7: return 0.90; // wheat
+        case 8: return 0.35; // water fallback
+        default: return 0.80;
+    }
+}
+
+vec3 sampleMaterialDetail(vec2 uv, float layer) {
+    if (layer < 0.0) return vec3(1.0);
+
+    vec3 tex = texture(terrainTex, vec3(uv, layer)).rgb;
+    float luma = dot(tex, vec3(0.299, 0.587, 0.114));
+
+    float strength = materialTextureStrength(layer);
+    float detail = clamp(1.0 + (luma - 0.5) * (0.80 * strength),
+                         mix(1.0, 0.68, strength),
+                         mix(1.0, 1.26, strength));
+    vec3 chroma = tex / max(luma, 0.08);
+    chroma = clamp(chroma, vec3(0.60), vec3(1.55));
+
+    return mix(vec3(1.0), chroma, 0.24 * strength) * detail;
+}
+
 void main() {
     vec3  normal    = normalize(fragNormal);
     vec3  lightDir  = normalize(ubo.lightDir.xyz);
@@ -50,10 +82,9 @@ void main() {
     vec3 ambient = ambientTint * mix(0.10, 0.30, dayFactor);
     vec3 direct  = vec3(diff * 0.7 * dayFactor * shadowFactor);
 
-    // Terrain albedo from the texture array (layer < 0 = untextured object: white).
-    // Vertex color stays as a tint, so per-tile hue + baked AO are preserved.
-    vec3 albedo = (fragLayer < 0.0) ? vec3(1.0) : texture(terrainTex, vec3(fragUV, fragLayer)).rgb;
-    vec3 litColor = fragColor * albedo * (ambient + direct);
+    // Material texture contributes low-strength detail; vertex color owns the style hue.
+    vec3 materialDetail = sampleMaterialDetail(fragUV, fragLayer);
+    vec3 litColor = fragColor * materialDetail * (ambient + direct);
 
     // Fog
     const float FOG_START = 27.0;

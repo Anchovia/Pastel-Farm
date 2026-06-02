@@ -184,6 +184,7 @@ private:
     // Generic uploaded-texture helper: staging upload + image + view (+ optional sampler).
     TextureResource createTexture(uint32_t width, uint32_t height, VkFormat format,
         const void* bytes, VkDeviceSize size, bool withSampler);
+    TextureResource createTextureFromFile(const std::string& path, bool withSampler);
     // Layered variant for a sampler2DArray (bytes laid out layer-major, all same size).
     TextureResource createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
         VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler);

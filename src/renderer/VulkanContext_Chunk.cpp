@@ -167,7 +167,7 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
     const int baseX = coord.x * CHUNK_SIZE;
     const int baseY = coord.y * CHUNK_SIZE;
     std::vector<ObjectInstance> insts;
-    insts.reserve(192);
+    insts.reserve(256);
 
     auto hash01 = [](int wx, int wy, int salt) -> float {
         uint32_t h = (uint32_t)wx * 73856093u ^ (uint32_t)wy * 19349663u ^ (uint32_t)salt * 83492791u;
@@ -237,15 +237,15 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
         float density = densityField(wx, wy);
         density = clamp01(density * (0.72f + ((float)openGrass / 8.0f) * 0.38f));
 
-        const float chance = 0.06f + density * 0.40f;
+        const float chance = 0.08f + density * 0.48f;
         if (hash01(wx, wy, 11) > chance) continue;
 
-        const float jitter = 0.54f + density * 0.30f;
+        const float jitter = 0.58f + density * 0.28f;
         const float ox = (hash01(wx, wy, 23) - 0.5f) * jitter;
         const float oy = (hash01(wx, wy, 37) - 0.5f) * jitter;
         const float variant = hash01(wx, wy, 67);
-        const float variantScale = variant < 0.28f ? 0.90f : (variant > 0.82f ? 1.08f : 1.0f);
-        const float sc = (0.64f + density * 0.30f + hash01(wx, wy, 41) * (0.20f + density * 0.16f)) * variantScale;
+        const float variantScale = variant < 0.25f ? 0.88f : (variant > 0.80f ? 1.12f : 1.0f);
+        const float sc = (0.68f + density * 0.34f + hash01(wx, wy, 41) * (0.22f + density * 0.16f)) * variantScale;
         const float rt = hash01(wx, wy, 53) * 6.2831853f;
         insts.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.51f}, sc, rt});
     }

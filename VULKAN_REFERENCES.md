@@ -56,16 +56,15 @@
 
 ### 1. Texture resource helper
 
-**도입 완료.** grass alpha 텍스처와 SMAA `AreaTex/SearchTex` LUT가 staging upload → image/transition/copy/view 시퀀스를 중복으로 갖던 것을, `GpuBuffer`식 move-only RAII 구조체 `TextureResource` + `createTexture(width, height, format, bytes, size, withSampler)` 헬퍼로 통합했다. sampler는 옵션(grass=자체 sampler, SMAA LUT=공유 `m_postSampler`).
+**도입 완료.** grass alpha 텍스처와 SMAA `AreaTex/SearchTex` LUT가 staging upload → image/transition/copy/view 시퀀스를 중복으로 갖던 것을, `GpuBuffer`식 move-only RAII 구조체 `TextureResource` + `createTexture(width, height, format, bytes, size, withSampler)` 헬퍼로 통합했다. sampler는 옵션(grass=자체 sampler, SMAA LUT=공유 `m_postSampler`). Authored texture loading 4a에서는 `stb_image` RGBA8 로더와 `createTextureFromFile(path, withSampler)`를 추가해 같은 업로드 경로를 파일 기반 텍스처에도 재사용한다.
 
 다음 확장 후보:
 
-- grass texture를 파일에서 로드
-- terrain layer art 튜닝, object albedo texture, 또는 atlas/array variant 추가
+- terrain/object authored albedo texture, 또는 atlas/array variant 추가
 - flower/ground patch 등 dressing texture가 2개 이상 추가
 - UI font/atlas texture가 별도 리소스로 들어옴
 
-terrain texture mapping 3a에서는 `sampler2DArray`용 `createTextureArray(width, height, layerCount, format, bytes, size, withSampler)`를 추가해 같은 `TextureResource` 수명 모델을 유지했다. 다음 확장은 terrain layer art 튜닝, object texture, 파일 로드(stb_image), mipmap/sampler 옵션이 실제로 필요해지는 시점에 한다.
+terrain texture mapping 3a에서는 `sampler2DArray`용 `createTextureArray(width, height, layerCount, format, bytes, size, withSampler)`를 추가해 같은 `TextureResource` 수명 모델을 유지했다. 4a에서는 `assets/textures/grass.png` 선택적 로드 + 절차 fallback까지 연결했다. 4b에서는 `assets/textures/terrain/*.png`로 terrain layer별 Color texture override를 적용했고, 누락되거나 크기가 맞지 않는 layer는 절차 fallback을 유지한다. 4c에서는 `fragColor * rawTexture` 대신 luma/chroma 기반 `materialDetail`을 사용해 texture를 주 색상이 아니라 표면 질감으로 안정화했다. 다음 확장은 material-lite, layer별 strength, mipmap/sampler 옵션이 실제로 필요해지는 시점에 한다.
 
 ### 2. Instance data 확장
 
@@ -134,10 +133,16 @@ SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한
 
 1. ✅ TextureResource helper — 완료
 2. ✅ terrain texture mapping 3a — `sampler2DArray` + 청크 UV/layer + vertex color tint 유지 완료
-3. terrain texture art 3b / object texture mapping 3c
-4. material-lite
-5. high-quality grass(wind/LOD/variant)
-6. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
+3. ✅ terrain texture art 3b — 절차 64×64 material mask 1차 튜닝 완료. 물은 전용 water pass 전 임시 placeholder
+4. ✅ object texture mapping 3c — object vertex UV/layer 배선, WOOD/LEAVES/STONE layer 재사용 완료
+5. ✅ authored texture loading 4a — `stb_image` RGBA8 로더 + `assets/textures` 복사 + `grass.png` 선택적 fallback 완료
+6. ✅ authored terrain texture override 4b — terrain layer별 Color texture 파일 override + 절차 fallback 완료
+7. ✅ texture tone 4c — luma/chroma 기반 `materialDetail`로 raw texture 곱셈 안정화 완료
+8. ✅ layer별 texture strength 4d — grass/leaves는 낮게, dirt/farmland/stone은 높게, wood/wheat는 중간값으로 분리 완료
+9. ✅ high-quality grass 5a — 3-card clump + density/scale 상향 완료
+10. grass wind/LOD/variant
+11. material-lite/mipmap/sampler — roughness/specular 상수와 sampler 정책
+12. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
 
 PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
 
@@ -161,8 +166,9 @@ PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실�
 1. `buildGrassDressingBuffer` 안에 좌표 기반 density field를 추가했다.
 2. 균등 확률 대신 patch 단위 밀도와 open grass bias를 사용한다.
 3. `ObjectInstance` 포맷 변경 없이 scale/offset 범위를 density에 따라 다르게 준다.
-4. 색/texture/card variant는 실제 필요가 확인될 때 인스턴스 포맷과 `grass.vert/.frag`를 함께 확장한다.
-5. grass 품질 문제가 alpha edge에서 확인되면 `alphatocoverage`, `multisampling`, `texturemipmapgen` 샘플을 다시 본다.
+4. 5a에서는 인스턴스 포맷을 유지한 채 3-card clump와 density/scale 값을 올렸다. 다음은 wind sway, 거리 LOD/fade, patch 대비를 우선 본다.
+5. 색/texture/card variant는 실제 필요가 확인될 때 인스턴스 포맷과 `grass.vert/.frag`를 함께 확장한다.
+6. grass 품질 문제가 alpha edge에서 확인되면 `alphatocoverage`, `multisampling`, `texturemipmapgen` 샘플을 다시 본다.
 
 이렇게 하면 Step 6는 수술적으로 작게 시작하면서도, 이후 texture array / wind / LOD / indirect draw로 확장할 길을 막지 않는다.
 

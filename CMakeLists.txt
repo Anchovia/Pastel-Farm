@@ -52,7 +52,7 @@ add_executable(engine
     src/world/TerrainGen.cpp
  "src/game/Camera.h" "src/platform/InputManager.h" "src/platform/InputManager.cpp")
 
-target_include_directories(engine PRIVATE src third_party/smaa ${Vulkan_INCLUDE_DIRS})
+target_include_directories(engine PRIVATE src third_party/smaa third_party/stb ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(engine PRIVATE Vulkan::Vulkan glfw glm::glm)
 target_compile_definitions(engine PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
@@ -85,6 +85,8 @@ endif()
 
 set(SHADER_SRC_DIR ${CMAKE_SOURCE_DIR}/shaders)
 set(SHADER_OUT_DIR $<TARGET_FILE_DIR:engine>/shaders)
+set(ASSET_SRC_DIR ${CMAKE_SOURCE_DIR}/assets)
+set(ASSET_OUT_DIR $<TARGET_FILE_DIR:engine>/assets)
 
 set(SHADERS
     ${SHADER_SRC_DIR}/triangle.vert
@@ -143,4 +145,10 @@ add_custom_command(TARGET engine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/smaa_edge.frag.spv ${SHADER_OUT_DIR}/smaa_edge.frag.spv
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/smaa_blend.frag.spv ${SHADER_OUT_DIR}/smaa_blend.frag.spv
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/spirv/smaa_neighborhood.frag.spv ${SHADER_OUT_DIR}/smaa_neighborhood.frag.spv
+)
+
+# Copy authored assets next to the executable.
+add_custom_command(TARGET engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${ASSET_OUT_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${ASSET_SRC_DIR} ${ASSET_OUT_DIR}
 )
