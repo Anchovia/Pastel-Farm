@@ -135,8 +135,8 @@ SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한
 1. ✅ TextureResource helper — 완료
 2. ✅ terrain texture mapping 3a — `sampler2DArray` + 청크 UV/layer + vertex color tint 유지 완료
 3. ✅ terrain texture art 3b — 절차 64×64 material mask 1차 튜닝 완료. 물은 전용 water pass 전 임시 placeholder
-4. object texture mapping 3c
-5. material-lite
+4. ✅ object texture mapping 3c — object vertex UV/layer 배선, WOOD/LEAVES/STONE layer 재사용 완료
+5. material-lite + authored texture loading
 6. high-quality grass(wind/LOD/variant)
 7. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
 

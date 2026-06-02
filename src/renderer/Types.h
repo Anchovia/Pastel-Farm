@@ -180,11 +180,11 @@ struct ChunkVertex {
     glm::vec3 normal;
     glm::vec3 color;  // top face uses topColor, side/bottom use sideColor (kept as tint)
     glm::vec2 uv;     // per-face 0..1
-    float     layer;  // terrain texture-array layer; < 0 = untextured (objects)
+    float     layer;  // material texture-array layer; < 0 = untextured
 };
 
 // Terrain texture-array layers — one material per layer. tileFaceLayer maps a tile
-// type + face to its layer index; objects pass layer < 0 (untextured) via the shader.
+// type + face to its layer index. Objects may reuse these material layers.
 static constexpr uint32_t TERRAIN_TEX_LAYERS = 9;
 inline int tileFaceLayer(TileType t, bool isTop) {
     switch (t) {

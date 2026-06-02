@@ -891,6 +891,14 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 유저 스크린샷 검증 결과: terrain layer 패턴이 보이고 grass/dirt/farmland/water 구분이 살아났다. 물은 패턴이 규칙적으로 보일 수 있어 ripple 대비/빈도를 낮춰 임시 placeholder로 정리했다.
 - water는 이후 별도 water pass 또는 water material 작업에서 다시 다룬다. 이번 단계의 목표는 실제 texture map 도입 전 UV/layer/tint/반복감 기준을 잡는 것이다.
 
+### Object texture mapping 1차 배선 (Task #3c)
+- 새 texture resource나 이미지 파일 없이, 기존 terrain `sampler2DArray`를 공유 material layer로 재사용해 StaticProp 오브젝트에도 텍스처 샘플 경로를 열었다.
+- object pipeline vertex input에 `ChunkVertex.uv`/`layer`를 location 6/7로 추가하고, `object.vert`가 더 이상 `fragLayer = -1` sentinel을 강제하지 않고 정점 UV/layer를 `chunk.frag`로 전달하게 했다.
+- `createObjectMeshes()`에서 tree trunk/workbench/fence는 WOOD layer, tree canopy는 LEAVES layer, rock/stone fence는 STONE layer를 받도록 정점 데이터를 채웠다. vertex color는 기존처럼 색조/tint 역할로 유지한다.
+- ground patch, pebble, legacy grass clump 같은 visual-only dressing mesh는 `layer = -1`로 명시해 기존 vertex color-only 표현을 유지했다.
+- `chunk.frag`와 `ChunkVertex` 주석은 terrain 전용이 아니라 material texture-array layer 의미로 정리했다. shadow object pass는 position만 읽으므로 변경하지 않았다.
+- 유저 스크린샷 검증 결과: 나무/울타리/작업대의 wood grain, 바위/돌담의 stone layer가 정상적으로 보이고, 지형·grass·shadow·UI·AA 경로는 유지되는 것으로 확인했다.
+
 ---
 
 ## 게임 설계 메모
@@ -921,7 +929,7 @@ World
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass(FXAA/SMAA 1x), post 이후 UI overlay를 분리해 그린다.
-- 다음 비주얼 개선은 object texture mapping, material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화, water 전용 표현이 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
+- 다음 비주얼 개선은 material-lite, 실제 texture file loading/authored texture, high-quality grass(wind/LOD/variant), ground dressing 텍스처화, water 전용 표현이 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
 
 ---
 

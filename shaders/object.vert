@@ -9,12 +9,14 @@ layout(binding = 0) uniform UniformBufferObject {
     vec4 fogColor;
 } ubo;
 
-layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec3 inColor;
+layout(location = 0) in vec3  inPosition;
+layout(location = 1) in vec3  inNormal;
+layout(location = 2) in vec3  inColor;
 layout(location = 3) in vec3  instancePos;
 layout(location = 4) in float instanceScale;
 layout(location = 5) in float instanceRot;
+layout(location = 6) in vec2  inUV;
+layout(location = 7) in float inLayer;
 
 layout(location = 0) flat out vec3 fragNormal;
 layout(location = 1)      out vec3 fragColor;
@@ -36,6 +38,6 @@ void main() {
     fragColor         = inColor;
     fragPosLightSpace = ubo.lightMVP * vec4(worldPos, 1.0);
     fragViewDepth     = -viewPos.z;
-    fragUV            = vec2(0.0);
-    fragLayer         = -1.0; // objects are untextured (vertex color only)
+    fragUV            = inUV;
+    fragLayer         = inLayer;
 }

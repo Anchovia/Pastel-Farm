@@ -552,6 +552,8 @@ void VulkanContext::createObjectPipeline() {
         { 3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectInstance, pos)   },
         { 4, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, scale) },
         { 5, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, rot)   },
+        { 6, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(ChunkVertex, uv)       },
+        { 7, 0, VK_FORMAT_R32_SFLOAT,       offsetof(ChunkVertex, layer)    },
     };
     cfg.cullMode   = VK_CULL_MODE_NONE;  // procedural mesh — winding not guaranteed outward
     cfg.depthTest  = true;
@@ -628,6 +630,19 @@ void VulkanContext::createObjectMeshes() {
         ObjectMesh& mesh = m_objectMeshes[(size_t)type];
         uploadMesh(mesh, verts);
     };
+    const float LAYER_NONE  = -1.0f;
+    const float LAYER_STONE = (float)tileFaceLayer(TileType::STONE, true);
+    const float LAYER_WOOD  = (float)tileFaceLayer(TileType::WOOD, true);
+    const float LAYER_LEAF  = (float)tileFaceLayer(TileType::LEAVES, true);
+    auto makeVertex = [](glm::vec3 pos, glm::vec3 normal, glm::vec3 color, glm::vec2 uv, float layer) {
+        return ChunkVertex{pos, normal, color, uv, layer};
+    };
+    auto pushTri = [&](std::vector<ChunkVertex>& v, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
+                       glm::vec3 n, glm::vec3 col, float layer) {
+        v.push_back(makeVertex(a, n, col, {0.0f, 1.0f}, layer));
+        v.push_back(makeVertex(b, n, col, {1.0f, 1.0f}, layer));
+        v.push_back(makeVertex(c, n, col, {0.5f, 0.0f}, layer));
+    };
 
     // ---- TREE: box trunk + 3 stacked cones (pine) ----
     {
@@ -647,12 +662,12 @@ void VulkanContext::createObjectMeshes() {
         glm::vec3 n = glm::normalize(glm::vec3((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f, 0.0f));
         glm::vec3 a0 = {a.x, a.y, t0}, b0 = {b.x, b.y, t0};
         glm::vec3 a1 = {a.x, a.y, t1}, b1 = {b.x, b.y, t1};
-        verts.push_back({a0, n, trunkColor});
-        verts.push_back({b0, n, trunkColor});
-        verts.push_back({b1, n, trunkColor});
-        verts.push_back({a0, n, trunkColor});
-        verts.push_back({b1, n, trunkColor});
-        verts.push_back({a1, n, trunkColor});
+        verts.push_back(makeVertex(a0, n, trunkColor, {0.0f, 1.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(b0, n, trunkColor, {1.0f, 1.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(b1, n, trunkColor, {1.0f, 0.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(a0, n, trunkColor, {0.0f, 1.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(b1, n, trunkColor, {1.0f, 0.0f}, LAYER_WOOD));
+        verts.push_back(makeVertex(a1, n, trunkColor, {0.0f, 0.0f}, LAYER_WOOD));
     }
 
     // Canopy: 3 stacked cones
@@ -671,9 +686,7 @@ void VulkanContext::createObjectMeshes() {
             glm::vec3 b1   = {cone.radius * cosf(a1), cone.radius * sinf(a1), cone.baseZ};
             glm::vec3 apex = {0.0f, 0.0f, cone.topZ};
             glm::vec3 n    = glm::normalize(glm::cross(b1 - b0, apex - b0));
-            verts.push_back({b0,   n, leafColor});
-            verts.push_back({b1,   n, leafColor});
-            verts.push_back({apex, n, leafColor});
+            pushTri(verts, b0, b1, apex, n, leafColor, LAYER_LEAF);
         }
     }
 
@@ -695,9 +708,7 @@ void VulkanContext::createObjectMeshes() {
     auto tri = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
         glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
         if (glm::dot(n, (a + b + c) / 3.0f - center) < 0.0f) n = -n;
-        verts.push_back({a, n, rockColor});
-        verts.push_back({b, n, rockColor});
-        verts.push_back({c, n, rockColor});
+        pushTri(verts, a, b, c, n, rockColor, LAYER_STONE);
     };
     for (int i = 0; i < 4; i++) {
         const glm::vec3& p0 = ring[i];
@@ -709,14 +720,18 @@ void VulkanContext::createObjectMeshes() {
     }
 
     // Flat-shaded axis-aligned box helper (cullMode is NONE for objects, so winding is free).
-    auto pushBox = [](std::vector<ChunkVertex>& v, glm::vec3 mn, glm::vec3 mx, glm::vec3 col) {
+    auto pushBox = [&](std::vector<ChunkVertex>& v, glm::vec3 mn, glm::vec3 mx, glm::vec3 col, float layer) {
         const glm::vec3 c[8] = {
             {mn.x,mn.y,mn.z},{mx.x,mn.y,mn.z},{mx.x,mx.y,mn.z},{mn.x,mx.y,mn.z},
             {mn.x,mn.y,mx.z},{mx.x,mn.y,mx.z},{mx.x,mx.y,mx.z},{mn.x,mx.y,mx.z},
         };
         auto quad = [&](int a, int b, int d, int e, glm::vec3 n) {
-            v.push_back({c[a],n,col}); v.push_back({c[b],n,col}); v.push_back({c[d],n,col});
-            v.push_back({c[a],n,col}); v.push_back({c[d],n,col}); v.push_back({c[e],n,col});
+            v.push_back(makeVertex(c[a], n, col, {0.0f, 1.0f}, layer));
+            v.push_back(makeVertex(c[b], n, col, {1.0f, 1.0f}, layer));
+            v.push_back(makeVertex(c[d], n, col, {1.0f, 0.0f}, layer));
+            v.push_back(makeVertex(c[a], n, col, {0.0f, 1.0f}, layer));
+            v.push_back(makeVertex(c[d], n, col, {1.0f, 0.0f}, layer));
+            v.push_back(makeVertex(c[e], n, col, {0.0f, 0.0f}, layer));
         };
         quad(4,5,6,7,{0,0,1});  quad(0,3,2,1,{0,0,-1});
         quad(0,1,5,4,{0,-1,0}); quad(3,7,6,2,{0,1,0});
@@ -726,8 +741,8 @@ void VulkanContext::createObjectMeshes() {
     // ---- WORKBENCH: a simple low table box ----
     {
     std::vector<ChunkVertex> verts;
-    pushBox(verts, {-0.35f, -0.35f, 0.0f}, {0.35f, 0.35f, 0.42f}, {0.52f, 0.36f, 0.18f});
-    pushBox(verts, {-0.40f, -0.40f, 0.42f}, {0.40f, 0.40f, 0.52f}, {0.62f, 0.45f, 0.25f}); // top slab
+    pushBox(verts, {-0.35f, -0.35f, 0.0f}, {0.35f, 0.35f, 0.42f}, {0.52f, 0.36f, 0.18f}, LAYER_WOOD);
+    pushBox(verts, {-0.40f, -0.40f, 0.42f}, {0.40f, 0.40f, 0.52f}, {0.62f, 0.45f, 0.25f}, LAYER_WOOD); // top slab
     upload(ObjectType::WORKBENCH, verts);
     }
 
@@ -735,17 +750,17 @@ void VulkanContext::createObjectMeshes() {
     {
     std::vector<ChunkVertex> verts;
     const glm::vec3 wood = {0.56f, 0.40f, 0.22f};
-    pushBox(verts, {-0.40f, -0.07f, 0.0f}, {-0.24f, 0.07f, 0.6f}, wood); // left post
-    pushBox(verts, { 0.24f, -0.07f, 0.0f}, { 0.40f, 0.07f, 0.6f}, wood); // right post
-    pushBox(verts, {-0.40f, -0.05f, 0.40f}, {0.40f, 0.05f, 0.50f}, wood); // top rail
-    pushBox(verts, {-0.40f, -0.05f, 0.18f}, {0.40f, 0.05f, 0.28f}, wood); // lower rail
+    pushBox(verts, {-0.40f, -0.07f, 0.0f}, {-0.24f, 0.07f, 0.6f}, wood, LAYER_WOOD); // left post
+    pushBox(verts, { 0.24f, -0.07f, 0.0f}, { 0.40f, 0.07f, 0.6f}, wood, LAYER_WOOD); // right post
+    pushBox(verts, {-0.40f, -0.05f, 0.40f}, {0.40f, 0.05f, 0.50f}, wood, LAYER_WOOD); // top rail
+    pushBox(verts, {-0.40f, -0.05f, 0.18f}, {0.40f, 0.05f, 0.28f}, wood, LAYER_WOOD); // lower rail
     upload(ObjectType::FENCE, verts);
     }
 
     // ---- STONE_FENCE: low stone wall ----
     {
     std::vector<ChunkVertex> verts;
-    pushBox(verts, {-0.42f, -0.14f, 0.0f}, {0.42f, 0.14f, 0.45f}, {0.56f, 0.56f, 0.60f});
+    pushBox(verts, {-0.42f, -0.14f, 0.0f}, {0.42f, 0.14f, 0.45f}, {0.56f, 0.56f, 0.60f}, LAYER_STONE);
     upload(ObjectType::STONE_FENCE, verts);
     }
 
@@ -767,9 +782,7 @@ void VulkanContext::createObjectMeshes() {
     const glm::vec3 dirt     = {0.34f, 0.30f, 0.18f};
     for (int i = 0; i < 7; i++) {
         const glm::vec3 col = (i % 2 == 0) ? dryGrass : dirt;
-        verts.push_back({center, n, col});
-        verts.push_back({ring[i], n, col});
-        verts.push_back({ring[(i + 1) % 7], n, col});
+        pushTri(verts, center, ring[i], ring[(i + 1) % 7], n, col, LAYER_NONE);
     }
     uploadMesh(m_groundPatchMesh, verts);
     }
@@ -790,9 +803,7 @@ void VulkanContext::createObjectMeshes() {
     auto tri = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
         glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
         if (glm::dot(n, (a + b + c) / 3.0f - center) < 0.0f) n = -n;
-        verts.push_back({a, n, pebbleColor});
-        verts.push_back({b, n, pebbleColor});
-        verts.push_back({c, n, pebbleColor});
+        pushTri(verts, a, b, c, n, pebbleColor, LAYER_NONE);
     };
     for (int i = 0; i < 5; i++) {
         tri(top, ring[i], ring[(i + 1) % 5]);
@@ -811,9 +822,7 @@ void VulkanContext::createObjectMeshes() {
         glm::vec3 b = side *  width;
         glm::vec3 c = dir * (width * 0.6f) + glm::vec3(0.0f, 0.0f, height);
         glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
-        verts.push_back({a, n, col});
-        verts.push_back({b, n, col});
-        verts.push_back({c, n, col});
+        pushTri(verts, a, b, c, n, col, LAYER_NONE);
     };
     blade(0.0f,      0.055f, 0.30f, {0.22f, 0.42f, 0.17f});
     blade(2.0944f,   0.050f, 0.24f, {0.27f, 0.50f, 0.20f});

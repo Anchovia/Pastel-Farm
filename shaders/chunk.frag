@@ -50,8 +50,8 @@ void main() {
     vec3 ambient = ambientTint * mix(0.10, 0.30, dayFactor);
     vec3 direct  = vec3(diff * 0.7 * dayFactor * shadowFactor);
 
-    // Terrain albedo from the texture array (layer < 0 = untextured object: white).
-    // Vertex color stays as a tint, so per-tile hue + baked AO are preserved.
+    // Material albedo from the texture array (layer < 0 = untextured: white).
+    // Vertex color stays as a tint, so authored hue + baked AO are preserved.
     vec3 albedo = (fragLayer < 0.0) ? vec3(1.0) : texture(terrainTex, vec3(fragUV, fragLayer)).rgb;
     vec3 litColor = fragColor * albedo * (ambient + direct);
 
