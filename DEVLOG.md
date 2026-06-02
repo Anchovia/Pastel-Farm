@@ -805,6 +805,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 기존 조건(GRASS + open sky + object 회피)과 `grassDirty` 재생성 게이트는 유지해 gameplay/save/object 렌더 경로 영향 없이 grass dressing만 변경.
 - 유저 빌드 검증 결과: 실행 정상, 균등 clump 느낌이 줄고 dense/sparse patch 차이가 생김. 다음 개선은 ground dressing layer, tint/texture/card variant, wind가 핵심.
 
+### Ground dressing layer 1차와 미학 피드백 (Vegetation Step 7)
+- grass와 별도의 visual-only ground dressing buffer를 추가. 청크별 `groundPatchBuffer` / `pebbleBuffer`를 만들고, object pipeline을 재사용해 지형 렌더 후 grass 렌더 전에 그림.
+- 배치 조건은 GRASS/DIRT + open sky + object 회피를 기준으로 하고, 좌표 기반 noise와 open ground bias로 patch/pebble을 결정론적으로 배치.
+- 저장, 충돌, 채집, shadow caster에는 연결하지 않았다. 의도는 최종 아트가 아니라 나중에 texture/card/decal 기반 지면 디테일로 바꾸기 전 placement layer를 검증하는 것.
+- 유저 빌드/스크린샷 피드백: 구조는 작동하지만 결과가 너무 못생겼다. 갈색 patch와 pebble placeholder가 크고 대비가 강해, 은은한 지면 디테일이 아니라 화면을 어지럽히는 오브젝트처럼 보인다.
+- 결론: Step 7 구조는 유지 가치가 있지만 현재 geometry placeholder는 최종 방향이 아니다. 다음 작업은 patch를 크게 줄이거나 비활성화하고, grass card tint/variant 또는 낮은 대비의 texture 기반 ground detail 쪽으로 전환하는 것이 좋다.
+
 ---
 
 ## 게임 설계 메모

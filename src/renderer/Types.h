@@ -194,7 +194,7 @@ struct UIVertex {
     glm::vec4 color;
 };
 
-// Object instance — per-tree transform (mesh reuses ChunkVertex)
+// Object instance transform for low-poly props and visual dressing.
 struct ObjectInstance {
     glm::vec3 pos;
     float     scale;

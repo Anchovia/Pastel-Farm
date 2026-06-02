@@ -121,6 +121,7 @@ private:
     void buildChunkBuffer(const glm::ivec2& coord, Chunk& chunk);
     void buildChunkObjectBuffer(const glm::ivec2& coord, Chunk& chunk);
     void buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chunk);
+    void buildGroundDressingBuffer(const glm::ivec2& coord, Chunk& chunk);
     void rebuildDirtyChunks();
     void createUIPipeline();
     void createUIBuffer();
@@ -212,7 +213,7 @@ private:
     VkPipeline               m_chunkPipeline     = VK_NULL_HANDLE;  // Chunk mesh
     VkPipeline               m_uiPipeline        = VK_NULL_HANDLE;  // 2D UI overlay
     VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
-    VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props (trees)
+    VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props and dressing
     VkPipeline               m_grassPipeline     = VK_NULL_HANDLE;  // Instanced alpha-card grass
 
     // Post-process: scene → offscreen color, then fullscreen pass → swapchain
@@ -242,6 +243,10 @@ private:
         std::vector<ObjGroup> objGroups;
         GpuBuffer      grassBuffer;
         uint32_t       grassCount = 0;
+        GpuBuffer      groundPatchBuffer;
+        uint32_t       groundPatchCount = 0;
+        GpuBuffer      pebbleBuffer;
+        uint32_t       pebbleCount = 0;
     };
     std::unordered_map<glm::ivec2, ChunkRenderData, IVec2Hash> m_chunkBuffers;
     Frustum                  m_frustum;
@@ -254,6 +259,8 @@ private:
     std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
     ObjectMesh m_grassClumpMesh;
     ObjectMesh m_grassCardMesh;
+    ObjectMesh m_groundPatchMesh;
+    ObjectMesh m_pebbleMesh;
 
     // Procedural grass alpha texture (sampled by the grass card pipeline). Creation is
     // isolated in createGrassTexture so a file-loaded image can swap in later.

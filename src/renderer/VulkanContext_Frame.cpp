@@ -242,6 +242,32 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdDrawIndexed(cmd, data.indexCount, 1, 0, 0, 0);
     }
 
+    // Ground dressing - visual-only flat patches and tiny pebbles, not shadow casters
+    {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_objectPipeline);
+        for (auto& [coord, data] : m_chunkBuffers) {
+            if (data.groundPatchCount == 0 && data.pebbleCount == 0) continue;
+
+            glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+            glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+            if (!m_frustum.containsAABB(chunkMin, chunkMax)) continue;
+
+            if (m_groundPatchMesh.count > 0 && data.groundPatchCount > 0) {
+                VkBuffer     bufs[] = { m_groundPatchMesh.vbuf, data.groundPatchBuffer };
+                VkDeviceSize offs[] = { 0, 0 };
+                vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+                vkCmdDraw(cmd, m_groundPatchMesh.count, data.groundPatchCount, 0, 0);
+            }
+
+            if (m_pebbleMesh.count > 0 && data.pebbleCount > 0) {
+                VkBuffer     bufs[] = { m_pebbleMesh.vbuf, data.pebbleBuffer };
+                VkDeviceSize offs[] = { 0, 0 };
+                vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+                vkCmdDraw(cmd, m_pebbleMesh.count, data.pebbleCount, 0, 0);
+            }
+        }
+    }
+
     // Grass alpha cards — visual-only dressing, not a shadow caster
     {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_grassPipeline);

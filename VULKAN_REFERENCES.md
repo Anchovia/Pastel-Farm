@@ -134,6 +134,20 @@ SaschaWillems의 debug utils/pipeline statistics 계열은 DevUI와 궁합이 �
 
 ---
 
+## Vegetation Step 7에 대한 메모
+
+`ground dressing layer` 1차는 Vulkan 기능 자체보다 **식생과 별도의 placement layer를 청크 단위로 만들 수 있는지**를 확인하는 작업이었다. 현재 구현은 별도 ground patch/pebble instance buffer를 만들고 object pipeline으로 그리는 구조라, 나중에 texture/card/decal 계열 표현으로 교체해도 배치 규칙을 재사용할 수 있다.
+
+검증 결과와 판단:
+
+1. 구조적으로는 visual-only dressing buffer, draw order, object 회피, grass/dirt/open-sky 조건을 검증했다.
+2. 미학적으로는 실패에 가깝다. 갈색 patch와 pebble placeholder가 너무 크고 대비가 강해 지면 디테일이 아니라 화면을 어지럽히는 오브젝트처럼 보였다.
+3. 최종 목표는 geometry patch 대량 배치가 아니라 texture/alpha detail, 작은 color breakup, 낮은 대비의 ground dressing이다.
+4. 다음 작업에서는 Step 7 구조를 유지하되 patch 밀도/크기/대비를 크게 낮추거나 비활성화하고, grass card variant/tint 또는 ground texture helper 쪽을 우선 검토한다.
+5. texture 리소스가 grass 외 2개 이상으로 늘어나는 시점에 SaschaWillems `texture`, `texturearray`, `texturemipmapgen` 샘플을 다시 보고 `TextureResource` helper 추출을 검토한다.
+
+---
+
 ## 문서 갱신 규칙
 
 - 새 Vulkan 레퍼런스 판단은 우선 이 문서에 적는다.
