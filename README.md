@@ -50,7 +50,8 @@
 ### App Flow / 입력
 - `MainMenu / Settings / Loading / Gameplay / Pause` 상태 흐름
 - 클릭형 `START`, `SETTINGS`, `RESUME`, `QUIT`, `BACK` UI
-- VSync ON/OFF 실제 present mode 적용, AA OFF/FXAA/SMAA 선택 데이터/UI
+- VSync ON/OFF 실제 present mode 적용, AA OFF/FXAA/SMAA 선택 UI
+- FXAA 실제 post AA 적용 완료, SMAA는 현재 FXAA fallback
 - 메뉴/settings/loading/pause 중 게임 입력·월드 업데이트 차단
 - `ESC`: Gameplay↔Pause, 인벤토리가 열려 있으면 인벤토리 닫기 우선
 
@@ -72,7 +73,8 @@
 - 제네릭 오브젝트 인스턴싱(`ObjectType`별 mesh + 청크별 instance group)
 - 2048² shadow map, 3×3 PCF, 청크/오브젝트/플레이어 shadow caster
 - day/night 기반 sky/fog/light 변화, hemisphere ambient
-- offscreen scene → post pass tone/color grading(exposure/contrast/saturation/split-tone/vignette)
+- offscreen scene → post pass tone/color grading(exposure/contrast/saturation/split-tone/vignette) + FXAA
+- 자체 게임 UI는 post AA 이후 스왑체인에 직접 렌더링해 픽셀 폰트 선명도 유지
 - grass alpha card dressing: 절차 RGBA grass texture + X자 card + alpha test + density field + 청크별 dirty gate
 - DevUI(ImGui, `PASTEL_DEV_BUILD`) + GPU timestamp(total/shadow/scene/post/imgui)
 
@@ -82,7 +84,7 @@
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
 - **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
-- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · height fog · texture mapping/material-lite · high-quality grass(wind/LOD/variant) · ground dressing texture · **AA(SMAA + FXAA fallback)** · shadow quality options · LUT
+- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · ✅ FXAA(+SMAA fallback) · height fog · texture mapping/material-lite · high-quality grass(wind/LOD/variant) · ground dressing texture · SMAA 실제 적용 · shadow quality options · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · full render graph · material node graph · RTX/full GI · full PBR 전면 전환 · mesh shader/bindless 대규모 시스템
 

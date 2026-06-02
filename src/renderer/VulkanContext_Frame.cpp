@@ -339,15 +339,6 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), m_dropCount, 0, 0, 0);
     }
 
-    // UI overlay (screen-space, on top of everything)
-    if (m_uiVertexCount > 0) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiPipeline);
-        VkBuffer     uiBufs[] = { m_uiBuffer[m_currentFrame] };
-        VkDeviceSize uiOffs[] = { 0 };
-        vkCmdBindVertexBuffers(cmd, 0, 1, uiBufs, uiOffs);
-        vkCmdDraw(cmd, m_uiVertexCount, 1, 0, 0);
-    }
-
     vkCmdEndRenderPass(cmd); // end scene pass (offscreen color now SHADER_READ_ONLY)
 #ifdef PASTEL_DEV_BUILD
     writeDevTimestamp(cmd, 2);
@@ -371,7 +362,25 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_postPipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
             m_postPipelineLayout, 0, 1, &m_postDescriptorSets[m_currentFrame], 0, nullptr);
+        PostPushConstants postPc{};
+        postPc.params = glm::vec4(
+            1.0f / (float)m_swapchainExtent.width,
+            1.0f / (float)m_swapchainExtent.height,
+            (float)m_aaModeHud,
+            0.0f
+        );
+        vkCmdPushConstants(cmd, m_postPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT,
+            0, sizeof(PostPushConstants), &postPc);
         vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
+
+        // UI overlay draws after post AA so pixel text remains crisp.
+        if (m_uiVertexCount > 0) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_uiPipeline);
+            VkBuffer     uiBufs[] = { m_uiBuffer[m_currentFrame] };
+            VkDeviceSize uiOffs[] = { 0 };
+            vkCmdBindVertexBuffers(cmd, 0, 1, uiBufs, uiOffs);
+            vkCmdDraw(cmd, m_uiVertexCount, 1, 0, 0);
+        }
 #ifdef PASTEL_DEV_BUILD
         writeDevTimestamp(cmd, 3);
         if (ImGui::GetCurrentContext()) {

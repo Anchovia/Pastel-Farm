@@ -106,6 +106,7 @@ private:
         bool             depthTest;   // depthTestEnable + depthWriteEnable
         bool             alphaBlend;  // semi-transparent (UI)
         VkPipelineLayout layout;
+        VkRenderPass     renderPass = VK_NULL_HANDLE;
     };
     VkPipeline createPipeline(const PipelineConfig& cfg);
     void createGraphicsPipeline();

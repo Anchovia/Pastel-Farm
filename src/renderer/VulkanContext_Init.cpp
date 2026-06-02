@@ -350,7 +350,7 @@ void VulkanContext::createRenderPass() {
 // ============================================================
 //  Graphics pipelines
 // ============================================================
-// Shared graphics-pipeline builder for the main render pass. Fills all common
+// Shared graphics-pipeline builder. Fills all common
 // fixed-function state; per-pipeline differences come from PipelineConfig.
 VkPipeline VulkanContext::createPipeline(const PipelineConfig& cfg) {
     auto vertCode = readFile(cfg.vertPath);
@@ -445,7 +445,7 @@ VkPipeline VulkanContext::createPipeline(const PipelineConfig& cfg) {
     pipelineInfo.pDepthStencilState  = &depthStencil;
     pipelineInfo.pDynamicState       = &dynamicState;
     pipelineInfo.layout              = cfg.layout;
-    pipelineInfo.renderPass          = m_renderPass;
+    pipelineInfo.renderPass          = (cfg.renderPass != VK_NULL_HANDLE) ? cfg.renderPass : m_renderPass;
     pipelineInfo.subpass             = 0;
 
     VkPipeline pipeline;
@@ -527,6 +527,7 @@ void VulkanContext::createUIPipeline() {
     cfg.depthTest  = false;   // UI draws on top — no depth test/write
     cfg.alphaBlend = true;    // semi-transparent panels
     cfg.layout     = m_uiPipelineLayout;
+    cfg.renderPass = m_postRenderPass;
     m_uiPipeline = createPipeline(cfg);
 }
 
@@ -1063,9 +1064,15 @@ void VulkanContext::createPostPipeline() {
         throw std::runtime_error("Failed to create post descriptor set layout");
 
     VkPipelineLayoutCreateInfo pl{};
-    pl.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pl.setLayoutCount = 1;
-    pl.pSetLayouts    = &m_postDescriptorSetLayout;
+    VkPushConstantRange postPush{};
+    postPush.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    postPush.offset     = 0;
+    postPush.size       = sizeof(PostPushConstants);
+    pl.sType                   = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pl.setLayoutCount          = 1;
+    pl.pSetLayouts             = &m_postDescriptorSetLayout;
+    pl.pushConstantRangeCount  = 1;
+    pl.pPushConstantRanges     = &postPush;
     if (vkCreatePipelineLayout(m_device, &pl, nullptr, &m_postPipelineLayout) != VK_SUCCESS)
         throw std::runtime_error("Failed to create post pipeline layout");
 

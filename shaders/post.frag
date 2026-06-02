@@ -4,6 +4,10 @@
 // we grade here and the swapchain write re-encodes to sRGB.
 layout(binding = 0) uniform sampler2D sceneColor;
 
+layout(push_constant) uniform PostPushConstants {
+    vec4 params; // xy = inverse framebuffer size, z = AA mode, w = unused
+} pc;
+
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 outColor;
 
@@ -15,9 +19,67 @@ const vec3  SHADOW_TINT = vec3(1.00, 0.99, 0.98); // neutral / faintly warm shad
 const vec3  HIGH_TINT   = vec3(1.07, 1.02, 0.92); // warmer highlights
 const float VIGNETTE    = 0.22;  // 0 = off, 1 = strong
 
-void main() {
-    vec3 c = texture(sceneColor, uv).rgb;
+const float FXAA_EDGE_THRESHOLD_MIN = 0.0312;
+const float FXAA_EDGE_THRESHOLD     = 0.125;
+const float FXAA_REDUCE_MUL         = 1.0 / 8.0;
+const float FXAA_REDUCE_MIN         = 1.0 / 128.0;
+const float FXAA_SPAN_MAX           = 8.0;
 
+float luminance(vec3 c) {
+    return dot(c, vec3(0.299, 0.587, 0.114));
+}
+
+vec3 sampleScene(vec2 p) {
+    return texture(sceneColor, clamp(p, vec2(0.0), vec2(1.0))).rgb;
+}
+
+vec3 applyFxaa(vec2 p) {
+    vec2 rcpFrame = pc.params.xy;
+
+    vec3 rgbM  = sampleScene(p);
+    vec3 rgbNW = sampleScene(p + rcpFrame * vec2(-1.0, -1.0));
+    vec3 rgbNE = sampleScene(p + rcpFrame * vec2( 1.0, -1.0));
+    vec3 rgbSW = sampleScene(p + rcpFrame * vec2(-1.0,  1.0));
+    vec3 rgbSE = sampleScene(p + rcpFrame * vec2( 1.0,  1.0));
+
+    float lumaM  = luminance(rgbM);
+    float lumaNW = luminance(rgbNW);
+    float lumaNE = luminance(rgbNE);
+    float lumaSW = luminance(rgbSW);
+    float lumaSE = luminance(rgbSE);
+
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+    float lumaRange = lumaMax - lumaMin;
+    if (lumaRange < max(FXAA_EDGE_THRESHOLD_MIN, lumaMax * FXAA_EDGE_THRESHOLD)) {
+        return rgbM;
+    }
+
+    vec2 dir;
+    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+
+    float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * 0.25 * FXAA_REDUCE_MUL, FXAA_REDUCE_MIN);
+    float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+    dir = clamp(dir * rcpDirMin, vec2(-FXAA_SPAN_MAX), vec2(FXAA_SPAN_MAX)) * rcpFrame;
+
+    vec3 rgbA = 0.5 * (
+        sampleScene(p + dir * (1.0 / 3.0 - 0.5)) +
+        sampleScene(p + dir * (2.0 / 3.0 - 0.5))
+    );
+    vec3 rgbB = 0.5 * rgbA + 0.25 * (
+        sampleScene(p + dir * -0.5) +
+        sampleScene(p + dir *  0.5)
+    );
+
+    float lumaB = luminance(rgbB);
+    if (lumaB < lumaMin || lumaB > lumaMax) {
+        return rgbA;
+    }
+    return rgbB;
+}
+
+vec3 applyGrade(vec3 c) {
     // exposure
     c *= EXPOSURE;
 
@@ -36,5 +98,11 @@ void main() {
     float vig = smoothstep(0.85, 0.25, length(uv - 0.5));
     c *= mix(1.0 - VIGNETTE, 1.0, vig);
 
-    outColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    return clamp(c, 0.0, 1.0);
+}
+
+void main() {
+    int aaMode = int(pc.params.z + 0.5);
+    vec3 c = (aaMode == 0) ? sampleScene(uv) : applyFxaa(uv);
+    outColor = vec4(applyGrade(c), 1.0);
 }

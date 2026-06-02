@@ -42,7 +42,7 @@
 | Instancing | [`examples/instancing`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/instancing) | 현재 object/grass instancing과 직접 관련. `ObjectInstance` 확장, variant index, tint, wind phase를 넣을 때 비교 |
 | Indirect draw | [`examples/indirectdraw`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/indirectdraw) | 식생/오브젝트 종류와 draw 수가 크게 늘어난 뒤 후보. 지금은 청크별 직접 draw가 단순하고 충분함 |
 | Alpha to coverage | [`examples/alphatocoverage`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/alphatocoverage) | grass alpha card 품질 개선 후보. SMAA/FXAA 이후에도 alpha edge가 거칠면 MSAA 정책과 함께 검토 |
-| Multisampling | [`examples/multisampling`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/multisampling) | AA 품질 옵션 확장 시 참고. 우선순위는 FXAA/SMAA 실제 적용이 먼저 |
+| Multisampling | [`examples/multisampling`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/multisampling) | AA 품질 옵션 확장 시 참고. FXAA는 post pass로 적용 완료. MSAA/alpha-to-coverage는 SMAA 이후에도 alpha edge 품질이 부족할 때 검토 |
 | Shadow mapping | [`examples/shadowmapping`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmapping) | 이미 구현된 shadow pass의 bias/PCF/descriptor 비교용. 구조 전환 목적은 아님 |
 | Cascaded shadow mapping | [`examples/shadowmappingcascade`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmappingcascade) | 권장 사양/품질 옵션에서 원거리 그림자 품질이 문제가 될 때 후보. 지금은 단일 shadow map 유지 |
 | Offscreen rendering | [`examples/offscreen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/offscreen) | 현재 post pass와 같은 계열. 추가 후처리, 미니맵, 반사 같은 기능 전 참고 |
@@ -112,21 +112,26 @@ SaschaWillems의 debug utils/pipeline statistics 계열은 DevUI와 궁합이 �
 
 ## 다음 구현 순서 메모
 
-다음 렌더링 구현은 **FXAA 실제 적용**부터 시작한다. 이유:
+FXAA 실제 적용은 완료됐다. 현재 상태:
 
-1. Settings에는 이미 `AA OFF / FXAA / SMAA` 데이터/UI가 있다.
-2. post pass가 이미 있으므로 FXAA는 구조 변경이 작고 체감이 빠르다.
-3. grass alpha card edge와 지형/오브젝트 edge 품질을 비교할 기준이 생긴다.
-4. SMAA, texture mapping, material-lite로 넘어가기 전에 AA 정책을 먼저 고정할 수 있다.
+1. Settings의 `AA OFF / FXAA / SMAA` 중 `FXAA`는 실제 post AA 경로에 연결됐다.
+2. `AA OFF`는 기존 post grading만 수행한다.
+3. `AA SMAA`는 아직 실제 SMAA가 아니며 현재 FXAA fallback으로 동작한다.
+4. 자체 게임 UI는 post AA 이후 스왑체인에 직접 그려 픽셀 폰트 깨짐을 피한다.
+
+다음 렌더링 구현은 **SMAA 실제 적용**부터 시작한다. 이유:
+
+1. FXAA는 빠르고 구조 변경이 작지만, 픽셀 아트/얇은 alpha edge에서 한계가 있다.
+2. Settings에는 이미 `SMAA` 선택지가 있어 실제 품질 옵션만 연결하면 된다.
+3. SMAA 구현 방식을 정하면 이후 texture mapping, material-lite, grass 품질 튜닝의 비교 기준이 안정된다.
 
 권장 순서:
 
-1. FXAA 실제 적용
-2. SMAA 적용
-3. TextureResource helper
-4. terrain/object texture mapping
-5. material-lite
-6. high-quality grass(wind/LOD/variant)
+1. SMAA 적용
+2. TextureResource helper
+3. terrain/object texture mapping
+4. material-lite
+5. high-quality grass(wind/LOD/variant)
 
 PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
 

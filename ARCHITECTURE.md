@@ -36,7 +36,7 @@ src/
 ## 렌더러 [구현됨]
 
 - Vulkan: instance / device / swapchain / render pass / pipelines / sync
-- **파이프라인**: 공유 빌더 `createPipeline(PipelineConfig)`로 scene 계열(player/selector/drop·chunk·object·grass·ui)을 생성하고, post는 별도 fullscreen pipeline으로 처리. shadow 계열(청크/오브젝트/플레이어)은 depth-only 별도 파이프라인.
+- **파이프라인**: 공유 빌더 `createPipeline(PipelineConfig)`로 scene 계열(player/selector/drop·chunk·object·grass)과 UI overlay pipeline을 생성하고, post는 별도 fullscreen pipeline으로 처리. UI pipeline은 post render pass에 맞춰 생성되어 FXAA/color grading 이후 스왑체인 위에 그려진다. shadow 계열(청크/오브젝트/플레이어)은 depth-only 별도 파이프라인.
 - viewport/scissor = **dynamic state** (리사이즈 시 파이프라인 재생성 불필요)
 - **청크 메시**: Hidden Face Culling, 청크별 vertex/index 버퍼, dirty만 리빌드(프레임당 N개 제한)
 - **컬링**: 청크 AABB frustum culling (메인패스 + shadow 라이트 프러스텀)
@@ -46,7 +46,7 @@ src/
 - **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어, 밤엔 shadow geometry draw 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
 - 색/재질: 현재 지형/오브젝트는 top/side vertex color + per-vertex AO 베이크, grass는 alpha texture. 장기적으로 terrain/object texture mapping과 material-lite(albedo + tint + roughness/specular 계열 상수)를 도입
-- **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
+- **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. 자체 게임 UI도 post AA 이후에 렌더링해 픽셀 폰트가 FXAA에 의해 깨지지 않게 한다. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
 
 ---
 
@@ -78,7 +78,7 @@ src/
 - ✅ DevUI(ImGui, `PASTEL_DEV_BUILD` 게이트) + Dev 빌드 구성 + GPU timestamp 프로파일링 — 비주얼 튜닝의 전제조건. **완료**
 - ✅ `FrameRenderData` 스냅샷 — `drawFrame` 인자 10개 → 구조체 1개(`VulkanContext.h`). 렌더러는 public 경계에서 스냅샷만 소비. **완료**
 - ✅ `GpuBuffer` RAII 래퍼 — `VkBuffer+VkDeviceMemory`(+mapped) move-only RAII로 통합, `createBuffer` 반환형화. `operator VkBuffer()`로 읽기 무변경. **완료**
-- App-state 머신(MainMenu/Settings/Loading/Gameplay/Pause) + 입력 정책 + world session start/end. **MainMenu 클릭 UI + Settings 클릭 UI(+VSync 적용/AA 데이터) + Loading 1차 + Pause 클릭 메뉴 완료**: 시작 시 MainMenu 표시, `START` / `SETTINGS` row 클릭으로 Gameplay 시작 또는 Settings 진입(키보드 백업 없이 클릭 전용), 설정 row 클릭으로 VSync ON/OFF(swapchain present mode 재생성 적용)·AA OFF/FXAA/SMAA(데이터/UI) 변경, 시작 시 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글, Pause에서는 `RESUME` / `SETTINGS` / `QUIT`(세션 정리 후 타이틀 복귀) row 클릭 제공. Settings는 진입 위치(MainMenu/Pause)에 따라 `BACK`/`ESC` 복귀 위치가 달라짐. 인벤토리가 열린 Gameplay에서는 `ESC`가 Pause보다 인벤토리 닫기를 우선. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단. AA 실제 렌더 적용·해상도·볼륨 등 추가 옵션은 예정
+- App-state 머신(MainMenu/Settings/Loading/Gameplay/Pause) + 입력 정책 + world session start/end. **MainMenu 클릭 UI + Settings 클릭 UI(+VSync 적용/AA 데이터) + Loading 1차 + Pause 클릭 메뉴 완료**: 시작 시 MainMenu 표시, `START` / `SETTINGS` row 클릭으로 Gameplay 시작 또는 Settings 진입(키보드 백업 없이 클릭 전용), 설정 row 클릭으로 VSync ON/OFF(swapchain present mode 재생성 적용)·AA OFF/FXAA/SMAA(UI/데이터) 변경, FXAA 실제 post AA 적용 완료(SMAA는 현재 FXAA fallback), 시작 시 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글, Pause에서는 `RESUME` / `SETTINGS` / `QUIT`(세션 정리 후 타이틀 복귀) row 클릭 제공. Settings는 진입 위치(MainMenu/Pause)에 따라 `BACK`/`ESC` 복귀 위치가 달라짐. 인벤토리가 열린 Gameplay에서는 `ESC`가 Pause보다 인벤토리 닫기를 우선. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단. 해상도·볼륨 등 추가 옵션은 예정
 
 **Tier 2 — 비주얼 정체성 (DevUI로 실시간 튜닝)**
 - ✅ 카메라 follow 댐핑 — `Camera` 내부 `m_followTarget` 지수 보간 + Loading 후 `snapToTarget`으로 저장 위치 스냅. 플레이어 추적감 개선, 회전은 기존 즉시 반응 유지
@@ -86,7 +86,7 @@ src/
 - height fog
 - ✅ vegetation alpha card 1차 — 절차 grass texture + X자 card clump + alpha test + shadow 제외 + 청크별 dirty gate. **완료**
 - ✅ density field 기반 grass dressing 1차 — 균등 확률 대신 patch density + open grass bias + density 기반 offset/scale variation 적용. **완료**
-- 다음 비주얼 후보: FXAA/SMAA 실제 적용 · terrain/object texture mapping · material-lite · high-quality grass(wind/LOD/density 옵션) · ground dressing 텍스처화 · shadow quality options · LUT(선택)
+- 다음 비주얼 후보: SMAA 실제 적용 · terrain/object texture mapping · material-lite · high-quality grass(wind/LOD/density 옵션) · ground dressing 텍스처화 · shadow quality options · LUT(선택)
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -97,7 +97,8 @@ src/
 ### 렌더링 품질 로드맵 (Tier 2 세부)
 - ✅ color grading / tone mapping (post 1패스: exposure/contrast/saturation/split-tone/vignette)
 - ✅ 그림자 접지 튜닝 (피터패닝 — bias 축소 + cull 조정 완료)
-- AA 실제 적용: FXAA 먼저 연결, SMAA를 주력 품질 옵션으로 추가
+- ✅ FXAA 실제 적용: post pass에서 화면 edge를 완화. 자체 게임 UI는 FXAA 이후에 그려 픽셀 폰트 선명도 유지
+- SMAA 실제 적용: 현재 `AA SMAA`는 임시 FXAA fallback. 다음 단계에서 SMAA를 주력 품질 옵션으로 별도 추가
 - texture mapping: terrain atlas/object albedo texture 경로 추가. vertex color는 tint/스타일 보정으로 유지
 - material-lite: full PBR 전환 전, albedo + tint + roughness/specular 상수로 재질 차이를 표현
 - shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
@@ -107,12 +108,11 @@ src/
 ### 다음 실행 순서 — 결정
 다음 세션/작업은 아래 순서를 따른다. 큰 material/PBR 시스템이나 render graph로 먼저 가지 않는다.
 
-1. 현재 변경분(렌더링 품질 기준 문서 재정렬 + Step 9 grass texture/card detail)을 먼저 커밋한다.
-2. **FXAA 실제 적용**: 이미 Settings에 있는 `AA OFF / FXAA / SMAA` 데이터와 post pass를 연결한다. 목표는 grass alpha edge, 지형/오브젝트 edge가 덜 거칠어지는지 확인하는 것.
-3. **SMAA 적용**: FXAA 이후 품질 옵션으로 추가한다. 필요하면 lookup texture/상수 테이블/패스 구성 방식을 별도 설계한다.
-4. **TextureResource 기반**: grass texture 생성/upload 경로를 일반화해 terrain/object texture mapping의 토대를 만든다.
-5. **Terrain/object texture mapping + material-lite**: terrain atlas 또는 단순 albedo texture부터 시작하고, vertex color는 tint/스타일 보정으로 유지한다.
-6. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
+1. 현재 FXAA/UI 후처리 순서 수정 변경분을 커밋한다.
+2. **SMAA 적용**: FXAA fallback과 구분되는 실제 품질 옵션으로 추가한다. 필요하면 lookup texture/상수 테이블/패스 구성 방식을 별도 설계한다.
+3. **TextureResource 기반**: grass texture 생성/upload 경로를 일반화해 terrain/object texture mapping의 토대를 만든다.
+4. **Terrain/object texture mapping + material-lite**: terrain atlas 또는 단순 albedo texture부터 시작하고, vertex color는 tint/스타일 보정으로 유지한다.
+5. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
 
 이 순서는 "품질을 올리되, 매 단계가 화면에 바로 기여하고 기존 구조와 자연스럽게 맞물리는" 경로다.
 

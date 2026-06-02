@@ -18,6 +18,10 @@ struct UniformBufferObject {
     glm::vec4 fogColor; // rgb = sky color at current time of day
 };
 
+struct PostPushConstants {
+    glm::vec4 params; // xy = inverse framebuffer size, z = AA mode, w = unused
+};
+
 // ============================================================
 //  Cube vertex data (24 verts, 4 per face — flat-shaded)
 // ============================================================

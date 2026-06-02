@@ -832,6 +832,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 다음 렌더링 방향은 FXAA/SMAA 실제 적용, terrain/object texture mapping, material-lite, high-quality grass(wind/LOD/variant), shadow quality options, ground dressing 텍스처화로 재정렬.
 - 실행 순서도 정리: 현재 변경분 커밋 → FXAA 실제 적용 → SMAA → TextureResource helper → terrain/object texture mapping → material-lite → high-quality grass. 다음 세션은 PBR/render graph 같은 대형 시스템보다 FXAA부터 시작하는 것이 맞다.
 
+### FXAA post AA 실제 적용 + UI 후처리 순서 분리
+- Settings의 `AA OFF / FXAA / SMAA` 중 `FXAA`를 `post.frag`의 실제 FXAA 경로에 연결. `PostPushConstants`로 inverse framebuffer size와 AA mode를 fragment shader에 전달한다.
+- `AA OFF`는 기존 post grading만 수행한다. `AA SMAA`는 아직 별도 SMAA가 아니며 현재는 FXAA fallback으로 동작한다. 다음 단계에서 SMAA edge/blend/neighborhood pass 또는 lookup texture/상수 테이블 방식을 설계해야 한다.
+- 자체 게임 UI(메뉴/핫바/픽셀 폰트)는 scene offscreen pass에서 제거하고 post fullscreen draw 이후 같은 post render pass에서 스왑체인에 직접 렌더링한다. FXAA가 픽셀 폰트 획을 섞어 `BACK` 글자가 깨지는 문제를 해결했다.
+- `createPipeline(PipelineConfig)`에 render pass override를 추가해 기본은 `m_renderPass`, UI만 `m_postRenderPass`를 사용하도록 최소 확장. ImGui DevUI와 자체 UI 모두 AA/color grading 영향 밖에서 선명하게 유지한다.
+- 유저 빌드 검증 결과: `AA OFF`는 미적용, `AA FXAA`는 적용, `AA SMAA`는 현재 FXAA와 동일하게 보임. UI 깨짐 수정도 정상 확인.
+
 ---
 
 ## 게임 설계 메모
@@ -861,8 +868,8 @@ World
 
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
-- 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop/ui, post pass를 분리해 그린다.
-- 다음 비주얼 개선은 FXAA/SMAA 실제 적용, texture mapping/material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다.
+- 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass, post 이후 UI overlay를 분리해 그린다.
+- 다음 비주얼 개선은 SMAA 실제 적용, texture mapping/material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다.
 
 ---
 
