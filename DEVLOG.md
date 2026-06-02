@@ -862,6 +862,19 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 유저 빌드 검증 결과: SMAA가 OFF 대비 edge 완화가 눈에 띄게 강해졌고 실제 적용이 체감됨.
 - 대각선 계단은 1x + diagonal detection 부재 때문에 남아 있어, 다음 작업(5b)에서 `smaa_blend.frag`에 diagonal detection(`SMAACalculateDiagWeights` 계열)을 포팅해 본질적으로 개선한다.
 
+### SMAA diagonal detection 포팅 + Ultra 프리셋 도달 (Task #5b)
+- `smaa_blend.frag`에 Iryoku SMAA의 diagonal 경로(`SMAACalculateDiagWeights`, `searchDiag1/2`, `areaDiag`, `decodeDiagBilinearAccess`, `movc`)를 GLSL로 포팅. `main()`에서 north edge일 때 대각 패턴을 먼저 계산하고, 검출되면 직교 H/V 처리를 건너뜀(없으면 기존 직교 경로 fallback).
+- diagonal area 데이터는 기존 `AreaTex` 우측 절반(`texcoord.x += 0.5`)에 이미 있어 새 LUT/텍스처/C++/디스크립터 변경 없이 셰이더만 수정. 1x이므로 `subsampleIndices = vec4(0)`로 단순화.
+- `SMAA_MAX_SEARCH_STEPS_DIAG`를 8(High)로 1차 포팅 후 체감이 약해 16(Ultra)로 상향. 이로써 threshold 0.05 / search 32 / corner 25 / diag 16 = **원본 `SMAA_PRESET_ULTRA`와 동일**.
+- 유저 빌드 검증(NO/FXAA/SMAA 비교): SMAA가 대각선 실루엣 계단을 펴주면서 FXAA처럼 뿌예지지 않고 선명도 유지. diagonal detection 동작 확인.
+
+### SMAA edge detection을 perceptual(감마) 공간으로 — 밤 AA 수정
+- 증상: 밤(어두운 장면)이 되면 SMAA가 사실상 적용되지 않음. 원인은 SMAA threshold(0.05)가 perceptual(감마) 입력 기준인데, edge 패스가 sRGB offscreen을 샘플할 때 샘플러가 linear로 디코드해 **linear 값 위에서** 검출하기 때문. linear에선 어두운 영역 대비가 압축돼 threshold 밑으로 깔림.
+- 수정: `smaa_edge.frag`의 `sampleScene`에서 `pow(c, 1/2.2)`로 perceptual 복원 후 luma edge detection. edge 패스는 edge 플래그만 출력하므로 색감·블렌딩(linear 유지)에는 영향 없음.
+- 대안 검토: "grade/tonemap을 AA 앞으로 옮기는 구조 변경(C안)"은 현재 grade가 약한 컬러 그레이딩(톤매퍼 아님)이라 밤을 못 고치고, 감마 인코딩 전체 이동은 swapchain 색공간까지 건드리는 큰 변경이라 보류. 실제 HDR/톤매핑 도입 시 `Scene(HDR)→Tonemap→AA→Present`로 정식 적용 예정.
+- 참고: FXAA도 동일하게 linear에서 luma를 보므로 밤에 약함. 필요 시 `post.frag` FXAA의 luma 계산에만 같은 감마를 적용하는 후속 작업으로 분리.
+- 유저 빌드 검증: 밤 장면에서도 큐브/타일/오브젝트 경계 AA 정상 적용 확인, 낮 장면 정상.
+
 ---
 
 ## 게임 설계 메모

@@ -98,7 +98,7 @@ src/
 - ✅ color grading / tone mapping (post 1패스: exposure/contrast/saturation/split-tone/vignette)
 - ✅ 그림자 접지 튜닝 (피터패닝 — bias 축소 + cull 조정 완료)
 - ✅ FXAA 실제 적용: post pass에서 화면 edge를 완화. 자체 게임 UI는 FXAA 이후에 그려 픽셀 폰트 선명도 유지
-- ✅ SMAA 1x 적용 + Ultra 계열 튜닝(5a): `AreaTex/SearchTex` LUT 기반 `edge detection → blend weight → neighborhood blending` 3-pass. 현재 값은 `threshold=0.05`, `search=32`, corner rounding 25 (Ultra 계열 threshold/search)이며 diagonal detection/reprojection/T2x/S2x는 아직 제외. 다음(5b)은 diagonal detection 포팅
+- ✅ SMAA 1x = 원본 `SMAA_PRESET_ULTRA`: `AreaTex/SearchTex` LUT 기반 `edge detection → blend weight(+diagonal) → neighborhood blending` 3-pass. 값은 `threshold=0.05`, `search=32`, `diag=16`, corner rounding 25. edge detection은 **perceptual(감마) 공간**에서 수행한다 — sRGB offscreen이 샘플 시 linear로 디코드되므로 `pow(.,1/2.2)`로 복원(밤 장면에서도 AA 유지). reprojection/T2x/S2x는 제외. AA를 grade/tonemap 뒤 최종 색 위에서 돌리는 구조 전환은 실제 HDR/톤매핑 도입 시로 보류
 - texture mapping: terrain atlas/object albedo texture 경로 추가. vertex color는 tint/스타일 보정으로 유지
 - material-lite: full PBR 전환 전, albedo + tint + roughness/specular 상수로 재질 차이를 표현
 - shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
@@ -112,7 +112,7 @@ src/
 2. ✅ **TextureResource 기반**: grass texture 생성/upload 경로, SMAA LUT 업로드 경로를 `GpuBuffer`식 move-only RAII `TextureResource` + `createTexture(...)` 헬퍼로 통합. 이후 terrain/object texture mapping에서 재사용. **완료(동작 변경 없는 리팩토링)**
 3. **Terrain/object texture mapping + material-lite**: terrain atlas 또는 단순 albedo texture부터 시작하고, vertex color는 tint/스타일 보정으로 유지한다.
 4. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
-5. **SMAA 품질 확장(선택)**: 1x 체감이 부족하면 diagonal detection, Ultra 계열 threshold/search, T2x/S2x를 별도 성능 예산으로 검토한다.
+5. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
 
 이 순서는 "품질을 올리되, 매 단계가 화면에 바로 기여하고 기존 구조와 자연스럽게 맞물리는" 경로다.
 

@@ -18,7 +18,12 @@ float luma(vec3 c) {
 }
 
 vec3 sampleScene(vec2 p) {
-    return textureLod(sceneColor, clamp(p, vec2(0.0), vec2(1.0)), 0.0).rgb;
+    // The sRGB offscreen is decoded to linear by the sampler, but SMAA's threshold
+    // is calibrated for perceptual (gamma) luma. Re-encode here so edge detection
+    // runs in gamma space; otherwise dark night scenes lose contrast and edges fall
+    // below the threshold. Only edge flags are output, so scene color is unaffected.
+    vec3 c = textureLod(sceneColor, clamp(p, vec2(0.0), vec2(1.0)), 0.0).rgb;
+    return pow(c, vec3(1.0 / 2.2));
 }
 
 void main() {

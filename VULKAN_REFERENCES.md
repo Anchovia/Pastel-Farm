@@ -123,11 +123,12 @@ FXAA와 SMAA 1x 1차 적용은 완료됐다. 현재 상태:
 
 SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한 AA 샘플은 MSAA/alpha-to-coverage 계열이다. 정식 SMAA는 Iryoku SMAA의 `AreaTex/SearchTex` LUT와 `edge detection → blend weight → neighborhood blending` 구조를 기준으로 삼는다.
 
-현재 SMAA는 `threshold=0.05`, `search=32`, corner rounding 25 (Ultra 계열 threshold/search, 5a 튜닝)이며 diagonal detection/reprojection/T2x/S2x는 아직 제외했다. 5a로 체감은 살아났고, 대각선 품질을 더 올리려면 다음을 별도 작업으로 본다.
+현재 SMAA는 원본 `SMAA_PRESET_ULTRA`와 동일하다(`threshold=0.05`, `search=32`, `diag=16`, corner rounding 25). edge detection은 perceptual(감마) 공간에서 수행한다 — sRGB offscreen이 샘플 시 linear로 디코드되므로 `smaa_edge.frag`에서 `pow(.,1/2.2)`로 복원해 밤 장면에서도 AA가 유지되게 했다. reprojection/T2x/S2x는 제외. 더 올리려면 다음을 별도 작업으로 본다.
 
-1. diagonal detection 포팅
-2. Ultra 계열 threshold/search 튜닝
+1. ✅ diagonal detection 포팅 — 완료
+2. ✅ Ultra 계열 threshold/search/diag 튜닝 — 완료
 3. T2x/S2x 또는 MSAA/alpha-to-coverage 연계
+4. grade/tonemap을 AA 앞으로 옮기는 구조 전환 — 실제 HDR/톤매핑 도입 시. (현재 grade는 약한 컬러 그레이딩이라 단독으로는 밤 AA에 효과 없음)
 
 권장 순서:
 
@@ -135,7 +136,7 @@ SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한
 2. terrain/object texture mapping
 3. material-lite
 4. high-quality grass(wind/LOD/variant)
-5. SMAA diagonal/T2x/S2x 또는 MSAA/alpha-to-coverage 품질 확장
+5. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
 
 PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
 
