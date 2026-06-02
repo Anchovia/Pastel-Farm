@@ -12,7 +12,7 @@ layout(push_constant) uniform PostPushConstants {
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 outColor;
 
-const int   SMAA_MAX_SEARCH_STEPS = 16;
+const int   SMAA_MAX_SEARCH_STEPS = 32;
 const float SMAA_AREATEX_MAX_DISTANCE = 16.0;
 const vec2  SMAA_AREATEX_PIXEL_SIZE = vec2(1.0 / 160.0, 1.0 / 560.0);
 const float SMAA_AREATEX_SUBTEX_SIZE = 1.0 / 7.0;

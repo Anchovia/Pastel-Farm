@@ -10,7 +10,7 @@ layout(push_constant) uniform PostPushConstants {
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 outColor;
 
-const float SMAA_THRESHOLD = 0.10;
+const float SMAA_THRESHOLD = 0.05;
 const float SMAA_LOCAL_CONTRAST_ADAPTATION_FACTOR = 2.0;
 
 float luma(vec3 c) {

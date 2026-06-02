@@ -56,14 +56,16 @@
 
 ### 1. Texture resource helper
 
-현재 grass texture는 `createGrassTexture()`에 절차 픽셀 생성, staging upload, image/view/sampler 생성이 한 번에 들어 있다. 텍스처 매핑이 본격화되면 `TextureResource`류의 작은 RAII helper를 빠르게 도입한다.
+**도입 완료.** grass alpha 텍스처와 SMAA `AreaTex/SearchTex` LUT가 staging upload → image/transition/copy/view 시퀀스를 중복으로 갖던 것을, `GpuBuffer`식 move-only RAII 구조체 `TextureResource` + `createTexture(width, height, format, bytes, size, withSampler)` 헬퍼로 통합했다. sampler는 옵션(grass=자체 sampler, SMAA LUT=공유 `m_postSampler`).
+
+다음 확장 후보:
 
 - grass texture를 파일에서 로드
 - terrain/object albedo texture 또는 atlas를 추가
 - flower/ground patch 등 dressing texture가 2개 이상 추가
 - UI font/atlas texture가 별도 리소스로 들어옴
 
-지금까지는 단일 texture라 helper를 미뤘지만, 프로젝트 목표가 고품질 스타일라이즈드로 정리된 만큼 terrain/object texture가 들어오는 순간부터는 helper 추출이 자연스럽다.
+terrain/object texture mapping이 들어오는 순간 같은 `createTexture` 경로를 재사용하고, 파일 로드(stb_image)/mipmap/sampler 옵션이 필요해지면 `createTexture` 시그니처를 거기서 확장한다.
 
 ### 2. Instance data 확장
 
@@ -129,7 +131,7 @@ SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한
 
 권장 순서:
 
-1. TextureResource helper
+1. ✅ TextureResource helper — 완료
 2. terrain/object texture mapping
 3. material-lite
 4. high-quality grass(wind/LOD/variant)

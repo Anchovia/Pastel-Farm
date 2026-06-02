@@ -908,46 +908,10 @@ void VulkanContext::createGrassTexture() {
         }
     }
 
+    // Upload the procedural pixels through the shared texture helper. The grass card
+    // pipeline samples this with its own LINEAR/CLAMP sampler (withSampler=true).
     const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
-    GpuBuffer staging = createBuffer(imgSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    void* mapped;
-    vkMapMemory(m_device, staging.memory, 0, imgSize, 0, &mapped);
-    memcpy(mapped, pixels.data(), (size_t)imgSize);
-    vkUnmapMemory(m_device, staging.memory);
-
-    createImage(W, H, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_grassTexImage, m_grassTexMemory);
-
-    transitionImageLayout(m_grassTexImage, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(staging.buffer, m_grassTexImage, W, H);
-    transitionImageLayout(m_grassTexImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    // staging frees here (GpuBuffer RAII); all transfers already waited on a fence.
-
-    VkImageViewCreateInfo vi{};
-    vi.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    vi.image                       = m_grassTexImage;
-    vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
-    vi.format                      = VK_FORMAT_R8G8B8A8_UNORM;
-    vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    vi.subresourceRange.levelCount = 1;
-    vi.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(m_device, &vi, nullptr, &m_grassTexView) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create grass texture view");
-
-    VkSamplerCreateInfo si{};
-    si.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    si.magFilter    = VK_FILTER_LINEAR;
-    si.minFilter    = VK_FILTER_LINEAR;
-    si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    if (vkCreateSampler(m_device, &si, nullptr, &m_grassTexSampler) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create grass sampler");
+    m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), imgSize, /*withSampler=*/true);
 }
 
 // ============================================================
@@ -1156,10 +1120,12 @@ void VulkanContext::createSmaaResources() {
     createTarget(m_smaaBlendImage, m_smaaBlendMemory, m_smaaBlendView, "SMAA blend");
 }
 
-void VulkanContext::createSmaaLookupTexture(uint32_t width, uint32_t height, VkFormat format,
-    const unsigned char* bytes, VkDeviceSize size,
-    VkImage& image, VkDeviceMemory& memory, VkImageView& view)
+TextureResource VulkanContext::createTexture(uint32_t width, uint32_t height, VkFormat format,
+    const void* bytes, VkDeviceSize size, bool withSampler)
 {
+    TextureResource tex;
+    tex.device = m_device;
+
     GpuBuffer staging = createBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     void* mapped;
@@ -1169,29 +1135,46 @@ void VulkanContext::createSmaaLookupTexture(uint32_t width, uint32_t height, VkF
 
     createImage(width, height, format, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tex.image, tex.memory);
 
-    transitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(staging.buffer, image, width, height);
-    transitionImageLayout(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    transitionImageLayout(tex.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(staging.buffer, tex.image, width, height);
+    transitionImageLayout(tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    // staging frees here (GpuBuffer RAII); all transfers already waited on a fence.
 
     VkImageViewCreateInfo vi{};
     vi.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    vi.image                       = image;
+    vi.image                       = tex.image;
     vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
     vi.format                      = format;
     vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     vi.subresourceRange.levelCount = 1;
     vi.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(m_device, &vi, nullptr, &view) != VK_SUCCESS)
-        throw std::runtime_error("Failed to create SMAA lookup texture view");
+    if (vkCreateImageView(m_device, &vi, nullptr, &tex.view) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create texture view");
+
+    if (withSampler) {
+        VkSamplerCreateInfo si{};
+        si.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        si.magFilter    = VK_FILTER_LINEAR;
+        si.minFilter    = VK_FILTER_LINEAR;
+        si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        if (vkCreateSampler(m_device, &si, nullptr, &tex.sampler) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create texture sampler");
+    }
+
+    return tex;
 }
 
 void VulkanContext::createSmaaLookupTextures() {
-    createSmaaLookupTexture(AREATEX_WIDTH, AREATEX_HEIGHT, VK_FORMAT_R8G8_UNORM,
-        areaTexBytes, AREATEX_SIZE, m_smaaAreaImage, m_smaaAreaMemory, m_smaaAreaView);
-    createSmaaLookupTexture(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, VK_FORMAT_R8_UNORM,
-        searchTexBytes, SEARCHTEX_SIZE, m_smaaSearchImage, m_smaaSearchMemory, m_smaaSearchView);
+    // SMAA LUTs are sampled through m_postSampler, so no per-texture sampler.
+    m_smaaAreaTex = createTexture(AREATEX_WIDTH, AREATEX_HEIGHT, VK_FORMAT_R8G8_UNORM,
+        areaTexBytes, AREATEX_SIZE, /*withSampler=*/false);
+    m_smaaSearchTex = createTexture(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, VK_FORMAT_R8_UNORM,
+        searchTexBytes, SEARCHTEX_SIZE, /*withSampler=*/false);
 }
 
 void VulkanContext::createPostPipeline() {
@@ -1540,10 +1523,10 @@ void VulkanContext::updateSmaaDescriptors() {
         blendImages[0].imageView   = m_smaaEdgeView[i];
         blendImages[0].sampler     = m_postSampler;
         blendImages[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        blendImages[1].imageView   = m_smaaAreaView;
+        blendImages[1].imageView   = m_smaaAreaTex.view;
         blendImages[1].sampler     = m_postSampler;
         blendImages[2].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        blendImages[2].imageView   = m_smaaSearchView;
+        blendImages[2].imageView   = m_smaaSearchTex.view;
         blendImages[2].sampler     = m_postSampler;
 
         VkWriteDescriptorSet blendWrites[3]{};
@@ -2281,8 +2264,8 @@ void VulkanContext::createDescriptorSets() {
 
         VkDescriptorImageInfo grassInfo{};
         grassInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        grassInfo.imageView   = m_grassTexView;
-        grassInfo.sampler     = m_grassTexSampler;
+        grassInfo.imageView   = m_grassTex.view;
+        grassInfo.sampler     = m_grassTex.sampler;
 
         VkWriteDescriptorSet writes[3]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

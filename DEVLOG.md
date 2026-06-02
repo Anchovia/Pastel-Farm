@@ -848,6 +848,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 유저 빌드 검증 결과: `AA SMAA`가 실제 SMAA 경로에 들어갔고 FXAA fallback과 달라졌다. 다만 1x 최소형이고 대각선 검출이 빠져 있어 체감은 아직 크지 않다.
 - 추후 AA 품질을 더 올릴 때는 SMAA diagonal detection, Ultra 계열 튜닝, T2x/S2x, MSAA/alpha-to-coverage 중 어느 축을 먼저 가져갈지 별도 작업으로 결정한다.
 
+### TextureResource RAII helper 도입 (텍스처 업로드 경로 통합)
+- grass alpha 텍스처와 SMAA `AreaTex/SearchTex` LUT가 각각 staging upload → image/layout transition/copy/view 시퀀스를 중복으로 갖던 것을, `GpuBuffer`와 동일한 move-only RAII 구조체 `TextureResource`로 통합.
+- `createTexture(width, height, format, bytes, size, withSampler)` 헬퍼 하나로 업로드 시퀀스를 모음. sampler는 옵션으로 처리(grass는 자체 LINEAR/CLAMP sampler 생성, SMAA LUT는 공유 `m_postSampler`를 쓰므로 sampler 미생성).
+- `m_grassTex*`(4개)와 `m_smaaArea*/m_smaaSearch*`(6개) 멤버를 `m_grassTex / m_smaaAreaTex / m_smaaSearchTex` 3개의 `TextureResource`로 교체. 소멸자의 수동 destroy 블록도 `.destroy()` 호출로 정리.
+- 동작 변경 없는 순수 리팩토링이며 생성 포맷·레이아웃 전환·디스크립터 바인딩·프레임 경로는 이전과 동일. 이후 terrain/object texture mapping에서 같은 헬퍼를 재사용하기 위한 토대.
+- 유저 빌드 검증 결과: 컴파일·실행 정상, grass·SMAA 모두 이전과 동일 동작, Vulkan validation 에러 없음.
+
 ---
 
 ## 게임 설계 메모

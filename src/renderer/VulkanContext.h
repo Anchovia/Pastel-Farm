@@ -49,6 +49,46 @@ struct GpuBuffer {
     }
 };
 
+// RAII wrapper for an uploaded sampled texture: image + memory + view (+ optional
+// sampler). Mirrors GpuBuffer's move-only ownership so it self-frees and can be
+// stored as a member or returned by value. The sampler stays VK_NULL_HANDLE when
+// the texture is sampled through a shared sampler owned elsewhere (e.g. SMAA LUTs).
+struct TextureResource {
+    VkImage        image   = VK_NULL_HANDLE;
+    VkDeviceMemory memory  = VK_NULL_HANDLE;
+    VkImageView    view    = VK_NULL_HANDLE;
+    VkSampler      sampler = VK_NULL_HANDLE;
+    VkDevice       device  = VK_NULL_HANDLE; // owner device, for self-destruction
+
+    TextureResource() = default;
+    TextureResource(const TextureResource&)            = delete;
+    TextureResource& operator=(const TextureResource&) = delete;
+    TextureResource(TextureResource&& o) noexcept
+        : image(o.image), memory(o.memory), view(o.view), sampler(o.sampler), device(o.device) {
+        o.image = VK_NULL_HANDLE; o.memory = VK_NULL_HANDLE; o.view = VK_NULL_HANDLE;
+        o.sampler = VK_NULL_HANDLE; o.device = VK_NULL_HANDLE;
+    }
+    TextureResource& operator=(TextureResource&& o) noexcept {
+        if (this != &o) {
+            destroy();
+            image = o.image; memory = o.memory; view = o.view; sampler = o.sampler; device = o.device;
+            o.image = VK_NULL_HANDLE; o.memory = VK_NULL_HANDLE; o.view = VK_NULL_HANDLE;
+            o.sampler = VK_NULL_HANDLE; o.device = VK_NULL_HANDLE;
+        }
+        return *this;
+    }
+    ~TextureResource() { destroy(); }
+
+    void destroy() {
+        if (sampler) vkDestroySampler(device, sampler, nullptr);
+        if (view)    vkDestroyImageView(device, view, nullptr);
+        if (image)   vkDestroyImage(device, image, nullptr);
+        if (memory)  vkFreeMemory(device, memory, nullptr);
+        image = VK_NULL_HANDLE; memory = VK_NULL_HANDLE; view = VK_NULL_HANDLE;
+        sampler = VK_NULL_HANDLE; device = VK_NULL_HANDLE;
+    }
+};
+
 // Per-frame snapshot the renderer consumes. Mirrors the previous drawFrame
 // argument list (by-ref for heavy data, by-value for scalars).
 struct FrameRenderData {
@@ -141,9 +181,9 @@ private:
     void createSmaaLookupTextures();
     void createSmaaDescriptors();
     void updateSmaaDescriptors();
-    void createSmaaLookupTexture(uint32_t width, uint32_t height, VkFormat format,
-        const unsigned char* bytes, VkDeviceSize size,
-        VkImage& image, VkDeviceMemory& memory, VkImageView& view);
+    // Generic uploaded-texture helper: staging upload + image + view (+ optional sampler).
+    TextureResource createTexture(uint32_t width, uint32_t height, VkFormat format,
+        const void* bytes, VkDeviceSize size, bool withSampler);
     void createObjectMeshes();
     void createGrassTexture();
     void createItemMesh();
@@ -261,12 +301,9 @@ private:
     std::vector<VkImage>        m_smaaBlendImage;
     std::vector<VkDeviceMemory> m_smaaBlendMemory;
     std::vector<VkImageView>    m_smaaBlendView;
-    VkImage        m_smaaAreaImage   = VK_NULL_HANDLE;
-    VkDeviceMemory m_smaaAreaMemory  = VK_NULL_HANDLE;
-    VkImageView    m_smaaAreaView    = VK_NULL_HANDLE;
-    VkImage        m_smaaSearchImage = VK_NULL_HANDLE;
-    VkDeviceMemory m_smaaSearchMemory = VK_NULL_HANDLE;
-    VkImageView    m_smaaSearchView  = VK_NULL_HANDLE;
+    // SMAA precomputed LUTs (sampled through the shared m_postSampler, no own sampler).
+    TextureResource m_smaaAreaTex;
+    TextureResource m_smaaSearchTex;
 
     GpuBuffer                m_vertexBuffer;
     GpuBuffer                m_indexBuffer;
@@ -304,10 +341,7 @@ private:
 
     // Procedural grass alpha texture (sampled by the grass card pipeline). Creation is
     // isolated in createGrassTexture so a file-loaded image can swap in later.
-    VkImage        m_grassTexImage   = VK_NULL_HANDLE;
-    VkDeviceMemory m_grassTexMemory  = VK_NULL_HANDLE;
-    VkImageView    m_grassTexView    = VK_NULL_HANDLE;
-    VkSampler      m_grassTexSampler = VK_NULL_HANDLE;
+    TextureResource m_grassTex;
 
     // Dropped items — shared small cube mesh + per-frame instance buffer (reuses m_indexBuffer + m_pipeline)
     static constexpr uint32_t   MAX_DROPS = 256;

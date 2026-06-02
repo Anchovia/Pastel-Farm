@@ -108,8 +108,8 @@ src/
 ### 다음 실행 순서 — 결정
 다음 세션/작업은 아래 순서를 따른다. 큰 material/PBR 시스템이나 render graph로 먼저 가지 않는다.
 
-1. 현재 SMAA 1x 1차 변경분을 커밋한다.
-2. **TextureResource 기반**: grass texture 생성/upload 경로, SMAA LUT 업로드 경로, 이후 terrain/object texture mapping을 포괄할 작은 texture helper를 도입한다.
+1. ✅ 현재 SMAA 1x 1차 변경분을 커밋한다. **완료**
+2. ✅ **TextureResource 기반**: grass texture 생성/upload 경로, SMAA LUT 업로드 경로를 `GpuBuffer`식 move-only RAII `TextureResource` + `createTexture(...)` 헬퍼로 통합. 이후 terrain/object texture mapping에서 재사용. **완료(동작 변경 없는 리팩토링)**
 3. **Terrain/object texture mapping + material-lite**: terrain atlas 또는 단순 albedo texture부터 시작하고, vertex color는 tint/스타일 보정으로 유지한다.
 4. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
 5. **SMAA 품질 확장(선택)**: 1x 체감이 부족하면 diagonal detection, Ultra 계열 threshold/search, T2x/S2x를 별도 성능 예산으로 검토한다.
