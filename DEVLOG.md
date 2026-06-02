@@ -706,6 +706,39 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 검증 후 밤이 조금 밝다는 피드백에 따라 ambient 바닥값을 `0.15 → 0.10`으로 낮춤. 낮 최대값 `0.30`은 유지해 낮 장면 변화는 최소화.
 - 검증 결과: 셰이더 컴파일/실행 정상, 낮 색감 유지, 밤 장면 더 어둡게 조율, 플레이어/셀렉터 색 이상 없음.
 
+### 메뉴 상태에서 동적 월드 엔티티 렌더 스킵 (정리)
+- MainMenu/Settings/Loading에서도 `recordCommandBuffer`가 플레이어 큐브를 항상 그려, 메뉴 딤 뒤로 주황 큐브가 비치던 문제를 정리.
+- 렌더러가 이미 보유한 HUD 플래그로 `worldVisible = !(mainMenu || settings || loading)`를 계산해 셀렉터·플레이어·드롭 드로우를 게이트. Pause는 게임 위 오버레이라 의도적으로 포함(월드 표시 유지).
+- `FrameRenderData`/`main.cpp` 호출부 변경 없이 `recordCommandBuffer` 한 곳만 수정. 청크/오브젝트/잔디 루프·UI·post·shadow 패스는 불변.
+- 셀렉터·드롭은 현재 메뉴에서 비어 있지만 함께 게이트해, 이후 Pause→타이틀 복귀 구현 시 직전 플레이 상태가 타이틀 뒤로 새지 않도록 대비.
+- 검증 결과: MainMenu에서 플레이어 큐브 비표시, Gameplay 플레이어/셀렉터/드롭 정상, Pause에서 월드 유지 정상 확인.
+
+### hemisphere ambient 웜톤 조정 (Tier 2 비주얼 튜닝)
+- 기존 `SKY_AMBIENT`가 파랑 우세(`0.74, 0.84, 1.08`)라 윗면이 차갑게 물들던 것을 `chunk.frag`/`triangle.frag` 양쪽에서 따뜻한 중립(`0.96, 0.93, 0.88`)으로 변경. `GROUND_AMBIENT`는 약간 더 따뜻하게(`1.04, 0.90, 0.70`).
+- 결과적으로 hemisphere 차이가 "cool vs warm"이 아니라 "따뜻함의 정도"로 읽혀 DESIGN의 따뜻한 톤 방향에 정렬. sky의 밝기(평균 luminance)는 이전과 비슷하게 유지해 낮 장면 노출 변화를 최소화.
+- 밤 ambient 바닥값(`0.10`)·diffuse·shadow·fog 구조는 불변. 셰이더 상수만 수정.
+- 검증 결과: 낮 색감이 덜 푸르게 바뀜 확인. 단 낮 ambient 절대 변화량이 작아 체감은 미세 — 추후 LUT/grading 단계에서 더 또렷해질 여지.
+
+### 마우스 좌표 프레임버퍼 픽셀 정합 (HiDPI 클릭/피킹 정렬)
+- 기존엔 `input.mouseX/Y`가 `glfwGetCursorPos`(창/스크린 좌표)인데 `windowWidth/Height`는 `glfwGetFramebufferSize`(픽셀)라, 디스플레이 배율이 1이 아닐 때 클릭 판정·월드 피킹이 보이는 위치와 어긋날 수 있었음.
+- `InputManager::pollInput`에서 커서를 `cursorPos × (framebufferSize / windowSize)`로 스케일해 프레임버퍼 픽셀로 변환하고, `windowWidth/Height`도 같은 자리에서 프레임버퍼 기준으로 설정. 마우스·창크기·렌더(스왑체인)가 모두 동일 픽셀 공간.
+- 모든 소비처(메뉴/Pause/Settings row 클릭, 핫바·인벤·크래프팅 클릭, 월드 타일 피킹)가 같은 `PlayerInput` 필드를 읽으므로 단일 지점 수정으로 일괄 정합.
+- 배율 1 디스플레이에선 스케일 계수가 1이라 동작 불변(회귀 없음). DevUI(ImGui)는 자체 입력 처리라 무관.
+- 검증 결과: 일반 모니터에서 메뉴/핫바/인벤/크래프팅 클릭·월드 피킹 기존과 동일, 리사이즈 후 정합 유지 확인.
+
+### `S` 키 입력 충돌 정리 + Ctrl+S 후진 버그 수정
+- `S`가 후진(`moveBackward`) · 메뉴 SETTINGS 백업(`settingsKey`) · 저장(`Ctrl+S`)에 3중으로 쓰여 취약했고, 특히 게임 중 `Ctrl+S` 저장 시 `S`가 같이 눌려 플레이어가 뒤로 한 발 움직이는 실제 버그가 있었음.
+- 메뉴 클릭 UI가 완성됐으므로 키보드 백업(`Enter`=START, `S`=SETTINGS)을 제거해 메뉴를 **클릭 전용**으로 단순화. `PlayerInput::startKey`/`settingsKey`, `InputManager`의 해당 읽기, `AppFlow::consumeMainMenuStart`/`updateMainMenuSettings` + 관련 `prev*` 상태와 DevUI 캡처 클리어까지 함께 제거.
+- `InputManager`에 `ctrlHeld` 지역값을 두어 `moveBackward = S && !ctrlHeld`로 게이트하고, `saveKey = ctrlHeld && S`로 재사용. 이제 `S`는 후진/저장에만 쓰이고 둘은 Ctrl 유무로 명확히 분리.
+- 검증 결과: MainMenu에서 `Enter`/`S` 무반응·클릭만 동작, gameplay `S` 후진 정상, `Ctrl+S` 저장 시 후진 없음·저장 정상, Settings/Pause 흐름 불변 확인.
+
+### Pause QUIT을 앱 종료에서 타이틀 복귀로 변경
+- 기존 Pause `QUIT`은 `Window::close()`로 앱을 완전히 종료했으나, 타이틀(MainMenu)로 복귀하도록 변경.
+- `World::reset()` 추가 — `m_chunks`와 `m_modifiedUnloaded`를 모두 비움. `load()`가 맵을 비우지 않고 추가만 하므로, 이를 안 비우면 이전 세션의 미저장 편집이 다음 세션에 샐 수 있어 둘 다 clear.
+- `main.cpp`에 `endWorldSession` 람다 추가: `world.reset()` + `gameState = GameState{}`(인벤토리/드롭/시간 fresh) + 세션 플래그 false. 다음 프레임 `rebuildDirtyChunks`가 청크 GPU 버퍼를 해제해 타이틀 뒤 잔상 제거. `AppFlow::returnToTitle()`로 Paused→MainMenu 전이.
+- 재시작(START)은 깨끗해진 맵에 `startWorldSession`이 save를 다시 로드 → 첫 실행과 동일한 fresh 진입. 미저장 변경은 버려짐(의도). 인앱 완전 종료는 창 X 버튼만 남음(`Window::close()`는 호출처 없이 보존 — 추후 타이틀 EXIT/저장확인에 재사용 후보).
+- 검증 결과: Pause QUIT→타이틀 복귀(앱 유지), 청크/플레이어/드롭 잔상 없음, START 재시작 시 save 정상 로드·세션 잔여 없음, 클릭 한 번에 하나만 동작 확인.
+
 ### Grid 규칙 vs Organic 표현 방향 정리 (Tier 2 비주얼 원칙)
 - terrain breakup을 타일별 deterministic vertex color tint로 시도했으나, 잔디 타일마다 색이 바뀌어 grid가 더 강하게 드러나는 문제가 확인됨. 변경은 즉시 되돌림.
 - 결정: **게임 규칙은 grid, 시각 경험은 organic**. 농사, 오브젝트 설치/철거, 충돌, 저장 좌표는 grid 기반을 유지하되 자연 바닥과 숲/풀/흙 표현은 100% grid처럼 보이면 안 됨.

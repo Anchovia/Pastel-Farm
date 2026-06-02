@@ -122,12 +122,13 @@
 - `FrameRenderData` 스냅샷 — `drawFrame`의 프레임 입력을 구조체 1개로 묶어 렌더러 public 경계를 안정화
 - `GpuBuffer` RAII — `VkBuffer+VkDeviceMemory`(+mapped)를 move-only 래퍼로 통합하고 device 파괴 전 명시 정리
 - DevUI(ImGui) + GPU 프로파일링 — `PASTEL_DEV_BUILD` 전용 F3 패널. post pass 위에 렌더링하고 GPU timestamp로 total/shadow/scene/post/imgui 구간 시간 표시
-- MainMenu 1차 App-state — 실행 직후 `PASTEL FARM`과 클릭형 `START` / `SETTINGS` row 표시. `START` 클릭(또는 `Enter`)으로 save 로드 + 초기 청크 로드 후 Gameplay 진입, `SETTINGS` 클릭(또는 `S`)으로 Settings 진입. 메뉴 중 게임 입력·시간 진행·청크 스트리밍 차단
+- MainMenu 1차 App-state — 실행 직후 `PASTEL FARM`과 클릭형 `START` / `SETTINGS` row 표시. `START` 클릭으로 save 로드 + 초기 청크 로드 후 Gameplay 진입, `SETTINGS` 클릭으로 Settings 진입(키보드 백업 없이 클릭 전용). 메뉴 중 게임 입력·시간 진행·청크 스트리밍 차단
 - Settings 1차 App-state — MainMenu에서 Settings 화면 진입, `ESC`/`BACK`으로 MainMenu 복귀. 설정 row 클릭으로 VSync ON/OFF(실제 present mode 적용), AA OFF/FXAA/SMAA(데이터/UI) 변경
 - Loading 1차 App-state — MainMenu에서 `START` 후 한 프레임 `LOADING` 화면을 표시하고, 그 다음 save 로드 + 초기 청크 로드 + Gameplay 진입
-- Pause 클릭 메뉴 — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 `PAUSED` + `RESUME` / `SETTINGS` / `QUIT` row 표시. Pause에서 Settings 진입 시 `BACK`/`ESC`는 Pause로 복귀. 인벤토리가 열린 Gameplay에서는 `ESC`가 먼저 인벤토리만 닫음
+- Pause 클릭 메뉴 — `ESC`로 Gameplay/Paused 토글. pause 중 게임 업데이트·카메라 회전·월드 입력을 멈추고 `PAUSED` + `RESUME` / `SETTINGS` / `QUIT` row 표시. `QUIT`은 세션을 정리(`World::reset` + gameState fresh)하고 타이틀(MainMenu)로 복귀. Pause에서 Settings 진입 시 `BACK`/`ESC`는 Pause로 복귀. 인벤토리가 열린 Gameplay에서는 `ESC`가 먼저 인벤토리만 닫음
 - 카메라 follow 댐핑 — 플레이어 위치를 즉시 추적하지 않고 지수 보간으로 부드럽게 따라감. Loading 후 Gameplay 진입 시에는 저장 위치로 스냅해 긴 미끄러짐 방지
-- Hemisphere ambient — `chunk.frag`/`triangle.frag`의 ambient를 법선 방향 기반 warm/cool tint로 조율. 윗면은 살짝 cool, 아래/측면은 살짝 warm하게 섞고 밤 ambient 바닥값을 낮춰 야간을 더 어둡게 정리
+- Hemisphere ambient — `chunk.frag`/`triangle.frag`의 ambient를 법선 방향 기반 hemisphere tint로 조율. 윗면(sky)은 따뜻한 중립, 아래/측면(ground)은 더 따뜻하게 섞어 전반적으로 warm 톤. 밤 ambient 바닥값을 낮춰 야간을 더 어둡게 정리
+- 메뉴 렌더 정리 — MainMenu/Settings/Loading에서는 플레이어·셀렉터·드롭 드로우를 스킵해 메뉴 뒤로 플레이어 큐브가 비치지 않도록 정리(Pause는 게임 오버레이라 월드 유지)
 
 > **스타듀식 오브젝트 경제 아크 ①~⑥ 완료.** (인벤토리/작물 경제 → 제네릭 오브젝트 → 채집 → 지형 불변 → 제작 → 설치/철거+영속성)
 

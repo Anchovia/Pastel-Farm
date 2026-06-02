@@ -21,8 +21,6 @@ enum class AppMode {
 struct AppFlow {
     AppMode mode = AppMode::MainMenu;
     bool prevEsc = false;
-    bool prevStart = false;
-    bool prevSettings = false;
     bool prevMenuClick = false;
     bool prevPauseClick = false;
     bool prevCtrlS = false;
@@ -49,12 +47,6 @@ struct AppFlow {
 
     bool loading() const {
         return mode == AppMode::Loading;
-    }
-
-    bool consumeMainMenuStart(bool startPressed) {
-        const bool pressed = mode == AppMode::MainMenu && startPressed && !prevStart;
-        prevStart = startPressed;
-        return pressed;
     }
 
     int consumeMainMenuClick(const PlayerInput& input) {
@@ -93,12 +85,6 @@ struct AppFlow {
         return action;
     }
 
-    void updateMainMenuSettings(bool settingsPressed) {
-        if (mode == AppMode::MainMenu && settingsPressed && !prevSettings)
-            enterSettings();
-        prevSettings = settingsPressed;
-    }
-
     void enterSettings() {
         if (mode == AppMode::MainMenu || mode == AppMode::Paused) {
             settingsReturnMode = mode;
@@ -124,6 +110,11 @@ struct AppFlow {
     void resumeGameplay() {
         if (mode == AppMode::Paused)
             mode = AppMode::Gameplay;
+    }
+
+    void returnToTitle() {
+        if (mode == AppMode::Paused)
+            mode = AppMode::MainMenu;
     }
 
     void updateEscape(bool escPressed) {
@@ -228,8 +219,6 @@ static void applyDevUiInputCapture(PlayerInput& input, const VulkanContext& ctx)
         clearGameplayInput(input);
         input.saveKey         = false;
         input.quit            = false;
-        input.startKey        = false;
-        input.settingsKey     = false;
     }
 }
 #endif
@@ -265,6 +254,15 @@ int main() {
             worldSessionStarted = true;
         };
 
+        // Tear down the active world session (quit to title). Drops all chunks so the
+        // renderer frees their buffers, and resets gameplay state for a fresh re-start.
+        auto endWorldSession = [&]() {
+            world.reset();
+            gameState = GameState{};
+            worldSessionStarted = false;
+            pendingWorldStart   = false;
+        };
+
         float  orbitAngle = 45.0f;
         double lastTime   = glfwGetTime();
 
@@ -294,7 +292,6 @@ int main() {
             const bool wasSettings = app.settings();
             const int menuClickAction = app.consumeMainMenuClick(input);
             const int pauseClickAction = app.consumePauseClick(input);
-            app.updateMainMenuSettings(input.settingsKey);
             if (menuClickAction == 2) {
                 app.enterSettings();
                 settings.syncClickState(input);
@@ -307,11 +304,13 @@ int main() {
                 app.enterSettings();
                 settings.syncClickState(input);
             }
-            else if (pauseClickAction == 3)
-                window.close();
+            else if (pauseClickAction == 3) {
+                endWorldSession();
+                app.returnToTitle();
+            }
             if (wasSettings && settings.update(input, app.mode))
                 app.leaveSettings();
-            if (app.consumeMainMenuStart(input.startKey) || menuClickAction == 1) {
+            if (menuClickAction == 1) {
                 app.enterLoading();
                 pendingWorldStart = true;
                 clearGameplayInput(input);
