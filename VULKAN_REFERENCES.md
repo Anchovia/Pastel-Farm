@@ -139,9 +139,10 @@ SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한
 6. ✅ authored terrain texture override 4b — terrain layer별 Color texture 파일 override + 절차 fallback 완료
 7. ✅ texture tone 4c — luma/chroma 기반 `materialDetail`로 raw texture 곱셈 안정화 완료
 8. ✅ layer별 texture strength 4d — grass/leaves는 낮게, dirt/farmland/stone은 높게, wood/wheat는 중간값으로 분리 완료
-9. high-quality grass(wind/LOD/variant)
-10. material-lite/mipmap/sampler — roughness/specular 상수와 sampler 정책
-11. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
+9. ✅ high-quality grass 5a — 3-card clump + density/scale 상향 완료
+10. grass wind/LOD/variant
+11. material-lite/mipmap/sampler — roughness/specular 상수와 sampler 정책
+12. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
 
 PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
 
@@ -165,8 +166,9 @@ PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실�
 1. `buildGrassDressingBuffer` 안에 좌표 기반 density field를 추가했다.
 2. 균등 확률 대신 patch 단위 밀도와 open grass bias를 사용한다.
 3. `ObjectInstance` 포맷 변경 없이 scale/offset 범위를 density에 따라 다르게 준다.
-4. 색/texture/card variant는 실제 필요가 확인될 때 인스턴스 포맷과 `grass.vert/.frag`를 함께 확장한다.
-5. grass 품질 문제가 alpha edge에서 확인되면 `alphatocoverage`, `multisampling`, `texturemipmapgen` 샘플을 다시 본다.
+4. 5a에서는 인스턴스 포맷을 유지한 채 3-card clump와 density/scale 값을 올렸다. 다음은 wind sway, 거리 LOD/fade, patch 대비를 우선 본다.
+5. 색/texture/card variant는 실제 필요가 확인될 때 인스턴스 포맷과 `grass.vert/.frag`를 함께 확장한다.
+6. grass 품질 문제가 alpha edge에서 확인되면 `alphatocoverage`, `multisampling`, `texturemipmapgen` 샘플을 다시 본다.
 
 이렇게 하면 Step 6는 수술적으로 작게 시작하면서도, 이후 texture array / wind / LOD / indirect draw로 확장할 길을 막지 않는다.
 

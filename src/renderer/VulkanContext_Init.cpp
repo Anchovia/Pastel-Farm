@@ -877,8 +877,8 @@ void VulkanContext::createObjectMeshes() {
     {
     std::vector<GrassCardVertex> verts;
     auto card = [&](float angle) {
-        const float halfW = 0.31f;
-        const float h     = 0.48f;
+        const float halfW = 0.34f;
+        const float h     = 0.52f;
         const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
         const glm::vec3 side = dir * halfW;
         const glm::vec3 n    = {-dir.y, dir.x, 0.0f};
@@ -891,7 +891,8 @@ void VulkanContext::createObjectMeshes() {
         verts.insert(verts.end(), {bl, br, tr, bl, tr, tl});
     };
     card(0.0f);
-    card(1.5707963f);
+    card(2.0943951f);
+    card(4.1887902f);
     uploadGrassCardMesh(m_grassCardMesh, verts);
     }
 }

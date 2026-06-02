@@ -925,6 +925,11 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 현재 값: grass top 0.62, grass side 0.82, dirt 1.05, stone 1.15, wood 0.90, leaves 0.58, farmland 1.05, wheat 0.90, water 0.35.
 - 유저 빌드/스크린샷 검증 결과: 흙/밭/돌의 texture 존재감은 살아났고 grass top은 조용하게 유지됐다. grass 바닥은 이후 grass card density/variant/wind와 ground dressing으로 채우는 방향이라, 현재 값은 유지한다.
 
+### High-quality grass 1차 튜닝 (Task #5a)
+- 기존 grass alpha card 경로를 유지한 채, X자 2-card clump를 120도 간격의 3-card clump로 바꿨다. 인스턴스 포맷, descriptor, shadow caster, 저장/충돌 규칙은 변경하지 않았다.
+- `buildGrassDressingBuffer()`에서 grass 배치 확률을 `0.06 + density * 0.40` → `0.08 + density * 0.48`로 올리고, scale/jitter/variant 범위를 조금 넓혀 빈 잔디 바닥을 card가 더 채우게 했다.
+- 유저 빌드/스크린샷 검증 결과: grass가 이전보다 풍성해졌고, DevUI 기준 scene GPU 시간이 약 1.0ms 수준으로 유지됐다. 일부 균등 배치 느낌은 남아 있으므로 다음 개선은 density patch 대비, wind sway, 거리 LOD/fade, card/tint variant로 본다.
+
 ---
 
 ## 게임 설계 메모
