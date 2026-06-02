@@ -143,8 +143,9 @@ SaschaWillems의 debug utils/pipeline statistics 계열은 DevUI와 궁합이 �
 1. 구조적으로는 visual-only dressing buffer, draw order, object 회피, grass/dirt/open-sky 조건을 검증했다.
 2. 미학적으로는 실패에 가깝다. 갈색 patch와 pebble placeholder가 너무 크고 대비가 강해 지면 디테일이 아니라 화면을 어지럽히는 오브젝트처럼 보였다.
 3. 최종 목표는 geometry patch 대량 배치가 아니라 texture/alpha detail, 작은 color breakup, 낮은 대비의 ground dressing이다.
-4. 다음 작업에서는 Step 7 구조를 유지하되 patch 밀도/크기/대비를 크게 낮추거나 비활성화하고, grass card variant/tint 또는 ground texture helper 쪽을 우선 검토한다.
-5. texture 리소스가 grass 외 2개 이상으로 늘어나는 시점에 SaschaWillems `texture`, `texturearray`, `texturemipmapgen` 샘플을 다시 보고 `TextureResource` helper 추출을 검토한다.
+4. cleanup에서는 Step 7 구조를 유지하되 patch 밀도/크기/대비를 크게 낮추고, grass 위의 ground patch는 사실상 제거했다. 결과가 거의 안 보이긴 하지만, 최종 texture/card detail 전 기준 화면으로는 과한 placeholder보다 낫다.
+5. 다음 작업에서는 grass card variant/tint를 우선 검토하고, ground detail은 texture/card/decal 계열로 바꿀 때 다시 늘린다.
+6. texture 리소스가 grass 외 2개 이상으로 늘어나는 시점에 SaschaWillems `texture`, `texturearray`, `texturemipmapgen` 샘플을 다시 보고 `TextureResource` helper 추출을 검토한다.
 
 ---
 

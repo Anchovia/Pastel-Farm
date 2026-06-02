@@ -756,8 +756,8 @@ void VulkanContext::createObjectMeshes() {
         { 0.05f, -0.31f, 0.006f},
         { 0.35f, -0.17f, 0.006f},
     };
-    const glm::vec3 dryGrass = {0.43f, 0.39f, 0.20f};
-    const glm::vec3 dirt     = {0.34f, 0.24f, 0.13f};
+    const glm::vec3 dryGrass = {0.42f, 0.46f, 0.24f};
+    const glm::vec3 dirt     = {0.34f, 0.30f, 0.18f};
     for (int i = 0; i < 7; i++) {
         const glm::vec3 col = (i % 2 == 0) ? dryGrass : dirt;
         verts.push_back({center, n, col});
@@ -770,7 +770,7 @@ void VulkanContext::createObjectMeshes() {
     // ---- PEBBLE: tiny visual-only low-poly stone, not a collidable object ----
     {
     std::vector<ChunkVertex> verts;
-    const glm::vec3 pebbleColor = {0.50f, 0.49f, 0.46f};
+    const glm::vec3 pebbleColor = {0.42f, 0.42f, 0.40f};
     const glm::vec3 center = {0.0f, 0.0f, 0.035f};
     const glm::vec3 top    = {0.0f, 0.0f, 0.11f};
     const glm::vec3 ring[5] = {

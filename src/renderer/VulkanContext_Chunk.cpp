@@ -336,26 +336,27 @@ void VulkanContext::buildGroundDressingBuffer(const glm::ivec2& coord, Chunk& ch
                 openGround++;
         }
 
-        const float patchField = smooth(clamp01((valueNoise(wx, wy, 19, 211) - 0.12f) / 0.78f));
+        const float patchField = smooth(clamp01((valueNoise(wx, wy, 19, 211) - 0.22f) / 0.70f));
         const float openBias = 0.65f + ((float)openGround / 8.0f) * 0.35f;
-        const float patchChance = (ground == TileType::GRASS ? 0.035f : 0.015f) +
-                                  patchField * (ground == TileType::GRASS ? 0.075f : 0.035f);
+        const float patchChance = (ground == TileType::DIRT ? 0.006f : 0.0f) +
+                                  patchField * (ground == TileType::DIRT ? 0.014f : 0.0f);
         bool patchPlaced = false;
         if (hash01(wx, wy, 223) < patchChance * openBias) {
-            const float ox = (hash01(wx, wy, 227) - 0.5f) * 0.42f;
-            const float oy = (hash01(wx, wy, 229) - 0.5f) * 0.42f;
-            const float sc = 0.62f + hash01(wx, wy, 233) * 0.42f;
+            const float ox = (hash01(wx, wy, 227) - 0.5f) * 0.24f;
+            const float oy = (hash01(wx, wy, 229) - 0.5f) * 0.24f;
+            const float sc = 0.28f + hash01(wx, wy, 233) * 0.18f;
             const float rt = hash01(wx, wy, 239) * 6.2831853f;
             patches.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.500f}, sc, rt});
             patchPlaced = true;
         }
 
         const float pebbleField = 1.0f - valueNoise(wx, wy, 15, 251);
-        const float pebbleChance = (ground == TileType::DIRT ? 0.025f : 0.010f) + pebbleField * 0.025f;
+        const float pebbleChance = (ground == TileType::DIRT ? 0.006f : 0.001f) +
+                                   pebbleField * (ground == TileType::DIRT ? 0.012f : 0.003f);
         if (!patchPlaced && hash01(wx, wy, 257) < pebbleChance * openBias) {
-            const float ox = (hash01(wx, wy, 263) - 0.5f) * 0.58f;
-            const float oy = (hash01(wx, wy, 269) - 0.5f) * 0.58f;
-            const float sc = 0.42f + hash01(wx, wy, 271) * 0.40f;
+            const float ox = (hash01(wx, wy, 263) - 0.5f) * 0.38f;
+            const float oy = (hash01(wx, wy, 269) - 0.5f) * 0.38f;
+            const float sc = 0.20f + hash01(wx, wy, 271) * 0.16f;
             const float rt = hash01(wx, wy, 277) * 6.2831853f;
             pebbles.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.505f}, sc, rt});
         }

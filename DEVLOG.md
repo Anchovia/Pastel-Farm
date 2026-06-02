@@ -812,6 +812,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 유저 빌드/스크린샷 피드백: 구조는 작동하지만 결과가 너무 못생겼다. 갈색 patch와 pebble placeholder가 크고 대비가 강해, 은은한 지면 디테일이 아니라 화면을 어지럽히는 오브젝트처럼 보인다.
 - 결론: Step 7 구조는 유지 가치가 있지만 현재 geometry placeholder는 최종 방향이 아니다. 다음 작업은 patch를 크게 줄이거나 비활성화하고, grass card tint/variant 또는 낮은 대비의 texture 기반 ground detail 쪽으로 전환하는 것이 좋다.
 
+### Ground dressing placeholder 축소 (Vegetation Step 7 cleanup)
+- Step 7의 visual-only ground dressing 구조는 유지하되, 화면을 점령하던 placeholder 강도를 크게 낮춤.
+- GRASS 위 ground patch 생성은 제거하고, DIRT 위에서만 아주 드물게 작은 patch가 나오도록 확률과 scale을 축소.
+- pebble도 밀도와 크기를 크게 줄이고 색 대비를 낮춰 지면에 더 묻히게 조정.
+- 유저 빌드/스크린샷 피드백: 이전보다 훨씬 조용해졌지만 거의 안 보일 정도로 줄었다. 현재 판단은 "없어 보이는 기준 화면"이 "못생긴 placeholder가 화면을 망치는 상태"보다 낫다는 쪽. 최종 디테일은 이후 텍스처/알파 기반 ground detail과 grass tint/card variant로 다시 채운다.
+
 ---
 
 ## 게임 설계 메모
