@@ -64,7 +64,7 @@ World
 └─ Entity     시뮬레이션: player / animal / NPC / tractor (이동·AI·상태·애니)
 ```
 
-> 현재 구현 상태: Terrain·TileState·StaticProp(나무)·save/load 존재. 작물은 임시로 voxel 타일(`WHEAT`)로 처리 중이며, 장기적으로 `Crop` 레이어로 분리 검토.
+> 현재 구현 상태: Terrain·TileState·StaticProp(나무/돌/작업대/울타리/돌담)·save/load v2 존재. 작물은 임시로 voxel 타일(`WHEAT`)로 처리 중이며, 장기적으로 `Crop` 레이어로 분리 검토.
 
 ---
 
@@ -107,7 +107,7 @@ Explore → Gather → Farm/Build → Progress → Unlock → Return to world
 - 추구: warm/cool 분리 조명, 따뜻한 톤, 읽히는 실루엣, 부드러운 후처리(과한 bloom·sharpen 회피), composition.
 - **현 엔진은 이미 토대를 갖춤**(top/side vertex color + AO + shadow/PCF + day-night + fog + post-grading[exposure/contrast/saturation/split-tone/vignette]). 남은 격차는 "기능 부재"가 아니라 **튜닝과 소수의 추가**(height fog, hemisphere/colored ambient, vegetation/object variation, wind). → **다시 만들기가 아니라 조율하기.** (기술 단계는 `ARCHITECTURE.md` 비주얼 로드맵)
 - 지형이 내부적으로 voxel/grid 기반이어도 최종 화면은 grid를 과시하지 않는다. 농사/건축의 규칙성은 유지하되, 자연 환경은 dressing layer로 경계를 흐린다.
-- 풀/식생은 Pastel Farm의 grid감을 줄이는 핵심 투자처다. 얇은 삼각형 몇 개를 세운 기하 풀은 멀리서 바늘처럼 보이기 쉬우므로 최종 방향이 아니다. 목표는 낮고 풍성한 alpha card 기반 clump, 밀도 영역, 색/높이/회전 variation, 약한 wind sway로 참고 이미지에 가까운 자연스러운 풀밭을 만드는 것.
+- 풀/식생은 Pastel Farm의 grid감을 줄이는 핵심 투자처다. 얇은 삼각형 몇 개를 세운 기하 풀은 멀리서 바늘처럼 보이기 쉬우므로 최종 방향이 아니다. 현재 alpha card 기반 clump 1차는 들어갔고, 다음 목표는 밀도 영역, 색/높이/회전 variation, ground dressing, 약한 wind sway로 참고 이미지에 가까운 자연스러운 풀밭을 만드는 것.
 - 전투 중심 연출(hit feedback, attack anticipation 등)은 **차용 안 함** — 코지 농사/라이프심엔 환경 연출(grass sway·leaf drift·발걸음/상호작용 피드백·ambient wildlife)만 가져온다.
 
 ---

@@ -2,6 +2,7 @@
 
 > 이 문서는 **엔진이 어떻게 구성돼 있고 왜 그렇게 했는지 + 기술적 장기 방향**을 다룬다.
 > 게임 기획은 `DESIGN.md`, 변경 이력은 `DEVLOG.md`, 기능 스냅샷·빌드는 `README.md`.
+> 외부 Vulkan 예제 레퍼런스 운용 기준은 `VULKAN_REFERENCES.md`.
 >
 > **갱신 시점:** 구조가 바뀔 때만(새 시스템 / 리팩토링 / 파이프라인 변경). 매 작업마다 갱신하지 않는다.
 > **태그:** `[구현됨]` = 현재 코드에 존재 · `[계획]` = 합의된 방향(아직 구현 안 됨).
@@ -34,15 +35,16 @@ src/
 ## 렌더러 [구현됨]
 
 - Vulkan: instance / device / swapchain / render pass / pipelines / sync
-- **파이프라인**: 공유 빌더 `createPipeline(PipelineConfig)`로 메인패스 4개(player·chunk·ui·object) 생성. shadow 계열(청크/나무/플레이어)은 depth-only 별도 파이프라인.
+- **파이프라인**: 공유 빌더 `createPipeline(PipelineConfig)`로 scene 계열(player/selector/drop·chunk·object·grass·ui)을 생성하고, post는 별도 fullscreen pipeline으로 처리. shadow 계열(청크/오브젝트/플레이어)은 depth-only 별도 파이프라인.
 - viewport/scissor = **dynamic state** (리사이즈 시 파이프라인 재생성 불필요)
 - **청크 메시**: Hidden Face Culling, 청크별 vertex/index 버퍼, dirty만 리빌드(프레임당 N개 제한)
 - **컬링**: 청크 AABB frustum culling (메인패스 + shadow 라이트 프러스텀)
-- **오브젝트**: 공유 메시 + 청크별 인스턴스 버퍼(나무), 인스턴스 버퍼는 청크 로드당 1회 빌드
+- **오브젝트**: `ObjectType`별 공유 메시 + 청크별 타입 그룹 인스턴스 버퍼(tree/rock/workbench/fence/stone fence). 오브젝트 변경 시에만 `objectsDirty`로 재빌드
+- **식생**: 절차 grass alpha texture + X자 card mesh + 청크별 grass instance buffer. 시각 dressing layer이며 shadow caster는 아님
 - **조명 스택**: ambient + sun diffuse(dayFactor) + shadow + fog (4-layer)
-- **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+나무+플레이어, 밤엔 shadow pass 스킵
+- **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어, 밤엔 shadow geometry draw 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
-- 색: top/side vertex color (텍스처 미사용, 추후 아틀라스 호환 구조), per-vertex AO 베이크
+- 색: 지형/오브젝트는 top/side vertex color + per-vertex AO 베이크. 현재 텍스처 예외는 grass alpha card 1장
 - **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
 
 ---
@@ -60,9 +62,9 @@ src/
 
 - 청크 `unordered_map<ivec2, Chunk>`, 32×32×8, load/unload radius 기반 **스트리밍**
 - 절차 지형: FBM noise 2채널(height/biome), 좌표 기반 **결정론적**
-- `TileState`: `growthStage`, `lastUpdatedDay` (작물 time-based catch-up)
-- 오브젝트 레이어: **terrain(voxel) ≠ object(prop)** 분리, 나무 = 인스턴스 프롭
-- save/load: **수정 청크만** 바이너리 저장. 나무 등 오브젝트는 미저장 → 좌표 결정론으로 재생성
+- `TileState`: `growthStage`, `lastUpdatedDay`, `watered`(물주기 상태는 현재 transient)
+- 오브젝트 레이어: **terrain(voxel) ≠ object(prop)** 분리. 자연물(tree/rock)과 설치물(workbench/fence/stone fence)을 같은 StaticProp 경로로 처리
+- save/load: **수정 청크만** 바이너리 저장(v2). 타일 + `TileState` 일부 + 청크 오브젝트를 직렬화해 설치물 유지와 채집 자연물 respawn 방지를 처리. 미수정 청크는 좌표 결정론으로 재생성
 
 ---
 
@@ -75,13 +77,14 @@ src/
 - ✅ DevUI(ImGui, `PASTEL_DEV_BUILD` 게이트) + Dev 빌드 구성 + GPU timestamp 프로파일링 — 비주얼 튜닝의 전제조건. **완료**
 - ✅ `FrameRenderData` 스냅샷 — `drawFrame` 인자 10개 → 구조체 1개(`VulkanContext.h`). 렌더러는 public 경계에서 스냅샷만 소비. **완료**
 - ✅ `GpuBuffer` RAII 래퍼 — `VkBuffer+VkDeviceMemory`(+mapped) move-only RAII로 통합, `createBuffer` 반환형화. `operator VkBuffer()`로 읽기 무변경. **완료**
-- App-state 머신(Boot/MainMenu/Settings/Loading/Gameplay/Pause) + 입력 컨텍스트 + 설정(해상도/vsync/볼륨/AA) + world load/unload. **MainMenu 클릭 UI + Settings 클릭 UI(+VSync 적용/AA 데이터) + Loading 1차 + Pause 클릭 메뉴 완료**: 시작 시 MainMenu 표시, `START` / `SETTINGS` row 클릭으로 Gameplay 시작 또는 Settings 진입(키보드 백업 없이 클릭 전용), 설정 row 클릭으로 VSync ON/OFF(swapchain present mode 재생성 적용)·AA OFF/FXAA/SMAA(데이터/UI) 변경, 시작 시 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글, Pause에서는 `RESUME` / `SETTINGS` / `QUIT`(세션 정리 후 타이틀 복귀) row 클릭 제공. Settings는 진입 위치(MainMenu/Pause)에 따라 `BACK`/`ESC` 복귀 위치가 달라짐. 인벤토리가 열린 Gameplay에서는 `ESC`가 Pause보다 인벤토리 닫기를 우선. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단. 입력 정책 helper와 로컬 `AppFlow`, Tiny UI Text 기반으로 DevUI 캡처/app mode 차단/edge-detect/기초 문구 표시 접합면을 정리. AA 실제 렌더 적용·해상도 등 추가 옵션은 예정
+- App-state 머신(MainMenu/Settings/Loading/Gameplay/Pause) + 입력 정책 + world session start/end. **MainMenu 클릭 UI + Settings 클릭 UI(+VSync 적용/AA 데이터) + Loading 1차 + Pause 클릭 메뉴 완료**: 시작 시 MainMenu 표시, `START` / `SETTINGS` row 클릭으로 Gameplay 시작 또는 Settings 진입(키보드 백업 없이 클릭 전용), 설정 row 클릭으로 VSync ON/OFF(swapchain present mode 재생성 적용)·AA OFF/FXAA/SMAA(데이터/UI) 변경, 시작 시 Loading을 한 프레임 표시한 뒤 save 로드 + 초기 청크 로드 후 Gameplay 진입, `ESC`로 Gameplay/Paused 토글, Pause에서는 `RESUME` / `SETTINGS` / `QUIT`(세션 정리 후 타이틀 복귀) row 클릭 제공. Settings는 진입 위치(MainMenu/Pause)에 따라 `BACK`/`ESC` 복귀 위치가 달라짐. 인벤토리가 열린 Gameplay에서는 `ESC`가 Pause보다 인벤토리 닫기를 우선. 메뉴/settings/loading/pause 중 게임 업데이트·카메라 회전·월드 입력 차단, 메뉴/settings/loading 중 청크 스트리밍·저장 차단. AA 실제 렌더 적용·해상도·볼륨 등 추가 옵션은 예정
 
 **Tier 2 — 비주얼 정체성 (DevUI로 실시간 튜닝)**
 - ✅ 카메라 follow 댐핑 — `Camera` 내부 `m_followTarget` 지수 보간 + Loading 후 `snapToTarget`으로 저장 위치 스냅. 플레이어 추적감 개선, 회전은 기존 즉시 반응 유지
 - ✅ hemisphere/colored ambient — `chunk.frag`/`triangle.frag`에서 법선 방향 기반 warm/cool ambient tint 적용. 밤 ambient 바닥값은 0.10으로 낮춰 야간을 더 어둡게 조율
 - height fog
-- vegetation alpha card 1차(풀 clump, alpha test, shadow 제외, 거리/밀도 제한) · organic dressing layer(잔돌/흙 패치/길 가장자리) · vegetation/object variation(스케일/회전/tint) · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
+- ✅ vegetation alpha card 1차 — 절차 grass texture + X자 card clump + alpha test + shadow 제외 + 청크별 dirty gate. **완료**
+- 다음 비주얼 후보: density field 기반 grass dressing · organic dressing layer(잔돌/흙 패치/길 가장자리) · vegetation/object variation(스케일/회전/tint) · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -101,7 +104,7 @@ src/
 - 목표: 풀 텍스처 1장 + X자/부채꼴 card clump + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.
 - 성능 제약: GTX 1050 Ti 권장 기준을 목표로, 근거리 청크 중심, clump당 card 2장(quad 2개, 4 triangles), shadow caster 제외, alpha blend보다 alpha test/clip 우선, 거리/밀도 제한.
 - 이후 확장: DevUI density/거리/scale 튜닝, wind sway(vertex shader), LOD 또는 원거리 밀도 감소.
-- 새 텍스처와 alpha 파이프라인이 생기는 작업이므로 구현 전 짧은 설계안과 승인 필요.
+- 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, X자 card mesh, 청크별 instance buffer까지 1차 연결 완료. 다음 개선은 단순 밀도 증가가 아니라 density field, variant, ground dressing layer 중심.
 
 ### Grid 규칙 vs Organic 표현 — **결정**
 - 농사·설치/철거·충돌·저장 좌표는 grid 기반으로 유지한다. 플레이어 규칙은 예측 가능해야 한다.
@@ -111,10 +114,10 @@ src/
 
 ### 스타듀식 오브젝트 경제 — **결정**(우선순위 ↑, 복셀 블록 편집은 은퇴)
 순서: ✅① 인벤토리/작물 경제 → ✅② 제네릭 오브젝트 시스템 → ✅③ 자원 채집 → ✅④ 지형 불변화 → ⑤⑥ 제작·건축(아래 분할) → ⑦ 이후.
-- **제작·건축 분할(마크식 2단계, 의존성 순서):** ✅⑤a 인벤 제작(기본 레시피, 클릭형) → ✅⑥ 오브젝트 설치/철거(작업대·울타리를 월드에) → ✅⑤b 작업대 근처 고급 레시피(`requiresWorkbench`) 해금. **(아크 ①~⑥ 전체 완료 ✅)**
+- **제작·건축 분할(2단계 의존성 순서):** ✅⑤a 인벤 제작(기본 레시피, 클릭형) → ✅⑥ 오브젝트 설치/철거(작업대·울타리를 월드에) → ✅⑤b 작업대 근처 고급 레시피(`requiresWorkbench`) 해금. **(아크 ①~⑥ 전체 완료 ✅)**
 > ① 완료: 스택+개수 인벤토리, 숫자 렌더러, 낫 수확 + 드롭/줍기 레이어(`DroppedItem`). ② 완료: `m_objectMeshes` 메시 레지스트리 + 청크별 타입 그룹 + `ObjectDef` 테이블. ③ 완료: `tryHarvestObject`(도끼→나무/곡괭이→돌 → 드롭 → 줍기). ④ 완료: 복셀 설치/파괴 제거(지형 불변). ⑤a 완료: `Recipe` 테이블 + 클릭형 인벤 제작. ⑥ 완료: 오브젝트 설치/철거 + save v2 영속성. ⑤b 완료: `isObjectTypeNear` 작업대 근접 판정 → 고급 레시피 해금(돌담).
 - **인벤토리**: 슬롯+개수(스택) 모델 + add/remove API + 숫자 렌더러(비트맵 digit quad, 텍스처 없음). 모든 드롭/소모가 여기로.
-- `ObjectType → MeshRegistry` + `ObjectDefinition` 데이터 주도(mesh / collidable / castShadow / **harvestTool / dropItem / placeable**). tree 전용 → generic **StaticProp**으로 승격.
+- `ObjectType → MeshRegistry` + `ObjectDefinition` 데이터 주도(mesh / collidable / castShadow / **harvestTool / dropItem / placeable**). 현재 tree/rock/workbench/fence/stone fence를 generic **StaticProp** 경로로 처리.
 - 채집: 도끼→나무, 곡괭이→돌 = 오브젝트 레이캐스트 → 제거 + 드롭 아이템 → 인벤토리.
 - **지형 불변**: 좌클릭 복셀 파괴 제거, 건축은 제작 오브젝트 설치/철거(플레이어 설치물만).
 - variant 시스템(울타리 등 연결 구조)은 그 이후.
@@ -142,7 +145,7 @@ src/
 개인 Vulkan 엔진이 "AAA 체크리스트"에 빠져 게임을 못 내는 함정 방어선. 아래는 매력적이지만 현재 스코프(저사양·플랫셰이딩·소수 콘텐츠)에서 ROI가 낮거나 철학과 충돌:
 - **ECS 전면 전환** — 오브젝트가 sparse, OOP로 충분. (필요 시 hybrid SoA만 국소 적용)
 - **Render Graph / FrameGraph** — 풀 그래프 X. 경량 `IRenderPass`까지만.
-- **Asset DB / Material 시스템 / Material 노드그래프** — 텍스처 거의 없음(메시 절차생성, vertex color). 추상화 역순.
+- **Asset DB / Material 시스템 / Material 노드그래프** — 텍스처는 아직 grass 1장 수준(대부분 절차 메시 + vertex color). 추상화 역순.
 - **Job/Async 시스템** — 청크 리빌드는 `MAX_CHUNK_BUILDS_PER_FRAME` throttle로 이미 완화. 식생 대량화 시점에.
 - **VulkanContext 빅뱅 분할** — 한 번에 쪼개지 말 것. 작은 것부터(GpuBuffer→FrameRenderData→파이프라인 생성 점진 추출).
 - **RTX/GI · mesh shader · bindless · full PBR** — 저사양·스타일라이즈드 목표와 정반대.
@@ -159,6 +162,6 @@ src/
 
 ## 알려진 이슈 / 메모
 
-- **그림자 피터패닝**: 파이프라인 depthBias + 셰이더 bias 이중 적용으로 절벽·블록 edge에서 그림자가 떠 보일 수 있음 — bias 튜닝 진행 중.
+- **grass dressing**: alpha card 전환은 완료됐지만 아직 실제 잔디밭보다 균등한 clump 분포에 가깝다. 다음 핵심은 density field, variant, ground dressing layer.
 - **작물**: 현재 voxel 타일(`WHEAT` + `TileState`)로 처리. 장기적으로 별도 `Crop` 인스턴스 레이어 분리 검토.
 - 그림자 최소 밝기 `max(shadow, 0.4)` 는 파스텔 톤 유지를 위한 **의도된 스타일**(버그 아님).

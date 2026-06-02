@@ -1,0 +1,142 @@
+# VULKAN_REFERENCES — Vulkan 레퍼런스 운용 노트
+
+> 이 문서는 외부 Vulkan 예제 레포를 Pastel Farm에 어떻게 참고할지 정리한다.
+> 엔진 구조 결정은 `ARCHITECTURE.md`, 게임 방향은 `DESIGN.md`, 변경 기록은 `DEVLOG.md`에 둔다.
+>
+> 핵심 원칙: 레퍼런스는 **정답 코드가 아니라 검증된 패턴 사전**이다. 우리 엔진의 `World / GameState / VulkanContext` 책임 분리와 저사양·스타일라이즈드 방향을 먼저 유지한다.
+
+---
+
+## 주 레퍼런스
+
+- [SaschaWillems/Vulkan](https://github.com/SaschaWillems/Vulkan)
+  - Vulkan C++ 예제 모음. triangle부터 texture, shadow, instancing, compute, debug extensions까지 폭이 넓다.
+  - 각 기능이 독립 예제로 분리되어 있어 "어떤 Vulkan 기능을 어떻게 배선하는지" 확인하기 좋다.
+  - 그대로 이식하기보다, 필요한 샘플의 리소스 수명·descriptor·pipeline·command buffer 패턴을 비교 대상으로 삼는다.
+- [KhronosGroup/Vulkan-Samples](https://github.com/KhronosGroup/Vulkan-Samples)
+  - SaschaWillems README에서도 공식 샘플 레포로 언급된다.
+  - 최신 API 방향, 성능 샘플, 확장 기능의 보조 기준으로 본다.
+- [SaschaWillems/HowToVulkan](https://github.com/SaschaWillems/HowToVulkan)
+  - SaschaWillems README에서 2026년 Vulkan 입문/이해용으로 연결한 자료.
+  - 큰 구조 판단보다 개념 재확인용으로 사용한다.
+
+---
+
+## 우리 엔진에 맞는 참고 방식
+
+- **기능 단위로만 참고한다.** 예제 전체 구조를 따라가면 Pastel Farm의 월드/게임/렌더 경계가 흐려질 수 있다.
+- **작은 래퍼부터 흡수한다.** `GpuBuffer`, `PipelineConfig`, `FrameRenderData`처럼 이미 생긴 국소 추상화를 먼저 키운다.
+- **rule of 3 전에는 큰 시스템을 만들지 않는다.** Texture helper, descriptor helper, render pass abstraction은 반복 지점이 실제로 쌓인 뒤 도입한다.
+- **저사양 목표를 먼저 본다.** 고급 기능이 멋져도 GTX 750 Ti~1050급 목표와 로우폴리 룩에 맞지 않으면 보류한다.
+- **문서화 후 구현한다.** 외부 레퍼런스를 근거로 구조를 바꾸려면 먼저 `ARCHITECTURE.md` 또는 이 문서에 판단을 남긴다.
+
+---
+
+## 우선 참고 샘플 맵
+
+| 주제 | SaschaWillems 샘플 | Pastel Farm 적용 판단 |
+|------|--------------------|------------------------|
+| Texture upload | [`examples/texture`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texture) | grass texture가 절차 생성에서 파일 기반으로 넘어갈 때 1순위 참고. staging buffer, image layout transition, sampler, descriptor update 패턴 비교 |
+| Texture array | [`examples/texturearray`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturearray) | grass/flower/ground dressing variant가 많아질 때 후보. 지금은 단일 grass texture라 보류 |
+| Mipmap generation | [`examples/texturemipmapgen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturemipmapgen) | alpha card 가장자리와 원거리 shimmer가 문제로 확인될 때 후보. 현재는 작은 절차 텍스처라 보류 |
+| Instancing | [`examples/instancing`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/instancing) | 현재 object/grass instancing과 직접 관련. `ObjectInstance` 확장, variant index, tint, wind phase를 넣을 때 비교 |
+| Indirect draw | [`examples/indirectdraw`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/indirectdraw) | 식생/오브젝트 종류와 draw 수가 크게 늘어난 뒤 후보. 지금은 청크별 직접 draw가 단순하고 충분함 |
+| Alpha to coverage | [`examples/alphatocoverage`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/alphatocoverage) | grass alpha card 품질 개선 후보. MSAA/AA 정책과 함께 검토해야 하므로 즉시 적용은 아님 |
+| Multisampling | [`examples/multisampling`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/multisampling) | AA 실제 적용 단계에서 참고. 현재 `Settings`에는 AA 데이터만 있으므로 렌더 적용 때 비교 |
+| Shadow mapping | [`examples/shadowmapping`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmapping) | 이미 구현된 shadow pass의 bias/PCF/descriptor 비교용. 구조 전환 목적은 아님 |
+| Cascaded shadow mapping | [`examples/shadowmappingcascade`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmappingcascade) | 넓은 고정맵 전환 후 원거리 그림자 품질이 문제가 될 때 후보. 지금은 단일 shadow map 유지 |
+| Offscreen rendering | [`examples/offscreen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/offscreen) | 현재 post pass와 같은 계열. 추가 후처리, 미니맵, 반사 같은 기능 전 참고 |
+| Pipeline statistics | [`examples/pipelinestatistics`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/pipelinestatistics) | DevUI GPU timestamp 다음 단계 후보. 병목이 vertex/fragment 중 어디인지 볼 때 유용 |
+| Debug utils | [`examples/debugutils`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/debugutils) | RenderDoc/validation 디버깅 개선 후보. `PASTEL_DEV_BUILD` 전용 객체 이름/구간 라벨 추가에 적합 |
+| ImGui overlay | [`examples/imgui`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/imgui) | DevUI는 이미 구현됨. docking/texture preview/graph 확장 때 비교 |
+
+---
+
+## 바로 흡수하기 좋은 패턴
+
+### 1. Texture resource helper
+
+현재 grass texture는 `createGrassTexture()`에 절차 픽셀 생성, staging upload, image/view/sampler 생성이 한 번에 들어 있다. 다음 중 하나가 추가되면 `TextureResource`류의 작은 RAII helper를 검토한다.
+
+- grass texture를 파일에서 로드
+- flower/ground patch 등 dressing texture가 2개 이상 추가
+- UI font/atlas texture가 별도 리소스로 들어옴
+
+아직은 단일 texture라 helper 추출을 서두르지 않는다.
+
+### 2. Instance data 확장
+
+현재 `ObjectInstance`는 `pos / scale / rot`만 가진다. Vegetation Step 6 이후 다음 값이 필요해질 수 있다.
+
+- `tint` 또는 packed color: clump별 초록색 변주
+- `variant`: texture array layer 또는 card mesh variant 선택
+- `windPhase`: vertex shader sway offset
+- `densityClass`: 디버그/튜닝용 분류
+
+우선 Step 6에서는 CPU 배치 규칙만 바꾸고, 색/variant가 실제로 필요해지는 순간 vertex input과 shader를 함께 확장한다.
+
+### 3. Alpha card 품질 개선
+
+현재 grass는 alpha test(`discard`) + depth write로 단순하고 저렴하게 처리한다. 카드 가장자리가 거칠거나 원거리에서 깜빡이면 다음 순서로 본다.
+
+1. texture 자체의 alpha mask 개선
+2. mipmap 또는 alpha cutoff 조정
+3. FXAA/SMAA 후처리와 조합
+4. MSAA가 들어간 뒤 alpha-to-coverage 검토
+
+alpha blend/OIT는 풀밭에는 비용과 정렬 문제가 커서 우선순위가 낮다.
+
+### 4. Dev 디버깅 개선
+
+SaschaWillems의 debug utils/pipeline statistics 계열은 DevUI와 궁합이 좋다. 다음 기능은 `PASTEL_DEV_BUILD`에만 넣는 후보로 둔다.
+
+- Vulkan object name 라벨
+- command buffer debug label
+- draw call/instance count 표시
+- vertex shader vs fragment shader invocation 통계
+- grass density heat/debug overlay
+
+---
+
+## 장기 후보
+
+- **Indirect draw**: vegetation/object draw call이 많아지고 CPU command recording이 병목으로 확인될 때.
+- **Compute cull/LOD**: 고정맵 + 대량 식생 + 거리 LOD가 실제 병목이 된 뒤.
+- **Dynamic rendering**: render pass/framebuffer 구조 변경 필요성이 여러 번 생긴 뒤. 지금은 기존 render pass 구조 유지.
+- **Timeline semaphore**: asset streaming 또는 async upload가 실제로 들어갈 때.
+- **Descriptor indexing / descriptor heap 계열**: texture/material 수가 크게 늘어난 뒤. 현재는 단순 descriptor set이 더 읽기 쉽다.
+- **glTF loading**: authored asset pipeline을 시작할 때. 지금의 절차/로우폴리 primitive mesh 단계에서는 보류.
+
+---
+
+## 지금은 참고만 할 영역
+
+- PBR / IBL / HDR bloom 중심 샘플: Pastel Farm의 플랫 셰이딩·스타일라이즈드 철학과 거리가 있다.
+- Deferred rendering / SSAO: 현재 조명 수와 스타일에는 forward + baked AO + shadow가 더 단순하다.
+- Ray tracing / mesh shader / bindless 대규모 시스템: 저사양 목표와 맞지 않는다.
+- Full render graph: `ARCHITECTURE.md`의 anti-goal과 충돌한다. 필요해도 경량 `IRenderPass` 정도부터 검토한다.
+
+---
+
+## Vegetation Step 6에 대한 적용
+
+다음 작업인 `density field + variant 기반 grass dressing`은 Vulkan API 자체보다 **인스턴스 생성 규칙과 인스턴스 데이터 설계**가 핵심이다.
+
+권장 순서:
+
+1. `buildGrassDressingBuffer` 안에 좌표 기반 density field를 추가한다.
+2. 균등 확률 대신 patch 단위 밀도, edge falloff, open grass bias를 사용한다.
+3. `ObjectInstance` 포맷 변경 없이 scale/rotation/offset 범위를 density에 따라 다르게 준다.
+4. 색/texture/card variant가 꼭 필요해지는 시점에만 인스턴스 포맷과 `grass.vert/.frag`를 확장한다.
+5. grass 품질 문제가 alpha edge에서 확인되면 `alphatocoverage`, `multisampling`, `texturemipmapgen` 샘플을 다시 본다.
+
+이렇게 하면 Step 6는 수술적으로 작게 시작하면서도, 이후 texture array / wind / LOD / indirect draw로 확장할 길을 막지 않는다.
+
+---
+
+## 문서 갱신 규칙
+
+- 새 Vulkan 레퍼런스 판단은 우선 이 문서에 적는다.
+- 구조 결정으로 굳으면 `ARCHITECTURE.md`에 짧게 승격한다.
+- 실제 구현 완료와 검증은 `DEVLOG.md`에 남긴다.
+- 게임 경험/비주얼 방향 자체가 바뀔 때만 `DESIGN.md`를 수정한다.
