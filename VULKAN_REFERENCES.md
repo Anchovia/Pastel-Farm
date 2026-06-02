@@ -138,9 +138,10 @@ SaschaWillems/Vulkan에는 README 기준 SMAA 샘플이 없고, 참고 가능한
 5. ✅ authored texture loading 4a — `stb_image` RGBA8 로더 + `assets/textures` 복사 + `grass.png` 선택적 fallback 완료
 6. ✅ authored terrain texture override 4b — terrain layer별 Color texture 파일 override + 절차 fallback 완료
 7. ✅ texture tone 4c — luma/chroma 기반 `materialDetail`로 raw texture 곱셈 안정화 완료
-8. material-lite/layer별 strength — roughness/specular 상수, grass/dirt/stone/wood별 texture strength
+8. ✅ layer별 texture strength 4d — grass/leaves는 낮게, dirt/farmland/stone은 높게, wood/wheat는 중간값으로 분리 완료
 9. high-quality grass(wind/LOD/variant)
-10. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
+10. material-lite/mipmap/sampler — roughness/specular 상수와 sampler 정책
+11. SMAA: diagonal + Ultra + perceptual edge(밤 AA)는 완료. 남은 T2x/S2x·MSAA/alpha-to-coverage·grade/tonemap→AA 구조 전환은 HDR/톤매핑 도입 시
 
 PBR, render graph, bindless, 대형 material system은 이 순서 뒤에서 실제 필요가 확인될 때 검토한다.
 

@@ -104,6 +104,7 @@ src/
 - ✅ authored texture loading 토대: `third_party/stb/stb_image.h`, `assets/textures` post-build copy, `createTextureFromFile(...)`를 추가했다. 현재는 `grass.png` 선택적 교체 + 절차 fallback까지만 연결했다
 - ✅ authored terrain texture override 1차: `assets/textures/terrain/*.png`가 있으면 terrain texture array layer를 파일 이미지로 덮어쓴다. water는 전용 pass 전까지 절차 fallback 유지
 - ✅ texture tone 안정화 1차: `chunk.frag`에서 raw texture 곱셈 대신 luma 기반 `materialDetail`을 만들어 vertex color 주 색감 + authored texture 표면 질감 구조로 정리
+- ✅ layer별 texture strength 1차: grass/leaves는 낮게, dirt/farmland/stone은 높게, wood/wheat는 중간값으로 조절해 재질별 texture 존재감을 분리
 - material-lite: full PBR 전환 전, albedo + tint + roughness/specular 상수로 재질 차이를 표현
 - shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
 - terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
@@ -120,9 +121,10 @@ src/
 6. ✅ **Authored texture loading 4a**: `stb_image` RGBA8 로더, `assets/textures` 복사 규칙, `createTextureFromFile(...)`, grass texture 파일 fallback 토대. **완료**
 7. ✅ **Authored terrain texture override 4b**: terrain layer별 Color texture 파일 override, 누락/크기 불일치 layer는 절차 fallback. water는 전용 pass 전까지 fallback. **완료**
 8. ✅ **Texture tone 4c**: `fragColor * rawTexture`를 luma/chroma 기반 `materialDetail`로 안정화해 texture는 질감, vertex color는 주 색감 역할을 유지. **완료**
-9. **Material-lite / layer별 strength**: roughness/specular 상수, grass/dirt/stone/wood별 texture strength, mipmap/sampler 정책은 필요 확인 후 확장한다.
+9. ✅ **Layer별 texture strength 4d**: grass/leaves/dirt/stone/wood/farmland 등 material layer별 texture 영향도를 shader에서 분리. **완료**
 10. **High-quality grass pass**: card 수/variant, wind, distance fade/LOD, density DevUI 튜닝을 1050 Ti 60fps 예산 안에서 적극적으로 올린다.
-11. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
+11. **Material-lite / mipmap/sampler**: roughness/specular 상수와 mipmap/sampler 정책은 필요 확인 후 확장한다.
+12. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
 
 이 순서는 "품질을 올리되, 매 단계가 화면에 바로 기여하고 기존 구조와 자연스럽게 맞물리는" 경로다.
 

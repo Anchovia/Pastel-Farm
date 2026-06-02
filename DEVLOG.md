@@ -919,6 +919,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 첫 조정은 너무 약해 grass/dirt/stone 질감이 덜 읽혔고, 최종값은 detail 강도 0.80, detail clamp 0.68~1.26, chroma mix 0.24로 정했다.
 - 유저 빌드/스크린샷 검증 결과: 첫 authored texture 적용 때처럼 실사 노이즈가 화면을 잡아먹지 않으면서, 흙과 지형 질감은 은은하게 남았다. 전역 안정화 값으로는 유지하고, layer별 strength는 필요가 확인되면 후속 작업으로 분리한다.
 
+### Layer별 texture strength 1차 (Task #4d)
+- `chunk.frag`에 `materialTextureStrength(layer)`를 추가해 terrain/object가 공유하는 material layer별 texture 영향도를 다르게 조절했다.
+- grass top/leaves는 낮게 유지해 바닥과 캐노피가 실사 노이즈로 지저분해지지 않게 하고, dirt/farmland/stone은 조금 더 높여 질감이 읽히게 했다. wood/wheat는 중간값, water fallback은 낮은 값으로 둔다.
+- 현재 값: grass top 0.62, grass side 0.82, dirt 1.05, stone 1.15, wood 0.90, leaves 0.58, farmland 1.05, wheat 0.90, water 0.35.
+- 유저 빌드/스크린샷 검증 결과: 흙/밭/돌의 texture 존재감은 살아났고 grass top은 조용하게 유지됐다. grass 바닥은 이후 grass card density/variant/wind와 ground dressing으로 채우는 방향이라, 현재 값은 유지한다.
+
 ---
 
 ## 게임 설계 메모
