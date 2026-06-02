@@ -37,6 +37,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createChunkPipeline();
     createUIPipeline();
     createObjectPipeline();
+    createGrassPipeline();
     createPostPipeline();
     createDepthResources();
     createOffscreenResources();
@@ -100,6 +101,7 @@ VulkanContext::~VulkanContext() {
     m_uiBuffer.clear();
     vkDestroyPipeline(m_device, m_uiPipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_uiPipelineLayout, nullptr);
+    vkDestroyPipeline(m_device, m_grassPipeline, nullptr);
     vkDestroyPipeline(m_device, m_objectPipeline, nullptr);
     vkDestroyPipeline(m_device, m_chunkPipeline, nullptr);
     vkDestroyPipeline(m_device, m_pipeline, nullptr);

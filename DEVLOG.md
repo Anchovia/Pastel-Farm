@@ -765,6 +765,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - grass fragment shader는 기존 `chunk.frag`의 ambient·diffuse·shadow·fog 흐름을 최대한 맞춰 이후 렌더 경로 연결 시 조명 톤이 크게 튀지 않도록 함.
 - CMake 셰이더 컴파일/복사 목록에 grass 셰이더를 추가. 유저 빌드 검증 결과: 셰이더 컴파일·앱 실행 정상, 기존 grass clump 시각 유지.
 
+### Grass alpha card 파이프라인과 디스크립터 준비 (Vegetation alpha card Step 3)
+- grass 전용 `m_grassPipeline`을 추가. 정점 입력은 `GrassCardVertex + ObjectInstance`, 셰이더는 `grass.vert` / `grass.frag`, 양면 카드 렌더링을 위해 cull mode는 `NONE`으로 설정.
+- alpha는 블렌딩이 아니라 fragment shader의 alpha test(`discard`)로 처리하므로 `alphaBlend=false`, depth test/write는 기존 월드 오브젝트처럼 켜둠.
+- 기존 scene descriptor layout을 `UBO(binding 0) + shadow map(binding 1) + grass texture(binding 2)`로 확장. 기존 청크/오브젝트/플레이어 셰이더는 binding 2를 사용하지 않으므로 같은 descriptor set을 계속 공유.
+- descriptor pool과 descriptor set update에 grass texture sampler write를 추가. 텍스처는 프레임별로 변하지 않지만, 기존 프레임별 scene descriptor set 구조에 맞춰 각 set에 같은 grass texture를 기록.
+- 아직 렌더 경로는 기존 기하 grass clump를 유지하므로 시각 변화 없음이 정상. 유저 빌드 검증 결과: 컴파일·실행·종료 정상, 기존 grass clump 시각 유지, Vulkan validation 에러 없음.
+
 ---
 
 ## 게임 설계 메모

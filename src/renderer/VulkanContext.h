@@ -126,6 +126,7 @@ private:
     void createUIBuffer();
     void updateHotbar();
     void createObjectPipeline();
+    void createGrassPipeline();
     void createPostRenderPass();
     void createOffscreenResources();
     void createPostPipeline();
@@ -212,6 +213,7 @@ private:
     VkPipeline               m_uiPipeline        = VK_NULL_HANDLE;  // 2D UI overlay
     VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
     VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props (trees)
+    VkPipeline               m_grassPipeline     = VK_NULL_HANDLE;  // Instanced alpha-card grass
 
     // Post-process: scene → offscreen color, then fullscreen pass → swapchain
     VkRenderPass             m_postRenderPass          = VK_NULL_HANDLE;

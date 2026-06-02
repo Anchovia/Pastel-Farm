@@ -553,6 +553,29 @@ void VulkanContext::createObjectPipeline() {
     m_objectPipeline = createPipeline(cfg);
 }
 
+void VulkanContext::createGrassPipeline() {
+    PipelineConfig cfg;
+    cfg.vertPath   = "shaders/grass.vert.spv";
+    cfg.fragPath   = "shaders/grass.frag.spv";
+    cfg.bindings   = {
+        { 0, sizeof(GrassCardVertex), VK_VERTEX_INPUT_RATE_VERTEX   },
+        { 1, sizeof(ObjectInstance),  VK_VERTEX_INPUT_RATE_INSTANCE },
+    };
+    cfg.attributes = {
+        { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(GrassCardVertex, pos)    },
+        { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(GrassCardVertex, normal) },
+        { 2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(GrassCardVertex, uv)     },
+        { 3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectInstance, pos)     },
+        { 4, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, scale)   },
+        { 5, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, rot)     },
+    };
+    cfg.cullMode   = VK_CULL_MODE_NONE;  // alpha cards are two-sided
+    cfg.depthTest  = true;
+    cfg.alphaBlend = false;              // alpha test in shader, not blended transparency
+    cfg.layout     = m_pipelineLayout;   // reuse UBO + shadow + grass texture descriptor layout
+    m_grassPipeline = createPipeline(cfg);
+}
+
 // ============================================================
 //  UI buffer
 // ============================================================
@@ -1690,7 +1713,7 @@ void VulkanContext::createShadowSampler() {
 //  Descriptor set layout
 // ============================================================
 void VulkanContext::createDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding bindings[2]{};
+    VkDescriptorSetLayoutBinding bindings[3]{};
 
     bindings[0].binding         = 0;
     bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1702,9 +1725,14 @@ void VulkanContext::createDescriptorSetLayout() {
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    bindings[2].binding         = 2;
+    bindings[2].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
     VkDescriptorSetLayoutCreateInfo info{};
     info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    info.bindingCount = 2;
+    info.bindingCount = 3;
     info.pBindings    = bindings;
 
     if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
@@ -1734,7 +1762,7 @@ void VulkanContext::createDescriptorPool() {
     poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
     poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT * 2;
 
     VkDescriptorPoolCreateInfo info{};
     info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1769,7 +1797,12 @@ void VulkanContext::createDescriptorSets() {
         imageInfo.imageView   = m_shadowImageView;
         imageInfo.sampler     = m_shadowSampler;
 
-        VkWriteDescriptorSet writes[2]{};
+        VkDescriptorImageInfo grassInfo{};
+        grassInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        grassInfo.imageView   = m_grassTexView;
+        grassInfo.sampler     = m_grassTexSampler;
+
+        VkWriteDescriptorSet writes[3]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet          = m_descriptorSets[i];
         writes[0].dstBinding      = 0;
@@ -1784,7 +1817,14 @@ void VulkanContext::createDescriptorSets() {
         writes[1].descriptorCount = 1;
         writes[1].pImageInfo      = &imageInfo;
 
-        vkUpdateDescriptorSets(m_device, 2, writes, 0, nullptr);
+        writes[2].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[2].dstSet          = m_descriptorSets[i];
+        writes[2].dstBinding      = 2;
+        writes[2].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[2].descriptorCount = 1;
+        writes[2].pImageInfo      = &grassInfo;
+
+        vkUpdateDescriptorSets(m_device, 3, writes, 0, nullptr);
     }
 }
 
