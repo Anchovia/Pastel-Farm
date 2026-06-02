@@ -270,11 +270,14 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         }
     }
 
-    // Player / selector (instanced pipeline)
+    // Player / selector / drops — dynamic world entities, hidden in menu states
+    // (MainMenu/Settings/Loading) so no orphan player cube shows behind the menu.
+    const bool worldVisible = !(m_mainMenuHud || m_settingsHud || m_loadingHud);
+
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
     vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-    if (m_showSelector) {
+    if (worldVisible && m_showSelector) {
         VkBuffer     sBufs[] = {m_selectorVertexBuffer, m_selectorInstBuffer[m_currentFrame]};
         VkDeviceSize sOffs[] = {0, 0};
         vkCmdBindVertexBuffers(cmd, 0, 2, sBufs, sOffs);
@@ -283,14 +286,16 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
     }
 
     // Player
-    VkBuffer     pBufs[] = {m_vertexBuffer, m_playerInstBuffer[m_currentFrame]};
-    VkDeviceSize pOffs[] = {0, 0};
-    vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
-    vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-    vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
+    if (worldVisible) {
+        VkBuffer     pBufs[] = {m_vertexBuffer, m_playerInstBuffer[m_currentFrame]};
+        VkDeviceSize pOffs[] = {0, 0};
+        vkCmdBindVertexBuffers(cmd, 0, 2, pBufs, pOffs);
+        vkCmdBindIndexBuffer(cmd, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdDrawIndexed(cmd, (uint32_t)kIndices.size(), 1, 0, 0, 0);
+    }
 
     // Dropped items (small cubes, same instanced pipeline as the player)
-    if (m_dropCount > 0) {
+    if (worldVisible && m_dropCount > 0) {
         VkBuffer     dBufs[] = {m_itemVertexBuffer, m_dropInstBuffer[m_currentFrame]};
         VkDeviceSize dOffs[] = {0, 0};
         vkCmdBindVertexBuffers(cmd, 0, 2, dBufs, dOffs);

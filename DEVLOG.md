@@ -706,6 +706,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 검증 후 밤이 조금 밝다는 피드백에 따라 ambient 바닥값을 `0.15 → 0.10`으로 낮춤. 낮 최대값 `0.30`은 유지해 낮 장면 변화는 최소화.
 - 검증 결과: 셰이더 컴파일/실행 정상, 낮 색감 유지, 밤 장면 더 어둡게 조율, 플레이어/셀렉터 색 이상 없음.
 
+### 메뉴 상태에서 동적 월드 엔티티 렌더 스킵 (정리)
+- MainMenu/Settings/Loading에서도 `recordCommandBuffer`가 플레이어 큐브를 항상 그려, 메뉴 딤 뒤로 주황 큐브가 비치던 문제를 정리.
+- 렌더러가 이미 보유한 HUD 플래그로 `worldVisible = !(mainMenu || settings || loading)`를 계산해 셀렉터·플레이어·드롭 드로우를 게이트. Pause는 게임 위 오버레이라 의도적으로 포함(월드 표시 유지).
+- `FrameRenderData`/`main.cpp` 호출부 변경 없이 `recordCommandBuffer` 한 곳만 수정. 청크/오브젝트/잔디 루프·UI·post·shadow 패스는 불변.
+- 셀렉터·드롭은 현재 메뉴에서 비어 있지만 함께 게이트해, 이후 Pause→타이틀 복귀 구현 시 직전 플레이 상태가 타이틀 뒤로 새지 않도록 대비.
+- 검증 결과: MainMenu에서 플레이어 큐브 비표시, Gameplay 플레이어/셀렉터/드롭 정상, Pause에서 월드 유지 정상 확인.
+
 ### Grid 규칙 vs Organic 표현 방향 정리 (Tier 2 비주얼 원칙)
 - terrain breakup을 타일별 deterministic vertex color tint로 시도했으나, 잔디 타일마다 색이 바뀌어 grid가 더 강하게 드러나는 문제가 확인됨. 변경은 즉시 되돌림.
 - 결정: **게임 규칙은 grid, 시각 경험은 organic**. 농사, 오브젝트 설치/철거, 충돌, 저장 좌표는 grid 기반을 유지하되 자연 바닥과 숲/풀/흙 표현은 100% grid처럼 보이면 안 됨.
