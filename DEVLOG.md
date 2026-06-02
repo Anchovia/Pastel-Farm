@@ -786,54 +786,49 @@ Vulkan 공부 겸 엔진 개발 기록.
 - alpha card mesh는 조금 더 낮고 넓게 조정하고, 절차 grass texture의 blade 수·폭·색을 늘려 기존보다 두꺼운 clump로 보이게 함.
 - 검증 결과: 기존보다 두꺼워지고 alpha card 적용은 안정적이나, 아직 레퍼런스처럼 바닥을 덮는 실제 잔디밭 느낌은 부족. 다음 개선은 단순 밀도 증가보다 density field, variant, ground dressing layer가 핵심.
 
+### SaschaWillems/Vulkan 레퍼런스 운용 문서 추가
+- 교수님 추천 레포인 `SaschaWillems/Vulkan`을 Pastel Farm의 Vulkan 참고 기준으로 채택하되, 엔진 구조를 그대로 이식하지 않고 기능별 패턴 사전으로 쓰기로 정리.
+- `VULKAN_REFERENCES.md`를 추가해 texture upload, instancing, alpha-to-coverage, shadow, indirect draw, debug utils, pipeline statistics 등 우리 엔진에 유용한 샘플과 적용 판단을 분류.
+- `ARCHITECTURE.md`에는 외부 Vulkan 레퍼런스 운용 기준이 새 문서에 있다는 연결만 추가하고, `README.md` 문서 목록에 새 문서를 등록.
+- Step 6 grass dressing에는 우선 `buildGrassDressingBuffer`의 좌표 기반 density field와 scale/rotation/offset variation을 적용하고, 인스턴스 포맷/texture array/alpha-to-coverage는 실제 필요가 확인될 때 확장하는 방향으로 정리.
+
+### 문서 최신화 패스
+- `README.md`의 긴 시간순 구현 목록을 현재 기능 스냅샷으로 압축하고, 세부 구현 이력은 `DEVLOG.md`로 분리해 문서 역할을 명확히 함.
+- `ARCHITECTURE.md`의 렌더러/월드 요약을 현재 코드에 맞춰 grass pipeline, post pass, 제네릭 오브젝트, save v2 오브젝트 직렬화 기준으로 갱신.
+- `DESIGN.md`의 현재 구현 상태와 grass alpha card 문구를 최신화.
+- `DEVLOG.md` 하단의 오래된 Minecraft식 설계 메모를 현재 Stardew-style 지형 불변/StaticProp 방향 요약으로 교체. 과거 구현 기록은 시간순 이력으로 보존.
+
 ---
 
 ## 게임 설계 메모
 
-### 게임 방향
+> 이 절은 현재 방향만 요약한다. 초기의 Minecraft식 복셀 설치/파괴 아이디어와 구현 순서 메모는 위 구현 기록에 역사로 남기고, 현재 설계 판단은 `DESIGN.md`와 `ARCHITECTURE.md`를 기준으로 한다.
 
-스타듀밸리(농지/자원 수집) + 마인크래프트(블록 설치/파괴)를 고정 아이소메트릭 시점으로.
-기본은 평지 한 층. 블록을 쌓으면 단차 발생 → 계단/사다리로 이동.
+### 현재 게임 방향
 
-### 월드: 타일 기반
+Pastel Farm은 커스텀 Vulkan 엔진 기반의 스타일라이즈드 로우폴리 농사·라이프심이다.
+현재 방향은 **Stardew-style 농사/채집/제작/건축 + 고정 아이소메트릭 시점 + authored 느낌의 세계**다.
 
-```
-World[x][y][z] = TileType  // 3D 그리드
-```
+- 지형은 불변이다. 플레이어는 복셀 블록을 자유 설치/파괴하지 않는다.
+- 자연물과 건축물은 `ObjectType` 기반 StaticProp 레이어에서 처리한다.
+- 나무/돌은 도구로 채집하고, 제작한 작업대/울타리/돌담은 오브젝트로 설치·철거한다.
+- 농사 규칙과 설치/충돌/저장은 grid를 따른다.
+- 자연 시각 표현은 grass alpha card와 dressing layer로 grid감을 줄인다.
 
-모든 블록은 **1×1×1 단위 큐브**로 통일.
-같은 메시를 재사용하고 색상/텍스처만 바꾸면 되므로 인스턴싱과 궁합이 좋다.
-
-```
-월드 로직  → 그리드 좌표 (정수)  : 타일 종류, 충돌, 속성
-렌더링/물리 → 연속 좌표 (float)  : 캐릭터 위치, 이동, 애니메이션
-```
-
-**타일 기반의 장점:**
-- 충돌 판정: 캐릭터 위치 → 그리드 좌표 변환 → 타일 속성 조회 (O(1))
-- 청크 시스템: N×N 타일 묶음으로 가까운 것만 로드/언로드
-- 컬링: 청크 단위로 frustum 밖이면 통째로 제외
-
-### 렌더링: 인스턴싱
-
-타일을 하나하나 개별 드로우콜로 그리면 1000타일 = 드로우콜 1000번.
-인스턴싱은 같은 메시를 위치/색상 데이터만 바꿔서 한 번에 그린다.
+### 현재 월드/렌더 구조
 
 ```
-// 개별 드로우콜 방식 (느림)
-for each tile: vkCmdDraw(tile)  // N번 호출
-
-// 인스턴싱 방식 (빠름)
-vkCmdDrawIndexed(tileMesh, instanceCount=N)  // 1번 호출
+World
+├─ Terrain    32×32×8 청크 기반 voxel 지형
+├─ TileState  growthStage / lastUpdatedDay / watered
+├─ StaticProp ObjectType(tree/rock/workbench/fence/stone fence)
+└─ Dressing   grass alpha card 등 저장하지 않는 시각 레이어
 ```
 
-저사양 목표에서 타일 수백~수천 개를 그려야 하므로 인스턴싱은 필수.
-
-### 구현 순서 (예정)
-1. 플랫 셰이딩 (현재)
-2. 인스턴싱
-3. 타일 그리드 + 청크
-4. 플레이어 이동
+- 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
+- save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
+- 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop/ui, post pass를 분리해 그린다.
+- 다음 grass 개선은 단순 밀도 증가가 아니라 density field, variant, ground dressing layer가 핵심이다.
 
 ---
 
