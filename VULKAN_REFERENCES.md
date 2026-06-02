@@ -144,8 +144,21 @@ SaschaWillems의 debug utils/pipeline statistics 계열은 DevUI와 궁합이 �
 2. 미학적으로는 실패에 가깝다. 갈색 patch와 pebble placeholder가 너무 크고 대비가 강해 지면 디테일이 아니라 화면을 어지럽히는 오브젝트처럼 보였다.
 3. 최종 목표는 geometry patch 대량 배치가 아니라 texture/alpha detail, 작은 color breakup, 낮은 대비의 ground dressing이다.
 4. cleanup에서는 Step 7 구조를 유지하되 patch 밀도/크기/대비를 크게 낮추고, grass 위의 ground patch는 사실상 제거했다. 결과가 거의 안 보이긴 하지만, 최종 texture/card detail 전 기준 화면으로는 과한 placeholder보다 낫다.
-5. 다음 작업에서는 grass card variant/tint를 우선 검토하고, ground detail은 texture/card/decal 계열로 바꿀 때 다시 늘린다.
+5. 다음 작업에서는 grass texture/card detail과 wind를 우선 검토하고, ground detail은 texture/card/decal 계열로 바꿀 때 다시 늘린다.
 6. texture 리소스가 grass 외 2개 이상으로 늘어나는 시점에 SaschaWillems `texture`, `texturearray`, `texturemipmapgen` 샘플을 다시 보고 `TextureResource` helper 추출을 검토한다.
+
+---
+
+## Vegetation Step 8에 대한 메모
+
+`grass tint/card variation` 1차는 인스턴스 포맷 확장 없이 shader hash로 처리했다. `ObjectInstance`에 tint/variant 필드를 추가하면 object/grass/shadow 계열 vertex input을 함께 재검토해야 하므로, 실제 texture array나 per-instance material이 필요해질 때까지 미룬다.
+
+적용 결과:
+
+1. `grass.vert`에서 instance position 기반 hash로 clump별 폭/높이 variation을 계산했다.
+2. 같은 hash 계열로 tint를 만들어 `grass.frag`에서 grass texture 색에 곱한다.
+3. C++ pipeline, descriptor, instance buffer, placement rule은 변경하지 않았다.
+4. 유저 빌드 검증 결과: 정상 실행. 반복감은 줄었고 화면은 과하게 지저분해지지 않았다.
 
 ---
 

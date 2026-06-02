@@ -16,6 +16,7 @@ layout(location = 0)      in vec3 fragNormal;
 layout(location = 1)      in vec2 fragUV;
 layout(location = 2)      in vec4 fragPosLightSpace;
 layout(location = 3)      in float fragViewDepth;
+layout(location = 4)      in vec3 fragTint;
 layout(location = 0) out vec4 outColor;
 
 void main() {
@@ -50,7 +51,7 @@ void main() {
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 ambient = ambientTint * mix(0.10, 0.30, dayFactor);
     vec3 direct  = vec3(diff * 0.7 * dayFactor * shadowFactor);
-    vec3 litColor = texel.rgb * (ambient + direct);
+    vec3 litColor = texel.rgb * fragTint * (ambient + direct);
 
     // Fog
     const float FOG_START = 27.0;

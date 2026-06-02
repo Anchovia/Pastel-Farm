@@ -40,7 +40,7 @@ src/
 - **청크 메시**: Hidden Face Culling, 청크별 vertex/index 버퍼, dirty만 리빌드(프레임당 N개 제한)
 - **컬링**: 청크 AABB frustum culling (메인패스 + shadow 라이트 프러스텀)
 - **오브젝트**: `ObjectType`별 공유 메시 + 청크별 타입 그룹 인스턴스 버퍼(tree/rock/workbench/fence/stone fence). 오브젝트 변경 시에만 `objectsDirty`로 재빌드
-- **식생/지면 dressing**: 절차 grass alpha texture + X자 card mesh + 청크별 grass instance buffer + 좌표 기반 density field. 별도 ground dressing buffer로 잔돌/패치 placement도 검증 중. 둘 다 저장하지 않는 시각 dressing layer이며 shadow caster는 아님
+- **식생/지면 dressing**: 절차 grass alpha texture + X자 card mesh + 청크별 grass instance buffer + 좌표 기반 density field + shader 기반 grass tint/card variation. 별도 ground dressing buffer로 잔돌/패치 placement도 검증 중. 둘 다 저장하지 않는 시각 dressing layer이며 shadow caster는 아님
 - **조명 스택**: ambient + sun diffuse(dayFactor) + shadow + fog (4-layer)
 - **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어, 밤엔 shadow geometry draw 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
@@ -85,7 +85,7 @@ src/
 - height fog
 - ✅ vegetation alpha card 1차 — 절차 grass texture + X자 card clump + alpha test + shadow 제외 + 청크별 dirty gate. **완료**
 - ✅ density field 기반 grass dressing 1차 — 균등 확률 대신 patch density + open grass bias + density 기반 offset/scale variation 적용. **완료**
-- 다음 비주얼 후보: visual variant(tint/texture/card) · ground dressing 텍스처화 · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
+- 다음 비주얼 후보: texture/card detail · ground dressing 텍스처화 · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -105,7 +105,7 @@ src/
 - 목표: 풀 텍스처 1장 + X자/부채꼴 card clump + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.
 - 성능 제약: GTX 1050 Ti 권장 기준을 목표로, 근거리 청크 중심, clump당 card 2장(quad 2개, 4 triangles), shadow caster 제외, alpha blend보다 alpha test/clip 우선, 거리/밀도 제한.
 - 이후 확장: DevUI density/거리/scale 튜닝, wind sway(vertex shader), LOD 또는 원거리 밀도 감소.
-- 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, X자 card mesh, 청크별 instance buffer, 좌표 기반 density field까지 1차 연결 완료. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 거의 안 보이는 수준으로 축소했다. 다음 개선은 tint/texture/card variant를 먼저 넣고, ground detail은 낮은 대비의 texture/card detail로 바꾸는 방향.
+- 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, X자 card mesh, 청크별 instance buffer, 좌표 기반 density field, shader 기반 tint/card variation까지 1차 연결 완료. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 거의 안 보이는 수준으로 축소했다. 다음 개선은 texture/card detail, wind, 낮은 대비의 ground texture/card detail 방향.
 
 ### Grid 규칙 vs Organic 표현 — **결정**
 - 농사·설치/철거·충돌·저장 좌표는 grid 기반으로 유지한다. 플레이어 규칙은 예측 가능해야 한다.
@@ -163,6 +163,6 @@ src/
 
 ## 알려진 이슈 / 메모
 
-- **grass/ground dressing**: alpha card + density field 1차는 완료. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 현재는 거의 안 보이는 기준 화면으로 두고, 다음 핵심은 텍스처/알파 기반 디테일 전환, tint/texture/card variant, wind.
+- **grass/ground dressing**: alpha card + density field + shader 기반 tint/card variation 1차는 완료. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 현재는 거의 안 보이는 기준 화면으로 두고, 다음 핵심은 텍스처/알파 기반 디테일 전환과 wind.
 - **작물**: 현재 voxel 타일(`WHEAT` + `TileState`)로 처리. 장기적으로 별도 `Crop` 인스턴스 레이어 분리 검토.
 - 그림자 최소 밝기 `max(shadow, 0.4)` 는 파스텔 톤 유지를 위한 **의도된 스타일**(버그 아님).

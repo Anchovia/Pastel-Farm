@@ -818,6 +818,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - pebble도 밀도와 크기를 크게 줄이고 색 대비를 낮춰 지면에 더 묻히게 조정.
 - 유저 빌드/스크린샷 피드백: 이전보다 훨씬 조용해졌지만 거의 안 보일 정도로 줄었다. 현재 판단은 "없어 보이는 기준 화면"이 "못생긴 placeholder가 화면을 망치는 상태"보다 낫다는 쪽. 최종 디테일은 이후 텍스처/알파 기반 ground detail과 grass tint/card variant로 다시 채운다.
 
+### Grass shader 기반 tint/card variation 1차 (Vegetation Step 8)
+- `ObjectInstance` 포맷(`pos/scale/rot`)은 유지하고, `grass.vert`에서 인스턴스 좌표 기반 hash로 clump별 폭/높이 variation을 계산.
+- `grass.vert`가 clump별 tint를 `fragTint`로 넘기고, `grass.frag`가 grass texture 색에 tint를 곱해 초록색 반복감을 완화.
+- C++ vertex input, descriptor, pipeline, grass placement/density, ground dressing buffer는 변경하지 않았다. 파장은 grass shader에 한정.
+- 유저 빌드 검증 결과: 셰이더 컴파일·실행 정상. grass 반복감이 약간 줄고, ground dressing cleanup 상태도 유지됨.
+
 ---
 
 ## 게임 설계 메모
@@ -848,7 +854,7 @@ World
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop/ui, post pass를 분리해 그린다.
-- 다음 grass 개선은 ground dressing layer, tint/texture/card variant, wind가 핵심이다.
+- 다음 grass 개선은 texture/card detail, wind, ground dressing 텍스처화가 핵심이다.
 
 ---
 
