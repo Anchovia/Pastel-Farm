@@ -713,6 +713,12 @@ Vulkan 공부 겸 엔진 개발 기록.
 - 셀렉터·드롭은 현재 메뉴에서 비어 있지만 함께 게이트해, 이후 Pause→타이틀 복귀 구현 시 직전 플레이 상태가 타이틀 뒤로 새지 않도록 대비.
 - 검증 결과: MainMenu에서 플레이어 큐브 비표시, Gameplay 플레이어/셀렉터/드롭 정상, Pause에서 월드 유지 정상 확인.
 
+### hemisphere ambient 웜톤 조정 (Tier 2 비주얼 튜닝)
+- 기존 `SKY_AMBIENT`가 파랑 우세(`0.74, 0.84, 1.08`)라 윗면이 차갑게 물들던 것을 `chunk.frag`/`triangle.frag` 양쪽에서 따뜻한 중립(`0.96, 0.93, 0.88`)으로 변경. `GROUND_AMBIENT`는 약간 더 따뜻하게(`1.04, 0.90, 0.70`).
+- 결과적으로 hemisphere 차이가 "cool vs warm"이 아니라 "따뜻함의 정도"로 읽혀 DESIGN의 따뜻한 톤 방향에 정렬. sky의 밝기(평균 luminance)는 이전과 비슷하게 유지해 낮 장면 노출 변화를 최소화.
+- 밤 ambient 바닥값(`0.10`)·diffuse·shadow·fog 구조는 불변. 셰이더 상수만 수정.
+- 검증 결과: 낮 색감이 덜 푸르게 바뀜 확인. 단 낮 ambient 절대 변화량이 작아 체감은 미세 — 추후 LUT/grading 단계에서 더 또렷해질 여지.
+
 ### Grid 규칙 vs Organic 표현 방향 정리 (Tier 2 비주얼 원칙)
 - terrain breakup을 타일별 deterministic vertex color tint로 시도했으나, 잔디 타일마다 색이 바뀌어 grid가 더 강하게 드러나는 문제가 확인됨. 변경은 즉시 되돌림.
 - 결정: **게임 규칙은 grid, 시각 경험은 organic**. 농사, 오브젝트 설치/철거, 충돌, 저장 좌표는 grid 기반을 유지하되 자연 바닥과 숲/풀/흙 표현은 100% grid처럼 보이면 안 됨.

@@ -38,8 +38,8 @@ void main() {
     }
     float shadowFactor = max(shadow, 0.4);
 
-    const vec3 SKY_AMBIENT    = vec3(0.74, 0.84, 1.08);
-    const vec3 GROUND_AMBIENT = vec3(1.02, 0.92, 0.74);
+    const vec3 SKY_AMBIENT    = vec3(0.96, 0.93, 0.88); // soft warm sky (no cool tint)
+    const vec3 GROUND_AMBIENT = vec3(1.04, 0.90, 0.70); // warmer ground bounce
     float hemi = clamp(normal.z * 0.5 + 0.5, 0.0, 1.0);
     vec3 ambientTint = mix(GROUND_AMBIENT, SKY_AMBIENT, hemi);
 
