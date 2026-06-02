@@ -748,7 +748,7 @@ Vulkan 공부 겸 엔진 개발 기록.
 ### Vegetation alpha card 투자 판단 (Tier 2 비주얼 방향)
 - 현재 기하 기반 풀 clump는 풀밭의 방향성 검증에는 유용하지만, 얇은 삼각형 실루엣 때문에 멀리서 삐쭉한 바늘처럼 보이는 한계가 확인됨.
 - 참고 이미지에 가까운 풀은 alpha texture card가 더 적합. 목표는 낮고 풍성한 X자/부채꼴 card clump, 색/높이/회전 variation, 밀도 rule, 약한 wind sway.
-- GTX 1050 Ti 권장 목표라면 투자 가치가 있음. 조건은 shadow 제외, alpha test/clip 우선, 근거리 청크 중심, clump당 card 2장 정도, 거리/밀도 제한.
+- GTX 1050 Ti 최소 기준에서도 grass는 투자 가치가 있음. 조건은 성능 예산을 DevUI/GPU timing으로 보면서 shadow 제외, alpha test/clip 우선, 거리/밀도/LOD를 조절하는 것.
 - 새 텍스처와 alpha 파이프라인이 들어가므로 구현 전 설계안 필요. 텍스처 0개 원칙의 첫 예외가 될 수 있으나 vegetation은 ROI가 높은 예외로 판단.
 
 ### 절차 grass alpha 텍스처 리소스 추가 (Vegetation alpha card Step 1)
@@ -824,6 +824,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 - C++ vertex input, descriptor, pipeline, grass placement/density, ground dressing buffer는 변경하지 않았다. 파장은 grass shader에 한정.
 - 유저 빌드 검증 결과: 셰이더 컴파일·실행 정상. grass 반복감이 약간 줄고, ground dressing cleanup 상태도 유지됨.
 
+### 렌더링 품질/성능 기준 재정렬
+- 프로젝트 성능 기준을 **최소 GTX 1050 Ti / 1080p / 60fps**, **권장 GTX 1660 Super급**으로 명확히 정리.
+- Pastel Farm은 초저사양 로우폴리 데모나 플래시게임식 단순화를 목표로 하지 않는다. 최적화·리팩토링·모듈성은 계속 핵심이지만, 품질을 낮추기 위한 보수주의는 피한다.
+- 목표 그래픽은 고품질 스타일라이즈드 상용 게임과 견줄 만한 화면이다. 로우폴리와 플랫 셰이딩은 저품질 제약이 아니라 미학적 선택이다.
+- 문서 기준을 수정: `README.md`, `DESIGN.md`, `ARCHITECTURE.md`, `VULKAN_REFERENCES.md`에서 GTX 750 Ti/통합 GPU급, 텍스처 최소화, PBR 전면 배제처럼 너무 보수적으로 보이던 문장을 정리.
+- 다음 렌더링 방향은 FXAA/SMAA 실제 적용, terrain/object texture mapping, material-lite, high-quality grass(wind/LOD/variant), shadow quality options, ground dressing 텍스처화로 재정렬.
+
 ---
 
 ## 게임 설계 메모
@@ -832,7 +839,7 @@ Vulkan 공부 겸 엔진 개발 기록.
 
 ### 현재 게임 방향
 
-Pastel Farm은 커스텀 Vulkan 엔진 기반의 스타일라이즈드 로우폴리 농사·라이프심이다.
+Pastel Farm은 커스텀 Vulkan 엔진 기반의 고품질 스타일라이즈드 로우폴리 농사·라이프심이다.
 현재 방향은 **Stardew-style 농사/채집/제작/건축 + 고정 아이소메트릭 시점 + authored 느낌의 세계**다.
 
 - 지형은 불변이다. 플레이어는 복셀 블록을 자유 설치/파괴하지 않는다.
@@ -854,7 +861,7 @@ World
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop/ui, post pass를 분리해 그린다.
-- 다음 grass 개선은 texture/card detail, wind, ground dressing 텍스처화가 핵심이다.
+- 다음 비주얼 개선은 FXAA/SMAA 실제 적용, texture mapping/material-lite, high-quality grass(wind/LOD/variant), ground dressing 텍스처화가 핵심이다.
 
 ---
 
@@ -868,7 +875,7 @@ Vulkan은 드라이버가 아무것도 안 해준다. GPU가 뭘 어떻게 할�
 대신 얻는 것:
 - CPU 오버헤드 최소화
 - 멀티스레드 렌더링 지원
-- 예측 가능한 퍼포먼스 (저사양에 특히 중요)
+- 예측 가능한 퍼포먼스 (정해진 성능 예산 안에서 품질을 올리기 위해 중요)
 
 ---
 

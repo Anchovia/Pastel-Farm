@@ -9,7 +9,7 @@
 
 ## High Concept
 
-Pastel Farm은 커스텀 Vulkan 엔진 위에 만드는 **스타일라이즈드 로우폴리 농사·라이프심** 게임이다.
+Pastel Farm은 커스텀 Vulkan 엔진 위에 만드는 **고품질 스타일라이즈드 로우폴리 농사·라이프심** 게임이다.
 
 > 기억에 남는 스타일라이즈드 세계에 살면서, 농사와 상호작용으로 땅을 가꾸고,
 > "authored이면서 살아있는" 세계를 경험한다.
@@ -28,10 +28,10 @@ Pastel Farm은 커스텀 Vulkan 엔진 위에 만드는 **스타일라이즈드 
 세계 지리가 기억에 남아야 한다 — 숲·강·마을 랜드마크·자원 위치·길. 세계가 **authored**로 느껴질 것.
 
 ### 2. Stylized Atmosphere (스타일라이즈드 분위기)
-사실성보다 비주얼 정체성. 로우폴리 / 플랫 셰이딩 / grounded lighting / 따뜻한 분위기 / 읽히는 실루엣 / 강한 구도. 레퍼런스: 코지한 스타일라이즈드 아이소메트릭 월드.
+사실성보다 비주얼 정체성. 로우폴리 / 플랫 셰이딩 / grounded lighting / 텍스처 디테일 / 따뜻한 분위기 / 읽히는 실루엣 / 강한 구도. 레퍼런스: 코지한 고품질 스타일라이즈드 아이소메트릭 월드.
 
-### 3. Low-Spec Friendly (저사양 친화)
-성능은 디자인 기둥이다. 스펙터클용 비싼 렌더링 회피, 똑똑한 조명·구도·효율적 지오메트리·확장 가능한 렌더링 선호.
+### 3. Optimized Quality (최적화된 품질)
+성능은 디자인 기둥이다. 그러나 목표는 초저사양 데모나 플래시게임식 단순화가 아니다. 최소 GTX 1050 Ti / 1080p / 60fps, 권장 GTX 1660 Super급을 기준으로, 최신 그래픽 기법을 선별해 **품질은 높고 성능은 안정적인** 스타일라이즈드 게임을 만든다.
 
 ### 4. Living World (살아있는 세계)
 정적이지 않게 — day/night, 재생 자원, 식생 변화, wildlife, 계절 활동, 모션·앰비언스.
@@ -100,13 +100,13 @@ Explore → Gather → Farm/Build → Progress → Unlock → Return to world
 - 기존 Minecraft식 복셀 설치/파괴는 **은퇴** — 복셀 지형은 고정, 건축은 오브젝트 레이어에서 일어난다.
 
 ## Visual Direction
-타깃: **스타일라이즈드 grounded 로우폴리**. 비주얼 퀄리티는 조명·그림자·분위기·구도·scene dressing·color grading에서 나온다. 사실성·PBR·AAA 충실도 아님.
+타깃: **고품질 스타일라이즈드 grounded 로우폴리**. 비주얼 퀄리티는 조명·그림자·분위기·구도·scene dressing·texture mapping·color grading에서 나온다. 포토리얼을 목표로 하지는 않지만, 품질 목표는 낮지 않다. A급 스타일라이즈드 상용 게임과 견줄 만한 화면을, 더 작고 안정적인 성능 예산 안에서 만드는 것이 목표다.
 
 ### Visual North Star — 결정됨
 **레퍼런스: 스타일라이즈드 로우폴리 "디오라마" 룩 (예: 덕코프류) — 단, 그래픽만 참고하고 게임 시스템(전투 등)은 차용하지 않는다.**
-- 핵심은 지오메트리 디테일이 아니라 **art-directed lighting + 분위기 + 구도**다. (로우폴리는 수단)
-- 추구: warm/cool 분리 조명, 따뜻한 톤, 읽히는 실루엣, 부드러운 후처리(과한 bloom·sharpen 회피), composition.
-- **현 엔진은 이미 토대를 갖춤**(top/side vertex color + AO + shadow/PCF + day-night + fog + post-grading[exposure/contrast/saturation/split-tone/vignette]). 남은 격차는 "기능 부재"가 아니라 **튜닝과 소수의 추가**(height fog, hemisphere/colored ambient, vegetation/object variation, wind). → **다시 만들기가 아니라 조율하기.** (기술 단계는 `ARCHITECTURE.md` 비주얼 로드맵)
+- 핵심은 **art-directed lighting + 분위기 + 구도 + 세밀한 시각 레이어**다. 로우폴리는 저품질 제약이 아니라 스타일 선택이다.
+- 추구: warm/cool 분리 조명, 따뜻한 톤, 읽히는 실루엣, 고품질 식생, 텍스처 기반 지면 디테일, 부드러운 후처리(과한 bloom·sharpen 회피), composition.
+- **현 엔진은 이미 토대를 갖춤**(top/side vertex color + AO + shadow/PCF + day-night + fog + post-grading[exposure/contrast/saturation/split-tone/vignette]). 남은 격차는 **품질 패스와 에셋/텍스처 레이어**다. height fog, AA, 텍스처 매핑, material-lite, 고품질 grass, wind, shadow 품질 옵션을 성능 예산 안에서 적극 도입한다. (기술 단계는 `ARCHITECTURE.md` 비주얼 로드맵)
 - 지형이 내부적으로 voxel/grid 기반이어도 최종 화면은 grid를 과시하지 않는다. 농사/건축의 규칙성은 유지하되, 자연 환경은 dressing layer로 경계를 흐린다.
 - 풀/식생은 Pastel Farm의 grid감을 줄이는 핵심 투자처다. 얇은 삼각형 몇 개를 세운 기하 풀은 멀리서 바늘처럼 보이기 쉬우므로 최종 방향이 아니다. 현재 alpha card 기반 clump와 density field 1차는 들어갔고, ground dressing 1차는 placement layer 검증과 placeholder 축소까지 완료했다. 다음 목표는 색/텍스처/card variation, 낮은 대비의 ground texture/detail, 약한 wind sway로 참고 이미지에 가까운 자연스러운 풀밭을 만드는 것.
 - 전투 중심 연출(hit feedback, attack anticipation 등)은 **차용 안 함** — 코지 농사/라이프심엔 환경 연출(grass sway·leaf drift·발걸음/상호작용 피드백·ambient wildlife)만 가져온다.
@@ -132,4 +132,4 @@ Explore → Gather → Farm/Build → Progress → Unlock → Return to world
 ## Final Design Statement
 
 > 커스텀 엔진 위에, authored 지리와 살아있는 시스템이 공존하는,
-> **스타일라이즈드하고 기억에 남는 저사양 농사 세계.**
+> **스타일라이즈드하고 기억에 남는, 최적화된 고품질 농사 세계.**

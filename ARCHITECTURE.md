@@ -11,8 +11,9 @@
 
 ## 설계 철학
 
-- 로우폴리 / 플랫 셰이딩 / 스타일라이즈드 — 포토리얼·PBR 안 함
-- 저사양 친화 (GTX 750 Ti~1050급 / 통합 GPU 고려), 낮은 CPU 오버헤드, 렌더링 낭비 최소
+- 고품질 스타일라이즈드 / 로우폴리 / 플랫 셰이딩 — 로우폴리는 저품질 제약이 아니라 미학적 선택
+- 성능 기준: 최소 GTX 1050 Ti / 1080p / 60fps, 권장 GTX 1660 Super급. 초저사양 데모가 아니라 **최적화된 고품질 상용 게임**이 목표
+- 최신 기법은 선별적으로 사용한다: 텍스처 매핑, material-lite, 고품질 식생, AA, shadow 품질 옵션, post 효과를 성능 예산 안에서 적극 도입
 - Vulkan 직접 제어, 게임과 엔진 동시 개발
 - 렌더러 원칙: **단순함 + 명시적 제어 + 유지보수성**
 
@@ -44,7 +45,7 @@ src/
 - **조명 스택**: ambient + sun diffuse(dayFactor) + shadow + fog (4-layer)
 - **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어, 밤엔 shadow geometry draw 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
-- 색: 지형/오브젝트는 top/side vertex color + per-vertex AO 베이크. 현재 텍스처 예외는 grass alpha card 1장
+- 색/재질: 현재 지형/오브젝트는 top/side vertex color + per-vertex AO 베이크, grass는 alpha texture. 장기적으로 terrain/object texture mapping과 material-lite(albedo + tint + roughness/specular 계열 상수)를 도입
 - **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
 
 ---
@@ -70,7 +71,7 @@ src/
 
 ## 기술 방향 [계획]
 
-> **중간점검 (아크 ①~⑥ 완료 후 재설정).** 핵심 판단: 기술 기반은 이미 충분 — 이제 "기능 추가"보다 **iteration speed · 비주얼 정체성 · app-flow**가 ROI가 높다. 비주얼은 **다시 만들기가 아니라 조율하기**(grading·fog·shadow·AO 이미 존재).
+> **렌더링 목표 재정렬.** Pastel Farm은 초저사양 로우폴리 데모가 아니라, GTX 1050 Ti 최소 / GTX 1660 Super 권장 기준에서 고품질 스타일라이즈드 화면을 목표로 한다. 최적화·모듈성은 계속 핵심이지만, 품질을 낮추기 위한 보수주의는 피한다.
 
 ### 우선순위 Tier (현재)
 **Tier 1 — 가속기 + 부채 상환 (app-flow 토대)**
@@ -85,7 +86,7 @@ src/
 - height fog
 - ✅ vegetation alpha card 1차 — 절차 grass texture + X자 card clump + alpha test + shadow 제외 + 청크별 dirty gate. **완료**
 - ✅ density field 기반 grass dressing 1차 — 균등 확률 대신 patch density + open grass bias + density 기반 offset/scale variation 적용. **완료**
-- 다음 비주얼 후보: texture/card detail · ground dressing 텍스처화 · wind field · AA(SMAA 주력 + FXAA fallback) · LUT(선택)
+- 다음 비주얼 후보: FXAA/SMAA 실제 적용 · terrain/object texture mapping · material-lite · high-quality grass(wind/LOD/density 옵션) · ground dressing 텍스처화 · shadow quality options · LUT(선택)
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -93,18 +94,21 @@ src/
 
 > ✅ 즉시 가능한 작은 완성도: **오브젝트 충돌** — `collidable`이 이미 `ObjectDef` 데이터로 존재 → `World::isCollidableAt` + `canOccupy` 한 줄로 배선 완료. 건축이 장식에서 기능으로.
 
-### 그림자 / 비주얼 로드맵 (Tier 2 세부)
+### 렌더링 품질 로드맵 (Tier 2 세부)
 - ✅ color grading / tone mapping (post 1패스: exposure/contrast/saturation/split-tone/vignette)
 - ✅ 그림자 접지 튜닝 (피터패닝 — bias 축소 + cull 조정 완료)
-- contact / blob shadow (접지감 추가, 거의 무료)
+- AA 실제 적용: FXAA 먼저 연결, SMAA를 주력 품질 옵션으로 추가
+- texture mapping: terrain atlas/object albedo texture 경로 추가. vertex color는 tint/스타일 보정으로 유지
+- material-lite: full PBR 전환 전, albedo + tint + roughness/specular 상수로 재질 차이를 표현
+- shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
 - terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
-- height fog / vegetation variation / wind / sky tint
+- height fog / vegetation variation / wind / sky tint / LUT
 
 ### Vegetation Alpha Card — **방향**
 - 참고 이미지 수준의 자연스러운 풀밭은 단순 삼각형 기하 clump보다 alpha card 방식이 맞다. 기하 blade는 멀리서 삐쭉한 바늘처럼 보이기 쉽다.
 - 목표: 풀 텍스처 1장 + X자/부채꼴 card clump + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.
-- 성능 제약: GTX 1050 Ti 권장 기준을 목표로, 근거리 청크 중심, clump당 card 2장(quad 2개, 4 triangles), shadow caster 제외, alpha blend보다 alpha test/clip 우선, 거리/밀도 제한.
-- 이후 확장: DevUI density/거리/scale 튜닝, wind sway(vertex shader), LOD 또는 원거리 밀도 감소.
+- 성능 기준: GTX 1050 Ti 최소 60fps 안에서 grass는 핵심 비주얼 투자처다. clump당 card 수, density, texture 품질, wind, LOD/fade를 DevUI/GPU timing으로 보며 적극적으로 올린다.
+- 이후 확장: DevUI density/거리/scale 튜닝, wind sway(vertex shader), card/texture variant, 거리 LOD 또는 원거리 density fade. 필요하면 단순 X-card를 넘어 부채꼴 card나 다중 card clump도 검토.
 - 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, X자 card mesh, 청크별 instance buffer, 좌표 기반 density field, shader 기반 tint/card variation까지 1차 연결 완료. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 거의 안 보이는 수준으로 축소했다. 다음 개선은 texture/card detail, wind, 낮은 대비의 ground texture/card detail 방향.
 
 ### Grid 규칙 vs Organic 표현 — **결정**
@@ -138,18 +142,18 @@ src/
 - **지금부터 지킬 제약 3가지(비용 0, 이미 준수 중)**: ① 랜덤은 시드·좌표 기반 결정론 유지, ② 모든 상태 변경은 `World`/`GameState` 경유(렌더러에 권위 상태 두지 않기), ③ 게임 동작을 직렬화 가능한 이산 명령으로 모델링.
 - **규모감**: 협동 멀티 = 수 주~수 개월 독립 서브시스템(지금까지 작업 전체와 맞먹는 별도 챕터). 렌더링은 거의 불변, 일은 로직 재배선·동기화·테스트에 집중.
 
-### 보류 (월드 대규모화 시점에만)
+### 보류 (실제 필요가 생긴 뒤)
 - 청크 메모리 풀링(VMA/서브할로케이터) — 할당 개수 한계 대비
-- 청크 메시 DEVICE_LOCAL — 디스크리트 GPU 정점 페치 가속 (GTX 1050급엔 체감 미미라 보류)
+- 청크 메시 DEVICE_LOCAL — 현재도 staging path가 존재하나, 동적 청크 메시/식생 규모가 커지고 GPU vertex fetch 병목이 보이면 우선순위 상승
 
 ### 명시적 비목표 (Anti-goals) — rule of 3 / 실제 병목 전엔 **안 함**
-개인 Vulkan 엔진이 "AAA 체크리스트"에 빠져 게임을 못 내는 함정 방어선. 아래는 매력적이지만 현재 스코프(저사양·플랫셰이딩·소수 콘텐츠)에서 ROI가 낮거나 철학과 충돌:
+개인 Vulkan 엔진이 "AAA 체크리스트"에 빠져 게임을 못 내는 함정 방어선. 단, 이것은 저품질을 목표로 하자는 뜻이 아니다. 품질에 직접 기여하는 텍스처, AA, shadow 옵션, material-lite는 적극 검토한다.
 - **ECS 전면 전환** — 오브젝트가 sparse, OOP로 충분. (필요 시 hybrid SoA만 국소 적용)
 - **Render Graph / FrameGraph** — 풀 그래프 X. 경량 `IRenderPass`까지만.
-- **Asset DB / Material 시스템 / Material 노드그래프** — 텍스처는 아직 grass 1장 수준(대부분 절차 메시 + vertex color). 추상화 역순.
+- **Asset DB / Material 노드그래프** — 에셋 수가 늘기 전엔 보류. 단, TextureResource/helper와 material-lite는 반복이 생기는 즉시 도입 가능.
 - **Job/Async 시스템** — 청크 리빌드는 `MAX_CHUNK_BUILDS_PER_FRAME` throttle로 이미 완화. 식생 대량화 시점에.
 - **VulkanContext 빅뱅 분할** — 한 번에 쪼개지 말 것. 작은 것부터(GpuBuffer→FrameRenderData→파이프라인 생성 점진 추출).
-- **RTX/GI · mesh shader · bindless · full PBR** — 저사양·스타일라이즈드 목표와 정반대.
+- **RTX/GI · mesh shader · bindless 대규모 시스템 · full PBR 전면 전환** — 지금 당장 필요하지 않다. PBR은 에셋/재질 수요가 실제로 생긴 뒤 material-lite에서 단계적으로 판단.
 > 기준: **rule of 3**(세 번 반복되면 추상화) + **전면 rewrite 금지, 국소 리팩토링만**. (`CLAUDE.md` 단순함·수술적 변경과 일치)
 
 ### 불변식 (Invariants) — 깨지 말 것

@@ -818,8 +818,8 @@ void VulkanContext::createObjectMeshes() {
     {
     std::vector<GrassCardVertex> verts;
     auto card = [&](float angle) {
-        const float halfW = 0.34f;
-        const float h     = 0.42f;
+        const float halfW = 0.31f;
+        const float h     = 0.48f;
         const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
         const glm::vec3 side = dir * halfW;
         const glm::vec3 n    = {-dir.y, dir.x, 0.0f};
@@ -841,44 +841,65 @@ void VulkanContext::createObjectMeshes() {
 //  Procedural grass alpha texture
 // ============================================================
 void VulkanContext::createGrassTexture() {
-    // A small grass-tuft mask: a few tapering vertical blades drawn into alpha, with a
+    // A small grass-tuft mask: curved tapering blades drawn into alpha, with a
     // base-dark / tip-light green. Kept isolated so a file-loaded image (stb_image) can
     // replace just this pixel fill later — pipeline/descriptor/mesh stay identical.
     const uint32_t W = 64, H = 64;
     std::vector<uint8_t> pixels((size_t)W * H * 4, 0); // RGBA8, fully transparent
 
-    auto plot = [&](int x, int y, const glm::vec3& c) {
+    auto clamp01 = [](float v) {
+        return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    };
+    auto smooth = [](float t) {
+        return t * t * (3.0f - 2.0f * t);
+    };
+    auto writePixel = [&](int x, int y, const glm::vec3& c, float alpha) {
         if (x < 0 || x >= (int)W || y < 0 || y >= (int)H) return;
         uint8_t* p = &pixels[((size_t)y * W + x) * 4];
+        const float a = clamp01(alpha);
+        const float oldA = (float)p[3] / 255.0f;
+        if (a < oldA * 0.85f) return;
         p[0] = (uint8_t)(c.r * 255.0f);
         p[1] = (uint8_t)(c.g * 255.0f);
         p[2] = (uint8_t)(c.b * 255.0f);
-        p[3] = 255;
+        p[3] = (uint8_t)(std::max(oldA, a) * 255.0f);
     };
 
-    struct Blade { float baseX, tipX, halfW; };
+    struct Blade { float baseX, midX, tipX, height, halfW, shade; };
     static const Blade blades[] = {
-        {0.50f, 0.50f, 0.105f},
-        {0.32f, 0.18f, 0.075f},
-        {0.68f, 0.84f, 0.075f},
-        {0.42f, 0.30f, 0.065f},
-        {0.58f, 0.70f, 0.065f},
-        {0.24f, 0.10f, 0.045f},
-        {0.76f, 0.92f, 0.045f},
-        {0.50f, 0.62f, 0.050f},
+        {0.50f, 0.49f, 0.52f, 1.00f, 0.110f, 1.00f},
+        {0.36f, 0.26f, 0.17f, 0.88f, 0.080f, 0.92f},
+        {0.64f, 0.74f, 0.86f, 0.86f, 0.080f, 1.04f},
+        {0.44f, 0.36f, 0.27f, 0.72f, 0.064f, 0.96f},
+        {0.56f, 0.64f, 0.75f, 0.70f, 0.064f, 1.08f},
+        {0.27f, 0.18f, 0.09f, 0.58f, 0.048f, 0.88f},
+        {0.73f, 0.82f, 0.93f, 0.58f, 0.048f, 0.90f},
+        {0.47f, 0.52f, 0.60f, 0.62f, 0.052f, 1.06f},
+        {0.53f, 0.48f, 0.40f, 0.54f, 0.046f, 0.94f},
     };
-    const glm::vec3 baseCol = {0.18f, 0.38f, 0.14f};
-    const glm::vec3 tipCol  = {0.50f, 0.68f, 0.28f};
+    const glm::vec3 baseCol = {0.15f, 0.33f, 0.12f};
+    const glm::vec3 tipCol  = {0.48f, 0.68f, 0.25f};
 
-    for (uint32_t y = 0; y < H; y++) {
-        const float t = 1.0f - (float)y / (float)(H - 1); // 0 at bottom row, 1 at top row
-        const glm::vec3 col = glm::mix(baseCol, tipCol, t);
-        for (const Blade& b : blades) {
-            const float cx    = b.baseX + (b.tipX - b.baseX) * t;
-            const float halfW = b.halfW * (1.0f - t);      // taper to a point at the tip
-            const int x0 = (int)((cx - halfW) * W);
-            const int x1 = (int)((cx + halfW) * W);
-            for (int x = x0; x <= x1; x++) plot(x, y, col);
+    for (const Blade& b : blades) {
+        for (uint32_t y = 0; y < H; y++) {
+            const float t = 1.0f - (float)y / (float)(H - 1); // 0 at bottom row, 1 at top row
+            if (t > b.height) continue;
+
+            const float u = t / b.height;
+            const float su = smooth(u);
+            const float cx = glm::mix(glm::mix(b.baseX, b.midX, su), b.tipX, su * su);
+            const float halfW = b.halfW * powf(1.0f - u, 1.35f);
+            const float feather = 1.35f / (float)W;
+            const glm::vec3 col = glm::mix(baseCol, tipCol, smooth(u)) * b.shade;
+
+            const int x0 = (int)((cx - halfW - feather) * W);
+            const int x1 = (int)((cx + halfW + feather) * W);
+            for (int x = x0; x <= x1; x++) {
+                const float px = ((float)x + 0.5f) / (float)W;
+                const float dist = fabsf(px - cx);
+                const float a = clamp01((halfW + feather - dist) / feather);
+                writePixel(x, (int)y, col, a * (0.72f + 0.28f * u));
+            }
         }
     }
 
