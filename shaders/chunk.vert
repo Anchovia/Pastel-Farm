@@ -21,6 +21,8 @@ layout(location = 2)      out vec4 fragPosLightSpace;
 layout(location = 3)      out float fragViewDepth;
 layout(location = 4)      out vec2 fragUV;
 layout(location = 5) flat out float fragLayer;
+layout(location = 6)      out vec3 fragViewPos;
+layout(location = 7)      out vec3 fragWorldPos;
 
 void main() {
     vec4 viewPos      = ubo.view * vec4(inPosition, 1.0);
@@ -31,4 +33,6 @@ void main() {
     fragViewDepth     = -viewPos.z;
     fragUV            = inUV;
     fragLayer         = inLayer;
+    fragViewPos       = viewPos.xyz;
+    fragWorldPos      = inPosition; // chunk verts are already world-space
 }

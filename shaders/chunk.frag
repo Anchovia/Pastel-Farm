@@ -7,6 +7,7 @@ layout(binding = 0) uniform UniformBufferObject {
     vec4 lightDir;
     mat4 lightMVP;
     vec4 fogColor;
+    vec4 animationParams; // x = gameTime (water animation)
 } ubo;
 
 layout(binding = 1) uniform sampler2DShadow shadowMap;
@@ -18,6 +19,8 @@ layout(location = 2)      in vec4 fragPosLightSpace;
 layout(location = 3)      in float fragViewDepth;
 layout(location = 4)      in vec2 fragUV;
 layout(location = 5) flat in float fragLayer;
+layout(location = 6)      in vec3 fragViewPos;
+layout(location = 7)      in vec3 fragWorldPos;
 layout(location = 0) out vec4 outColor;
 
 float materialTextureStrength(float layer) {
@@ -85,6 +88,44 @@ void main() {
     // Material texture contributes low-strength detail; vertex color owns the style hue.
     vec3 materialDetail = sampleMaterialDetail(fragUV, fragLayer);
     vec3 litColor = fragColor * materialDetail * (ambient + direct);
+
+    // Stylized water (terrain layer 8): procedural sine ripple perturbs the surface
+    // normal so the sun glint shimmers and the surface gently undulates. World-space
+    // so it does not swim with the camera; independent of the (flat) albedo texture.
+    if (int(floor(fragLayer + 0.5)) == 8) {
+        float t  = ubo.animationParams.x;
+        vec2  wp = fragWorldPos.xy;
+
+        // Broad swell (low freq) → smooth normal for the soft moving sheen.
+        float p1 = wp.x * 0.45 + t * 0.7;
+        float p2 = wp.x * 0.30 - wp.y * 0.42 + t * 0.55;
+        float dwx = cos(p1) * 0.45 + cos(p2) * 0.30;
+        float dwy = -cos(p2) * 0.42;
+        vec3  Nworld = normalize(vec3(-dwx * 0.12, -dwy * 0.12, 1.0));
+
+        // Multi-octave ripple field → flowing color bands + stylized crest highlight lines.
+        float r = sin(dot(wp, vec2( 0.9,  0.5)) + t * 1.1)
+                + sin(dot(wp, vec2(-0.6,  1.0)) + t * 0.9) * 0.8
+                + sin(dot(wp, vec2( 1.4, -0.8)) + t * 1.6) * 0.6;
+        r /= 2.4;                                    // ~[-1, 1]
+        float band  = 0.5 + 0.5 * r;
+        float crest = smoothstep(0.55, 0.85, r);     // thin moving ripple crests
+
+        vec3  V  = normalize(-fragViewPos);                        // fragment -> eye (view space)
+        vec3  Nv = normalize((ubo.view * vec4(Nworld,   0.0)).xyz);
+        vec3  Lv = normalize((ubo.view * vec4(lightDir, 0.0)).xyz);
+        float spec = pow(max(dot(Nv, normalize(Lv + V)), 0.0), 24.0) * dayFactor * shadowFactor;
+        float fres = pow(1.0 - max(dot(Nv, V), 0.0), 4.0);
+        // Hide fine detail (crests, glint) with distance so it never aliases into a grid.
+        float detailFade = 1.0 - smoothstep(22.0, 52.0, fragViewDepth);
+
+        vec3 water = mix(vec3(0.10, 0.32, 0.50), vec3(0.20, 0.52, 0.66), band);
+        water += vec3(0.16, 0.22, 0.26) * crest * detailFade;      // stylized ripple crests
+        water *= (ambient + direct);
+        water += vec3(0.85, 0.93, 1.0) * spec * 0.35 * detailFade; // soft sun sheen
+        water += vec3(0.12, 0.18, 0.22) * fres * 0.28;             // gentle fresnel edge
+        litColor = water;
+    }
 
     // Fog
     const float FOG_START = 27.0;

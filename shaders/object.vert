@@ -24,6 +24,8 @@ layout(location = 2)      out vec4 fragPosLightSpace;
 layout(location = 3)      out float fragViewDepth;
 layout(location = 4)      out vec2 fragUV;
 layout(location = 5) flat out float fragLayer;
+layout(location = 6)      out vec3 fragViewPos;  // matches chunk.frag (shared fragment shader)
+layout(location = 7)      out vec3 fragWorldPos; // matches chunk.frag (water uses it; objects don't)
 
 void main() {
     float s = sin(instanceRot);
@@ -40,4 +42,6 @@ void main() {
     fragViewDepth     = -viewPos.z;
     fragUV            = inUV;
     fragLayer         = inLayer;
+    fragViewPos       = viewPos.xyz;
+    fragWorldPos      = worldPos;
 }
