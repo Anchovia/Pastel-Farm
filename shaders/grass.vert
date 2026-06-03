@@ -24,6 +24,7 @@ layout(location = 3)      out float fragViewDepth;
 layout(location = 4)      out vec3 fragTint;
 layout(location = 5)      out float fragFade;
 layout(location = 6)      out float fragRootShade;
+layout(location = 7)      out vec3 fragViewPos;
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -70,4 +71,5 @@ void main() {
     fragTint          = mix(vec3(0.76, 0.98, 0.72), vec3(0.90, 1.04, 0.68), h2);
     fragFade          = clamp(1.0 - smoothstep(36.0, 62.0, viewDepth), 0.0, 1.0);
     fragRootShade     = rootShade;
+    fragViewPos       = viewPos.xyz;
 }
