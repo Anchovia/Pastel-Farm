@@ -908,10 +908,12 @@ void VulkanContext::createObjectMeshes() {
 //  Grass blade textures
 // ============================================================
 void VulkanContext::createGrassTexture() {
-    auto uploadImage = [&](const LoadedImageRGBA8& image) {
+    // Color/albedo uploads as sRGB (hardware linearizes on sample); the opacity mask
+    // uploads as UNORM (raw coverage value, no gamma).
+    auto uploadImage = [&](const LoadedImageRGBA8& image, VkFormat format) {
         const VkDeviceSize imgSize = (VkDeviceSize)image.width * (VkDeviceSize)image.height * 4;
         return createTexture((uint32_t)image.width, (uint32_t)image.height,
-            VK_FORMAT_R8G8B8A8_UNORM, image.pixels.data(), imgSize, /*withSampler=*/true);
+            format, image.pixels.data(), imgSize, /*withSampler=*/true);
     };
     auto makeOpacityFromAlpha = [](const LoadedImageRGBA8& source) {
         LoadedImageRGBA8 opacity;
@@ -943,16 +945,16 @@ void VulkanContext::createGrassTexture() {
             throw std::runtime_error("Grass blade color/opacity texture size mismatch");
         }
 
-        m_grassTex = uploadImage(colorImage);
-        m_grassOpacityTex = uploadImage(opacityImage);
+        m_grassTex = uploadImage(colorImage, VK_FORMAT_R8G8B8A8_SRGB);
+        m_grassOpacityTex = uploadImage(opacityImage, VK_FORMAT_R8G8B8A8_UNORM);
         return;
     }
 
     const std::string authoredGrassPath = "assets/textures/grass.png";
     if (fileExists(authoredGrassPath)) {
         LoadedImageRGBA8 image = loadImageRGBA8(authoredGrassPath);
-        m_grassTex = uploadImage(image);
-        m_grassOpacityTex = uploadImage(makeOpacityFromAlpha(image));
+        m_grassTex = uploadImage(image, VK_FORMAT_R8G8B8A8_SRGB);
+        m_grassOpacityTex = uploadImage(makeOpacityFromAlpha(image), VK_FORMAT_R8G8B8A8_UNORM);
         return;
     }
 
@@ -1028,7 +1030,7 @@ void VulkanContext::createGrassTexture() {
     // Upload the procedural pixels through the shared texture helper. The grass card
     // pipeline samples these with their own LINEAR/CLAMP samplers (withSampler=true).
     const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
-    m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), imgSize, /*withSampler=*/true);
+    m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_SRGB, pixels.data(), imgSize, /*withSampler=*/true);
     m_grassOpacityTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, opacityPixels.data(), imgSize, /*withSampler=*/true);
 }
 
@@ -1324,7 +1326,7 @@ void VulkanContext::createTerrainTextureArray() {
     }
 
     const VkDeviceSize size = (VkDeviceSize)W * H * 4 * L;
-    m_terrainTex = createTextureArray(W, H, L, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), size, /*withSampler=*/true);
+    m_terrainTex = createTextureArray(W, H, L, VK_FORMAT_R8G8B8A8_SRGB, pixels.data(), size, /*withSampler=*/true);
 }
 
 // ============================================================
