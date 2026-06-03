@@ -6,6 +6,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 
 ## 구현 기록
 
+### 2026-06-04 — 세이브 무결성 + 견고성 (Phase 0)
+> 외부 LLM(Codex) 리뷰를 코드로 검증해 "렌더 품질보다 세이브/진행도 견고성이 더 시급"으로 우선순위를 재배치한 결과. 상세 진단은 `ARCHITECTURE` "게임 견고성·데이터 무결성".
+
+- **세이브 v2→v3**: `World::save/load`에 인벤토리(27슬롯)·드롭·타일별 `watered` 직렬화 추가. `GameState::setInventory/setDrops` 추가, `main.cpp` save/load 배선. 재시작 시 제작·채집·씨앗·물 준 상태가 유지된다(이전엔 전부 손실).
+- **Atomic write**: `save.dat.tmp`에 쓰고 flush/close 후 `std::filesystem::rename`으로 교체 → 저장 중 크래시가 기존 세이브를 파손하지 못함.
+- **로드 검증 + 무변경 보장**: magic/ver + `count`/`objCount`/`dropCount` 범위 + `ItemType`/`ObjectType` enum 범위 검사. 모든 데이터를 로컬에 읽고 **전체 성공 시에만 커밋**(손상/절단 세이브가 월드·인벤을 부분 변경하지 못함). 버전 불일치(v2 등) = 새 월드(개발 정책).
+- **dt clamp**: `main.cpp`에서 프레임 dt를 `0.1s`로 상한 → stall/resize/디버거 정지 후 시간·성장·이동 점프 + 충돌 터널링 방지.
+- **작물 성장 catch-up**: `growthTick`을 람다로 추출해 `m_chunks` + `m_modifiedUnloaded`를 모두 틱. 물-게이트 모델(물 준 날만 1단계, 매일 마름)이라 day-delta가 아니라 "두 맵 모두 틱"이 정답 — unloaded 동안 재물주기 불가라 물 1회분 1단계만 성장.
+- 다음: Phase 1 렌더 correctness (albedo `*_SRGB` / mask UNORM 분리, 밉맵 + trilinear + anisotropic).
+
 ### 2026-06-03 — 그림자 품질 패스 + 품질/정공법 원칙 명문화
 
 **렌더링 방향 리셋 (문서/메모리):** 매 세션 저사양 워크어라운드로 회귀하던 문제를 구조적으로 차단.

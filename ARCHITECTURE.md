@@ -65,9 +65,9 @@ src/
 
 - 청크 `unordered_map<ivec2, Chunk>`, 32×32×8, load/unload radius 기반 **스트리밍**
 - 절차 지형: FBM noise 2채널(height/biome), 좌표 기반 **결정론적**
-- `TileState`: `growthStage`, `lastUpdatedDay`, `watered`(물주기 상태는 현재 transient)
+- `TileState`: `growthStage`, `lastUpdatedDay`, `watered`(매일 마름; v3부터 세이브에 영속)
 - 오브젝트 레이어: **terrain(voxel) ≠ object(prop)** 분리. 자연물(tree/rock)과 설치물(workbench/fence/stone fence)을 같은 StaticProp 경로로 처리
-- save/load: **수정 청크만** 바이너리 저장(v2). 타일 + `TileState` 일부 + 청크 오브젝트를 직렬화해 설치물 유지와 채집 자연물 respawn 방지를 처리. 미수정 청크는 좌표 결정론으로 재생성
+- save/load: **수정 청크 + 인벤토리 + 드롭**을 바이너리 저장(v3). 청크는 타일 + `TileState`(growthStage·lastUpdatedDay·watered) + 오브젝트를 직렬화해 설치물 유지·채집물 respawn 방지를 처리. **atomic write**(temp→rename)와 **로드 검증**(count/objCount/enum 범위, 실패 시 무변경)로 견고화. 미수정 청크는 좌표 결정론으로 재생성
 
 ---
 
@@ -223,6 +223,8 @@ src/
 ### 게임 견고성·데이터 무결성 (코드리뷰 검증, 2026-06-04)
 > 외부 LLM(Codex) 리뷰를 코드로 직접 검증. 렌더 품질보다 **실제 게임을 깨뜨릴 수 있는** 데이터/진행도 문제가 더 시급하다고 판단(AGENTS.md §9: 리뷰는 권위가 아니라 검증 대상).
 
+- ✅ **Phase 0 완료 (2026-06-04)**: ① 인벤토리·드롭·watered 세이브(v3) · ② atomic write + 로드 범위/enum 검증(실패 시 무변경) · ③ dt clamp(0.1s) · ④ 작물 catch-up(`growthTick`이 unloaded 청크도 틱). **남은 견고성**: Vulkan 반환값 검사·생성자 RAII·순수 로직 테스트.
+
 - **P1 인벤토리·드롭 미저장**: `World::save()`가 플레이어 위치·시간·수정 청크(타일/growthStage/lastUpdatedDay/오브젝트)만 저장. `GameState`의 인벤토리·드롭·watered는 빠져 재시작 시 제작·채집·씨앗 진행이 손실 → 세이브 포맷에 인벤토리/드롭 추가(버전 업).
 - **P1 세이브 비원자적 + 로드 검증 없음**: `save.dat`에 직접 기록(저장 중 크래시 시 기존 세이브 파손) → 임시파일 write→flush→rename 표준 적용. `load()`가 `count`/`objCount`/`TileType`/`ObjectType` 범위를 검증하지 않아 손상 세이브가 `objectDef`/`m_objectMeshes` OOB로 이어질 수 있음 → 범위 검증 + 실패 시 부분 적용 롤백.
 - **P2 작물 성장 catch-up 부재**: `growthTick()`이 로드된 `m_chunks`만 순회 → 멀리 떠난 동안 `m_modifiedUnloaded` 작물은 시간이 지나도 안 자람. `lastUpdatedDay` 저장값을 catch-up에 안 씀 → day-delta 기반 catch-up.
@@ -234,7 +236,7 @@ src/
 ### 통합 수정 우선순위 (재배치, 2026-06-04)
 렌더 품질 + 견고성을 합쳐 "위험·비용 대비 효과" 순으로 재배치.
 - ✅ **그림자 1차(완료)**: light frustum 축소(range 80→45) + texel snapping + soft PCF 5×5 + grass shadow 캐스터 비활성화.
-- **Phase 0 — 데이터 무결성/견고성 (시급·저비용)**: ① 인벤토리·드롭(+watered) 세이브 → ② 세이브 atomic write + 로드 범위 검증 → ③ dt clamp → ④ 작물 catch-up. (가능하면 ①②와 함께 순수 로직 테스트)
+- ✅ **Phase 0 — 데이터 무결성/견고성 (완료, 2026-06-04)**: ① 인벤토리·드롭(+watered) 세이브(v3) · ② atomic write + 로드 검증 · ③ dt clamp · ④ 작물 catch-up. (순수 로직 테스트 + Vk 반환값/RAII 하드닝은 후속)
 - **Phase 1 — 렌더 correctness 토대**: ⑤ albedo `*_SRGB` / mask UNORM 분리 → ⑥ 밉맵 + trilinear + anisotropic(+`samplerAnisotropy` feature·device 적합성 체크). (⑦ HDR float 오프스크린은 bloom/grading 확장 시)
 - **Phase 2 — 비주얼 폴리시 (덕코프)**: ⑧ 잔디 translucency/backlight + ground contact AO(+비활성 grass shadow 리소스 제거) → ⑨ 그림자 해상도 4096/동적 texel size/CSM·소품 contact shadow.
 - **Phase 3 — 콘텐츠/확장**: ⑩ worldgen 풍부화(언덕 채움·height/slope)·water material/pass → ⑪ MSAA+alpha-to-coverage(잔디 alpha edge) → ⑫ 흰 화면(창 지연+pipeline cache) → ⑬ authored asset/font.
