@@ -145,7 +145,7 @@ src/
 ### 2.5D 고품질 잔디·룩 레시피 — **결정** (AAA 2.5D 관행 교차검증, 2026-06-03)
 > 고정 시점 2.5D는 카메라가 잔디를 옆/바닥에서 들여다보지 않으므로, "잔디 한 포기당 삼각형 수"보다 **조명·색·접지 표현**이 체감 품질을 좌우한다. 덕코프류 룩의 핵심은 초고사양 메시가 아니라 *일관된 아트 + 제한된 카메라용 최적화된 표현*이다.
 
-- **잔디 셰이딩 스택(우선순위순)**: ① 개체별 색 랜덤(반복감 제거) → ② height gradient(밑동 짙은 녹색 → 끝 밝은/노란 녹색) → ③ base/접지 AO(밑동 어둡게) → ④ **translucency/backlight(역광 시 노랗게 발광 — "진짜 잔디" 인상의 최대 요소, 저비용)** → ⑤ wind(현재 sin sway, 후에 wind noise map) → ⑥ 거리 fade/density falloff. 현재 ①②⑤⑥ 일부 + ③ 부분(`fragRootShade`) 구현, **④ 미구현(최우선 후보)**.
+- **잔디 셰이딩 스택(우선순위순)**: ① 개체별 색 랜덤(반복감 제거) → ② height gradient(밑동 짙은 녹색 → 끝 밝은/노란 녹색) → ③ base/접지 AO(밑동 어둡게) → ④ **translucency/backlight(역광 시 노랗게 발광 — "진짜 잔디" 인상의 최대 요소, 저비용)** → ⑤ wind(현재 sin sway, 후에 wind noise map) → ⑥ 거리 fade/density falloff. **구현 현황: ①②⑤⑥ + ③(밑동 `fragRootShade` + decal식 ground contact AO) + ④(view-space transmission, 노을·역광에서만 발광) 완료.** wind noise map / 색·card variant는 후속 튜닝.
 - **그림자 정책 — 결정**: 캐릭터/나무/오브젝트/건물 = 실시간 shadow map(필요 시 CSM + soft). **잔디는 그림자를 *받기만* 하고 개별 잔디는 *쏘지 않는다*** — 얇은 날 그림자는 단일 shadow map에서 ~1텍셀 폭이라 sun sweep에 깜빡이고 비용 대비 효과가 낮다(AAA 2.5D 표준). 대신 **ground contact AO / 어두운 패치**로 잔디를 바닥에 앉힌다. 작은 소품은 contact/blob shadow. (실험적 `shadow_grass` 캐스터는 이 정책에 따라 비활성화 — cleanup으로 완전 제거 예정.)
 - **땅이 좋아 보이는 진짜 이유 = terrain blending**: 잔디 자체보다 흙/잔디/길/어두운 접촉부가 자연스럽게 섞이는 것. terrain albedo + noise color variation + dirt/grass blend mask + ground AO.
 - **스코프(우리 규모)**: GPU-driven(compute frustum/occlusion cull + `vkCmdDrawIndexedIndirect` + mesh shader 절차 생성)은 100만~1000만 포기 오픈월드용이다. 우리는 2.5D + fog 57유닛 제한이라 청크별 instancing + 단순 cull로 충분 → **규모상 보류**(성능 미달이라서가 아님). 실제 draw 병목이 측정되면 indirect/compute cull로 승격.
@@ -237,7 +237,7 @@ src/
 렌더 품질 + 견고성을 합쳐 "위험·비용 대비 효과" 순으로 재배치.
 - ✅ **그림자 1차(완료)**: light frustum 축소(range 80→45) + texel snapping + soft PCF 5×5 + grass shadow 캐스터 비활성화.
 - ✅ **Phase 0 — 데이터 무결성/견고성 (완료, 2026-06-04)**: ① 인벤토리·드롭(+watered) 세이브(v3) · ② atomic write + 로드 검증 · ③ dt clamp · ④ 작물 catch-up. (순수 로직 테스트 + Vk 반환값/RAII 하드닝은 후속)
-- **Phase 1 — 렌더 correctness 토대**: ⑤ albedo `*_SRGB` / mask UNORM 분리 → ⑥ 밉맵 + trilinear + anisotropic(+`samplerAnisotropy` feature·device 적합성 체크). (⑦ HDR float 오프스크린은 bloom/grading 확장 시)
-- **Phase 2 — 비주얼 폴리시 (덕코프)**: ⑧ 잔디 translucency/backlight + ground contact AO(+비활성 grass shadow 리소스 제거) → ⑨ 그림자 해상도 4096/동적 texel size/CSM·소품 contact shadow.
+- ✅ **Phase 1 — 렌더 correctness 토대 (완료)**: ⑤ albedo `*_SRGB` / mask UNORM 분리 · ⑥ 밉맵 + trilinear + anisotropic(`samplerAnisotropy` feature, `vkCmdBlitImage` 밉 체인). (⑦ HDR float 오프스크린은 bloom/grading 확장 시 — 미완)
+- **Phase 2 — 비주얼 폴리시 (덕코프)**: ✅ ⑧ 잔디 translucency/backlight + decal식 ground contact AO(`PipelineConfig.depthWrite` 추가) **완료** → **⑨ 그림자 해상도 4096/동적 texel size/CSM·소품 contact shadow (다음)**. (비활성 `shadow_grass` 리소스 완전 제거 cleanup은 잔여)
 - **Phase 3 — 콘텐츠/확장**: ⑩ worldgen 풍부화(언덕 채움·height/slope)·water material/pass → ⑪ MSAA+alpha-to-coverage(잔디 alpha edge) → ⑫ 흰 화면(창 지연+pipeline cache) → ⑬ authored asset/font.
 > shader slope-bias grazing은 해상도/PCF로 충분하면 생략. CSM·헬퍼 추출·grass shadow 완전 제거 cleanup은 위 Phase 안에서.

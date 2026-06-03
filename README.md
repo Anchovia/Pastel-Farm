@@ -74,11 +74,13 @@
 - 청크 메시 hidden face culling + per-vertex AO + terrain texture array + authored terrain texture override + vertex color tint
 - 청크 AABB frustum culling, shadow light frustum culling
 - 제네릭 오브젝트 인스턴싱(`ObjectType`별 mesh + 청크별 instance group)
-- 2048² shadow map, 3×3 PCF, 청크/오브젝트/플레이어 shadow caster
+- 2048² shadow map(가시범위 frustum-fit + texel snapping 안정화), soft 5×5 PCF, 청크/오브젝트/플레이어 caster(잔디는 그림자 받기만·미캐스팅)
 - day/night 기반 sky/fog/light 변화, hemisphere ambient
 - offscreen scene → post pass tone/color grading(exposure/contrast/saturation/split-tone/vignette) + FXAA/SMAA
 - 자체 게임 UI는 post AA 이후 스왑체인에 직접 렌더링해 픽셀 폰트 선명도 유지
-- grass alpha card dressing: 절차 RGBA grass texture + 낮은 blade-field cluster + alpha test + density field + shader wind/fade/tint + 청크별 dirty gate
+- grass alpha card dressing: foliage atlas/절차 grass texture + 낮은 blade-field cluster + alpha test + density field + shader wind/fade/tint + **translucency/backlight(역광 발광)** + 청크별 dirty gate
+- grass **ground contact AO**: 클럼프별 decal식 soft 패치로 바닥에 접지(alpha-blend, depth-write off)
+- 텍스처 필터링: **albedo sRGB**(mask는 UNORM) + **밉맵 + trilinear + anisotropic**(terrain array·grass color)
 - authored texture loading: `assets/textures` post-build 복사 + `stb_image` RGBA8 로딩 + terrain layer별 파일 override + `grass.png` 선택적 파일 텍스처 fallback
 - DevUI(ImGui, `PASTEL_DEV_BUILD`) + GPU timestamp(total/shadow/scene/post/imgui)
 

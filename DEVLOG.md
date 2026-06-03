@@ -6,6 +6,13 @@ Vulkan 공부 겸 엔진 개발 기록.
 
 ## 구현 기록
 
+### 2026-06-04 — 렌더 correctness + 잔디 비주얼 (Phase 1·2)
+- **albedo sRGB (Phase 1 ⑤)**: grass color·terrain layer array를 `R8G8B8A8_SRGB`로 업로드(샘플 시 하드웨어 linear 디코드 → 조명 계산 정확). opacity/SMAA LUT 등 mask는 UNORM 유지. `uploadImage`에 포맷 파라미터 추가.
+- **밉맵 + trilinear + anisotropic (Phase 1 ⑥)**: `generateMipmaps`(표준 `vkCmdBlitImage` 반감 체인, 배열은 전 레이어 일괄 blit) 추가. `createImage`에 `mipLevels`, `createTexture/createTextureArray`에 `mipmapped` 파라미터. `createLogicalDevice`에서 `samplerAnisotropy` 지원 쿼리 후 활성화 + `maxAnisotropy` 디바이스 한도 클램프. 샘플러 trilinear+aniso. terrain array·grass color에 적용(소스가 아직 64² 절차라 체감은 작음 — authored 고해상도 도입 시 커짐).
+- **잔디 translucency/backlight (Phase 2 ⑧a)**: `grass.vert`가 view-space 위치 출력, `grass.frag`가 `dot(viewDir, Lview)` 기반 transmission으로 역광 시 잎 끝을 따뜻하게 발광. 정오엔 안 보이고 동틀/해질 녘에만(물리적으로 정상). dayFactor 대신 `smoothstep`로 밤에만 게이트.
+- **잔디 ground contact AO (Phase 2 ⑧b)**: 제거한 grass cast shadow의 대체재. 클럼프마다 decal식 수평 quad를 alpha-blend로 깔아 지면을 살짝 어둡게(절차적 soft 원형, 텍스처 없음). depthTest ON·depthWrite OFF. 이를 위해 `PipelineConfig.depthWrite` 옵션 추가(`createPipeline`에서 `depthTest && depthWrite`). 새 셰이더 `contact.vert/.frag`. 첫 튠은 과해서(검은 얼룩) strength 0.32→0.12·코어 제거·크기 축소로 subtle하게 조정. 안 쓰는 vertex attribute는 제거해 검증 경고 해소.
+- 다음: ⑨ 그림자 해상도/품질(4096·동적 texel·CSM), HDR 오프스크린, 비활성 `shadow_grass` 완전 제거 cleanup.
+
 ### 2026-06-04 — 세이브 무결성 + 견고성 (Phase 0)
 > 외부 LLM(Codex) 리뷰를 코드로 검증해 "렌더 품질보다 세이브/진행도 견고성이 더 시급"으로 우선순위를 재배치한 결과. 상세 진단은 `ARCHITECTURE` "게임 견고성·데이터 무결성".
 

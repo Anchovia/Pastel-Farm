@@ -485,7 +485,7 @@ VkPipeline VulkanContext::createPipeline(const PipelineConfig& cfg) {
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable  = cfg.depthTest ? VK_TRUE : VK_FALSE;
-    depthStencil.depthWriteEnable = cfg.depthTest ? VK_TRUE : VK_FALSE;
+    depthStencil.depthWriteEnable = (cfg.depthTest && cfg.depthWrite) ? VK_TRUE : VK_FALSE;
     depthStencil.depthCompareOp   = cfg.depthTest ? VK_COMPARE_OP_LESS : VK_COMPARE_OP_ALWAYS;
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -635,6 +635,31 @@ void VulkanContext::createGrassPipeline() {
     cfg.alphaBlend = false;              // alpha test in shader, not blended transparency
     cfg.layout     = m_pipelineLayout;   // reuse UBO + shadow + grass texture descriptor layout
     m_grassPipeline = createPipeline(cfg);
+}
+
+// Ground contact AO: flat alpha-blended quad under each grass clump that darkens
+// the terrain beneath it (decal-style soft contact shadow). depthTest on so hills
+// occlude, depthWrite off so it neither z-fights the ground nor blocks the grass.
+void VulkanContext::createContactPipeline() {
+    PipelineConfig cfg;
+    cfg.vertPath   = "shaders/contact.vert.spv";
+    cfg.fragPath   = "shaders/contact.frag.spv";
+    cfg.bindings   = {
+        { 0, sizeof(GrassCardVertex), VK_VERTEX_INPUT_RATE_VERTEX   },
+        { 1, sizeof(ObjectInstance),  VK_VERTEX_INPUT_RATE_INSTANCE },
+    };
+    cfg.attributes = { // only what contact.vert consumes (normal/rot omitted)
+        { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(GrassCardVertex, pos)  },
+        { 2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(GrassCardVertex, uv)   },
+        { 3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectInstance, pos)   },
+        { 4, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, scale) },
+    };
+    cfg.cullMode   = VK_CULL_MODE_NONE;
+    cfg.depthTest  = true;
+    cfg.depthWrite = false;  // decal: darkens ground without owning depth
+    cfg.alphaBlend = true;
+    cfg.layout     = m_pipelineLayout;
+    m_contactPipeline = createPipeline(cfg);
 }
 
 // ============================================================
@@ -910,6 +935,20 @@ void VulkanContext::createObjectMeshes() {
     bladeCard(2.62f, {-0.10f, -0.19f}, 0.048f, 0.42f,  0.020f, {0.2061f, 0.0010f, 0.2461f, 0.4385f});
     bladeCard(4.72f, { 0.19f,  0.07f}, 0.048f, 0.44f, -0.020f, {0.3799f, 0.5000f, 0.4189f, 0.9805f});
     uploadGrassCardMesh(m_grassCardMesh, verts);
+    }
+
+    // ---- CONTACT QUAD: flat unit quad for ground contact AO under grass ----
+    {
+        const glm::vec3 up{0.0f, 0.0f, 1.0f};
+        std::vector<GrassCardVertex> quad = {
+            {{-0.5f, -0.5f, 0.0f}, up, {0.0f, 0.0f}},
+            {{ 0.5f, -0.5f, 0.0f}, up, {1.0f, 0.0f}},
+            {{ 0.5f,  0.5f, 0.0f}, up, {1.0f, 1.0f}},
+            {{-0.5f, -0.5f, 0.0f}, up, {0.0f, 0.0f}},
+            {{ 0.5f,  0.5f, 0.0f}, up, {1.0f, 1.0f}},
+            {{-0.5f,  0.5f, 0.0f}, up, {0.0f, 1.0f}},
+        };
+        uploadGrassCardMesh(m_contactQuadMesh, quad);
     }
 }
 

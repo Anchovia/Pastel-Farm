@@ -304,6 +304,24 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
         }
     }
 
+    // Ground contact AO — soft dark patch under each grass clump (grounds the grass).
+    // Drawn after terrain so it darkens the ground; depth-write off so it never blocks grass.
+    {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_contactPipeline);
+        for (auto& [coord, data] : m_chunkBuffers) {
+            if (m_contactQuadMesh.count == 0 || data.grassCount == 0) continue;
+
+            glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+            glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+            if (!m_frustum.containsAABB(chunkMin, chunkMax)) continue;
+
+            VkBuffer     bufs[] = { m_contactQuadMesh.vbuf, data.grassBuffer };
+            VkDeviceSize offs[] = { 0, 0 };
+            vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+            vkCmdDraw(cmd, m_contactQuadMesh.count, data.grassCount, 0, 0);
+        }
+    }
+
     // Grass alpha cards — visual-only dressing, not a shadow caster
     {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_grassPipeline);

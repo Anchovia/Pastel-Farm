@@ -147,8 +147,9 @@ private:
         std::vector<VkVertexInputBindingDescription>   bindings;
         std::vector<VkVertexInputAttributeDescription> attributes;
         VkCullModeFlags  cullMode;
-        bool             depthTest;   // depthTestEnable + depthWriteEnable
-        bool             alphaBlend;  // semi-transparent (UI)
+        bool             depthTest;          // depthTestEnable
+        bool             alphaBlend;         // semi-transparent (UI)
+        bool             depthWrite = true;  // depthWriteEnable (only applies when depthTest); off for decals
         VkPipelineLayout layout;
         VkRenderPass     renderPass = VK_NULL_HANDLE;
     };
@@ -173,6 +174,7 @@ private:
     void updateHotbar();
     void createObjectPipeline();
     void createGrassPipeline();
+    void createContactPipeline();
     void createPostRenderPass();
     void createOffscreenResources();
     void createPostPipeline();
@@ -278,6 +280,7 @@ private:
     VkPipelineLayout         m_uiPipelineLayout  = VK_NULL_HANDLE;
     VkPipeline               m_objectPipeline    = VK_NULL_HANDLE;  // Instanced low-poly props and dressing
     VkPipeline               m_grassPipeline     = VK_NULL_HANDLE;  // Instanced alpha-card grass
+    VkPipeline               m_contactPipeline   = VK_NULL_HANDLE;  // Ground contact AO under grass clumps
 
     // Post-process: scene → offscreen color, then fullscreen pass → swapchain
     VkRenderPass             m_postRenderPass          = VK_NULL_HANDLE;
@@ -349,6 +352,7 @@ private:
     std::array<ObjectMesh, (size_t)ObjectType::COUNT> m_objectMeshes;
     ObjectMesh m_grassClumpMesh;
     ObjectMesh m_grassCardMesh;
+    ObjectMesh m_contactQuadMesh; // flat quad for ground contact AO under grass
     ObjectMesh m_groundPatchMesh;
     ObjectMesh m_pebbleMesh;
 
