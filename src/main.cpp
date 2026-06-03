@@ -5,6 +5,8 @@
 #include "world/World.h"
 #include "world/Chunk.h"
 #include <iostream>
+#include <array>
+#include <vector>
 #include "game/Camera.h"
 
 static constexpr int LOAD_RADIUS   = 3;
@@ -241,9 +243,13 @@ int main() {
         auto startWorldSession = [&]() {
             glm::vec3 savedPos;
             float     savedTime;
-            if (world.load("save.dat", savedPos, savedTime)) {
+            std::array<ItemStack, INV_SLOTS> savedInv;
+            std::vector<DroppedItem>         savedDrops;
+            if (world.load("save.dat", savedPos, savedTime, savedInv, savedDrops)) {
                 gameState.setPlayerPosition(savedPos);
                 gameState.setTime(savedTime);
+                gameState.setInventory(savedInv);
+                gameState.setDrops(savedDrops);
             }
 
             lastPlayerChunk = World::chunkCoord(
@@ -324,7 +330,8 @@ int main() {
 
             // Ctrl+S save (edge-detect)
             if (worldSessionStarted && app.consumeSavePress(input.saveKey))
-                world.save("save.dat", gameState.player().position(), gameState.time());
+                world.save("save.dat", gameState.player().position(), gameState.time(),
+                           gameState.inventory(), gameState.drops());
 
             if (input.windowWidth > 0 && input.windowHeight > 0)
                 camera.setAspectRatio((float)input.windowWidth / input.windowHeight);

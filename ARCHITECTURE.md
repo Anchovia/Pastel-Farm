@@ -217,5 +217,25 @@ src/
 - **그림자 "빤짝임/일렁임" (blocky shadow aliasing)**: 주원인은 **그림자 맵 실효 해상도 부족**이다. 라이트 직교 박스 half-extent `range=80`(`VulkanContext_Frame.cpp`) → 160유닛을 2048텍셀에 펴서 텍셀당 ~0.078유닛인데, fog가 57유닛에서 가려 그 너머는 보이지도 않는다(해상도 절반 이상 낭비). 저해상도 계단(blocky) 에지가 태양이 천천히 회전하며 기어다녀 "불타듯 반짝"인다. **표준 해법: light frustum을 가시 범위에 맞게 축소(range↓) → 실효 해상도↑** (LearnOpenGL "blocky shadows: frustum을 scene에 딱 맞게"). texel snapping은 **적용 완료** — 플레이어 이동에 의한 translation 떨림 방지용 표준 stabilization이나, 회전 기반 blocky aliasing은 못 잡으므로 주 해법이 아니다.
 - **일출/일몰 줄무늬 = Shadow Acne (Moiré)**: 그림자지지 않아야 할 면에 생기는 잘못된 self-shadowing. `chunk.frag`의 bias `mix(0.0015, 0.0003, NdotL)`는 slope-scaled bias **모양(수직→작게, grazing→크게)이 LearnOpenGL 권장과 정확히 일치**한다 — "bias가 꺼져 있다"가 아니라 **grazing 끝값(0.0015)이 약하고 저해상도와 겹쳐** 일출/일몰에 acne가 남는 것. **해법 순서: ① frustum 축소(해상도↑ — acne를 peter-panning 부작용 없이 줄임) → ② 그래도 남으면 shader bias의 grazing 끝값 소폭 상향(peter-panning 주시).** front-face culling은 청크가 hidden-face-culled = 단면 메시라 적용 불가(LearnOpenGL p18 "단면 object엔 불가" 단서와 일치). 하드웨어 caster depthBias(현재 청크 0/0, 오브젝트는 1.5/1.2)는 선택적 보조 레버.
 - **텍스처 필터링 부재**: 전 텍스처 경로가 `mipLevels=1`, `mipmapMode=NEAREST`, 이방성 필터링 미사용 → 원거리 minification aliasing("자글자글"). 표준: **밉맵 + trilinear(`LINEAR_MIPMAP_LINEAR`) + anisotropic**(아이소메트릭은 항상 비스듬한 시점이라 aniso 효과 큼). 단 64×64 절차 텍스처는 magnification 흐림/계단이라 필터링으론 못 고치고 **원본 해상도 상향(512²+)**이 필요(LearnOpenGL #4 "텍스처가 애초에 작으면"). GTX 1660 Super 예산 충분.
+- **색공간(sRGB) 누락 (2026-06-04 리뷰 검증)**: authored albedo 텍스처(grass color, terrain layer array)를 `VK_FORMAT_R8G8B8A8_UNORM`으로 업로드(`createGrassTexture`/`createTerrainTextureArray`, 1327행 등) → 조명 계산이 sRGB→linear 변환 없이 수행돼 색이 틀어진다. 표준: **albedo/color는 `*_SRGB` 포맷**(샘플 시 하드웨어가 linear로 디코드), opacity/AO/roughness 등 **mask는 UNORM** 유지. swapchain은 이미 `B8G8R8A8_SRGB`.
+- **HDR 오프스크린 타깃 없음**: scene을 swapchain의 8-bit sRGB 계열로 바로 렌더 → 톤/하이라이트 여유가 작다. bloom/grading/SSAO를 제대로 하려면 **`R16G16B16A16_SFLOAT` linear HDR 타깃** 후 톤매핑이 표준(post 확장 시 도입).
 - **시작 시 흰 화면(5~10초)**: world/청크 로드는 이미 Loading 상태에서 처리된다. 실제 원인은 **`VulkanContext` 생성자의 동기 초기화**(파이프라인 약 15개 드라이버 컴파일 + 텍스처 업로드)가 창이 이미 보이는 상태에서 첫 present 전까지 블록하기 때문이다. 메인 메뉴조차 이 init 뒤에 그려지므로 "텍스처 로딩을 START 후로 이동"으로는 해결되지 않는다. 완화책: 첫 프레임 전까지 창 숨김(`GLFW_VISIBLE=false`→첫 present 후 `glfwShowWindow`), **`VkPipelineCache`** 도입(2회차부터 컴파일 단축), 필요 시 스플래시 1프레임.
-- **렌더 결함 수정 우선순위(개정, 2026-06-03 진행 반영)**: ✅ light frustum 축소(range 80→45) + ✅ texel snapping + ✅ soft PCF 5×5 + ✅ grass shadow 캐스터 비활성화(결정) 까지 완료 → **다음: ① 잔디 리얼리즘(translucency/backlight + 색·gradient 강화 → ground contact AO) → ② 텍스처 mipmap+이방성+terrain blending → ③ 그림자 해상도 4096/CSM+soft·소품 contact/blob shadow → ④ 흰 화면(창 지연표시 + pipeline cache) → ⑤ post: bloom/SSAO.** shader slope-bias grazing은 해상도/PCF로 충분하면 생략. 큰 작업(CSM, shadow 파이프라인 헬퍼 추출, grass shadow 캐스터 완전 제거 cleanup)은 위 순서 안에서.
+### 게임 견고성·데이터 무결성 (코드리뷰 검증, 2026-06-04)
+> 외부 LLM(Codex) 리뷰를 코드로 직접 검증. 렌더 품질보다 **실제 게임을 깨뜨릴 수 있는** 데이터/진행도 문제가 더 시급하다고 판단(AGENTS.md §9: 리뷰는 권위가 아니라 검증 대상).
+
+- **P1 인벤토리·드롭 미저장**: `World::save()`가 플레이어 위치·시간·수정 청크(타일/growthStage/lastUpdatedDay/오브젝트)만 저장. `GameState`의 인벤토리·드롭·watered는 빠져 재시작 시 제작·채집·씨앗 진행이 손실 → 세이브 포맷에 인벤토리/드롭 추가(버전 업).
+- **P1 세이브 비원자적 + 로드 검증 없음**: `save.dat`에 직접 기록(저장 중 크래시 시 기존 세이브 파손) → 임시파일 write→flush→rename 표준 적용. `load()`가 `count`/`objCount`/`TileType`/`ObjectType` 범위를 검증하지 않아 손상 세이브가 `objectDef`/`m_objectMeshes` OOB로 이어질 수 있음 → 범위 검증 + 실패 시 부분 적용 롤백.
+- **P2 작물 성장 catch-up 부재**: `growthTick()`이 로드된 `m_chunks`만 순회 → 멀리 떠난 동안 `m_modifiedUnloaded` 작물은 시간이 지나도 안 자람. `lastUpdatedDay` 저장값을 catch-up에 안 씀 → day-delta 기반 catch-up.
+- **P2 dt clamp 없음 / Vulkan 반환값 다수 미검사 / 생성자 RAII 미흡**: 큰 dt(resize·stall·디버거 정지)가 시간·성장·이동을 튀게 함 → `dt` clamp. `vkQueueSubmit`/`vkBeginCommandBuffer`/`vkMapMemory` 실패 무시, 생성자 중간 throw 시 raw 핸들 누수 → 점진 하드닝.
+- **P3 picking z=0 평면 가정**: 레이가 z=0 평면 교차 후 컬럼 스캔. 언덕/오브젝트 조준 시 XY가 어긋날 수 있으나 **±1 인접 클램프가 가려 실害 작음**(Codex 과장). 정밀 필요 시 voxel DDA.
+- **테스트 부재**: save/load round-trip, inventory/craft, growthTick, placement 순수 로직 테스트 없음 → 세이브 변경과 함께 도입 검토(렌더보다 회귀 위험 큼).
+- **보류(측정 후)**: 청크/식생/오브젝트 버퍼 DEVICE_LOCAL화 — 현재 GPU ~2ms, vertex-fetch 병목 미측정. HOST_VISIBLE 매핑은 동적 데이터엔 정당. 병목이 측정되면 staging→DEVICE_LOCAL 승격(Codex는 P1이라 했으나 규모상 보류).
+
+### 통합 수정 우선순위 (재배치, 2026-06-04)
+렌더 품질 + 견고성을 합쳐 "위험·비용 대비 효과" 순으로 재배치.
+- ✅ **그림자 1차(완료)**: light frustum 축소(range 80→45) + texel snapping + soft PCF 5×5 + grass shadow 캐스터 비활성화.
+- **Phase 0 — 데이터 무결성/견고성 (시급·저비용)**: ① 인벤토리·드롭(+watered) 세이브 → ② 세이브 atomic write + 로드 범위 검증 → ③ dt clamp → ④ 작물 catch-up. (가능하면 ①②와 함께 순수 로직 테스트)
+- **Phase 1 — 렌더 correctness 토대**: ⑤ albedo `*_SRGB` / mask UNORM 분리 → ⑥ 밉맵 + trilinear + anisotropic(+`samplerAnisotropy` feature·device 적합성 체크). (⑦ HDR float 오프스크린은 bloom/grading 확장 시)
+- **Phase 2 — 비주얼 폴리시 (덕코프)**: ⑧ 잔디 translucency/backlight + ground contact AO(+비활성 grass shadow 리소스 제거) → ⑨ 그림자 해상도 4096/동적 texel size/CSM·소품 contact shadow.
+- **Phase 3 — 콘텐츠/확장**: ⑩ worldgen 풍부화(언덕 채움·height/slope)·water material/pass → ⑪ MSAA+alpha-to-coverage(잔디 alpha edge) → ⑫ 흰 화면(창 지연+pipeline cache) → ⑬ authored asset/font.
+> shader slope-bias grazing은 해상도/PCF로 충분하면 생략. CSM·헬퍼 추출·grass shadow 완전 제거 cleanup은 위 Phase 안에서.

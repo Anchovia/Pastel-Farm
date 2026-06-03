@@ -10,7 +10,7 @@ static constexpr int CHUNK_DEPTH = 8;
 struct TileState {
     uint8_t  growthStage    = 0;
     uint32_t lastUpdatedDay = 0;
-    bool     watered        = false; // farmland; transient (resets daily, not saved)
+    bool     watered        = false; // farmland; resets daily, persisted in save (v3)
 };
 
 enum class ObjectType : uint8_t {
