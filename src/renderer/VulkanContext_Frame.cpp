@@ -186,6 +186,39 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
                 }
             }
 
+            // Nearby grass cards write alpha-tested depth into the shadow map. This is
+            // more expensive than visual-only grass, so keep it chunk-cull limited.
+            if (!m_shadowGrassDescriptorSets.empty()) {
+                static constexpr float GRASS_SHADOW_RADIUS = 56.0f;
+                static constexpr float GRASS_SHADOW_RADIUS_SQ = GRASS_SHADOW_RADIUS * GRASS_SHADOW_RADIUS;
+
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowGrassPipeline);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_shadowGrassPipelineLayout, 0, 1, &m_shadowGrassDescriptorSets[m_currentFrame], 0, nullptr);
+                vkCmdPushConstants(cmd, m_shadowGrassPipelineLayout,
+                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
+
+                for (auto& [coord, data] : m_chunkBuffers) {
+                    if (m_grassCardMesh.count == 0 || data.grassCount == 0) continue;
+
+                    glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+                    glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+                    if (!lightFrustum.containsAABB(chunkMin, chunkMax)) continue;
+
+                    const glm::vec2 chunkCenter = {
+                        (coord.x + 0.5f) * (float)CHUNK_SIZE,
+                        (coord.y + 0.5f) * (float)CHUNK_SIZE
+                    };
+                    const glm::vec2 d = chunkCenter - glm::vec2(m_shadowCenter);
+                    if (glm::dot(d, d) > GRASS_SHADOW_RADIUS_SQ) continue;
+
+                    VkBuffer     bufs[] = { m_grassCardMesh.vbuf, data.grassBuffer };
+                    VkDeviceSize offs[] = { 0, 0 };
+                    vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+                    vkCmdDraw(cmd, m_grassCardMesh.count, data.grassCount, 0, 0);
+                }
+            }
+
             // Player cube casts a shadow too (always inside the light box — no cull)
             {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPlayerPipeline);
@@ -545,6 +578,7 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
         glm::mat4 lightProj = glm::ortho(-range, range, -range, range, 1.0f, 300.0f);
         lightProj[1][1] *= -1.0f;
         m_lightMVP = lightProj * lightView;
+        m_shadowCenter = frame.playerPosition;
     }
 
     updateUniformBuffer(m_currentFrame, frame.camera, frame.gameTime);

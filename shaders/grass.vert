@@ -23,6 +23,7 @@ layout(location = 2)      out vec4 fragPosLightSpace;
 layout(location = 3)      out float fragViewDepth;
 layout(location = 4)      out vec3 fragTint;
 layout(location = 5)      out float fragFade;
+layout(location = 6)      out float fragRootShade;
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -42,7 +43,8 @@ void main() {
     p.xy *= mix(0.88, 1.14, h0);
     p.z  *= mix(0.86, 1.12, h1);
 
-    float topFactor = smoothstep(0.20, 1.0, 1.0 - inUV.y);
+    float rootShade = 1.0 - smoothstep(0.015, 0.20, p.z);
+    float topFactor = smoothstep(0.08, 0.38, p.z);
     vec2 windDir = normalize(vec2(0.82, 0.42));
     float time = ubo.animationParams.x;
     float gust = 0.65 + 0.35 * sin(time * 0.45 + instancePos.x * 0.11 + instancePos.y * 0.07);
@@ -65,6 +67,7 @@ void main() {
     fragUV            = inUV;
     fragPosLightSpace = ubo.lightMVP * vec4(worldPos, 1.0);
     fragViewDepth     = viewDepth;
-    fragTint          = mix(vec3(0.92, 1.06, 0.78), vec3(1.18, 1.14, 0.70), h2);
+    fragTint          = mix(vec3(0.76, 0.98, 0.72), vec3(0.90, 1.04, 0.68), h2);
     fragFade          = clamp(1.0 - smoothstep(36.0, 62.0, viewDepth), 0.0, 1.0);
+    fragRootShade     = rootShade;
 }

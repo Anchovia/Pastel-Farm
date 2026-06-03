@@ -185,7 +185,6 @@ private:
     // Generic uploaded-texture helper: staging upload + image + view (+ optional sampler).
     TextureResource createTexture(uint32_t width, uint32_t height, VkFormat format,
         const void* bytes, VkDeviceSize size, bool withSampler);
-    TextureResource createTextureFromFile(const std::string& path, bool withSampler);
     // Layered variant for a sampler2DArray (bytes laid out layer-major, all same size).
     TextureResource createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
         VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler);
@@ -207,7 +206,9 @@ private:
     void createShadowPipeline();
     void createShadowObjectPipeline();
     void createShadowPlayerPipeline();
+    void createShadowGrassPipeline();
     void createShadowSampler();
+    void createShadowGrassDescriptors();
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
@@ -345,9 +346,10 @@ private:
     ObjectMesh m_groundPatchMesh;
     ObjectMesh m_pebbleMesh;
 
-    // Procedural grass alpha texture (sampled by the grass card pipeline). Creation is
-    // isolated in createGrassTexture so a file-loaded image can swap in later.
+    // Grass blade textures (sampled by the grass card pipeline). The opacity mask is
+    // split out so foliage material maps can expand without repacking the color image.
     TextureResource m_grassTex;
+    TextureResource m_grassOpacityTex;
 
     // Terrain material texture array (sampler2DArray, one layer per tile material).
     TextureResource m_terrainTex;
@@ -394,8 +396,14 @@ private:
     VkPipeline                   m_shadowPipeline       = VK_NULL_HANDLE;
     VkPipeline                   m_shadowObjectPipeline = VK_NULL_HANDLE;  // instanced tree shadow caster
     VkPipeline                   m_shadowPlayerPipeline = VK_NULL_HANDLE;  // player cube shadow caster
+    VkPipelineLayout             m_shadowGrassPipelineLayout = VK_NULL_HANDLE;
+    VkPipeline                   m_shadowGrassPipeline       = VK_NULL_HANDLE;  // alpha-tested grass caster
+    VkDescriptorSetLayout        m_shadowGrassDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool             m_shadowGrassDescriptorPool      = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> m_shadowGrassDescriptorSets;
     VkSampler                    m_shadowSampler        = VK_NULL_HANDLE;
     glm::mat4                    m_lightMVP             = glm::mat4(1.0f);
+    glm::vec3                    m_shadowCenter         = glm::vec3(0.0f);
     glm::vec3                    m_sunDir               = glm::vec3(0.0f, 0.0f, 1.0f);
     float                        m_dayFactor            = 0.0f;
 

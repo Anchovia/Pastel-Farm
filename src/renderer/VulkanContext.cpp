@@ -48,6 +48,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createShadowPipeline();
     createShadowObjectPipeline();
     createShadowPlayerPipeline();
+    createShadowGrassPipeline();
     createFramebuffers();
     createCommandPool();
     createSmaaLookupTextures();
@@ -70,6 +71,7 @@ VulkanContext::VulkanContext(Window& window, World& world) : m_window(window), m
     createPostSampler();
     createDescriptorPool();
     createDescriptorSets();
+    createShadowGrassDescriptors();
     createPostDescriptors();
     createSmaaDescriptors();
     createCommandBuffers();
@@ -115,6 +117,10 @@ VulkanContext::~VulkanContext() {
     vkDestroyPipeline(m_device, m_pipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
     vkDestroyPipeline      (m_device, m_shadowPlayerPipeline, nullptr);
+    vkDestroyPipeline      (m_device, m_shadowGrassPipeline,  nullptr);
+    vkDestroyPipelineLayout(m_device, m_shadowGrassPipelineLayout, nullptr);
+    vkDestroyDescriptorPool(m_device, m_shadowGrassDescriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(m_device, m_shadowGrassDescriptorSetLayout, nullptr);
     vkDestroyPipeline      (m_device, m_shadowObjectPipeline, nullptr);
     vkDestroyPipeline      (m_device, m_shadowPipeline,       nullptr);
     vkDestroyPipelineLayout(m_device, m_shadowPipelineLayout, nullptr);
@@ -142,6 +148,7 @@ VulkanContext::~VulkanContext() {
     m_smaaSearchTex.destroy();
     vkDestroySampler            (m_device, m_postSampler,             nullptr);
     m_grassTex.destroy();
+    m_grassOpacityTex.destroy();
     m_terrainTex.destroy();
     vkDestroyRenderPass         (m_device, m_smaaRenderPass,          nullptr);
     vkDestroyRenderPass         (m_device, m_postRenderPass,          nullptr);

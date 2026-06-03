@@ -167,7 +167,7 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
     const int baseX = coord.x * CHUNK_SIZE;
     const int baseY = coord.y * CHUNK_SIZE;
     std::vector<ObjectInstance> insts;
-    insts.reserve(1536);
+    insts.reserve(1024);
 
     auto hash01 = [](int wx, int wy, int salt) -> float {
         uint32_t h = (uint32_t)wx * 73856093u ^ (uint32_t)wy * 19349663u ^ (uint32_t)salt * 83492791u;
@@ -237,16 +237,14 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
         float density = densityField(wx, wy);
         density = clamp01(density * (0.72f + ((float)openGrass / 8.0f) * 0.38f));
 
-        for (int attempt = 0; attempt < 4; attempt++) {
+        for (int attempt = 0; attempt < 3; attempt++) {
             float chance = 0.0f;
             if (attempt == 0) {
-                chance = 0.040f + density * 0.54f;
+                chance = 0.030f + density * 0.42f;
             } else if (attempt == 1) {
-                chance = clamp01((density - 0.12f) / 0.88f) * 0.64f;
-            } else if (attempt == 2) {
-                chance = clamp01((density - 0.42f) / 0.58f) * 0.50f;
+                chance = clamp01((density - 0.18f) / 0.82f) * 0.42f;
             } else {
-                chance = clamp01((density - 0.72f) / 0.28f) * 0.32f;
+                chance = clamp01((density - 0.56f) / 0.44f) * 0.24f;
             }
             const int salt = attempt * 101;
             if (hash01(wx, wy, 11 + salt) > chance) continue;
@@ -255,8 +253,8 @@ void VulkanContext::buildGrassDressingBuffer(const glm::ivec2& coord, Chunk& chu
             const float ox = (hash01(wx, wy, 23 + salt) - 0.5f) * jitter;
             const float oy = (hash01(wx, wy, 37 + salt) - 0.5f) * jitter;
             const float variant = hash01(wx, wy, 67 + salt);
-            const float variantScale = variant < 0.25f ? 0.84f : (variant > 0.80f ? 1.16f : 1.0f);
-            const float sc = (0.88f + density * 0.22f + hash01(wx, wy, 41 + salt) * (0.20f + density * 0.12f)) * variantScale;
+            const float variantScale = variant < 0.25f ? 0.86f : (variant > 0.80f ? 1.06f : 1.0f);
+            const float sc = (0.74f + density * 0.16f + hash01(wx, wy, 41 + salt) * (0.14f + density * 0.08f)) * variantScale;
             const float rt = hash01(wx, wy, 53 + salt) * 6.2831853f;
             insts.push_back({{(float)wx + ox, (float)wy + oy, (float)z + 0.505f}, sc, rt});
         }

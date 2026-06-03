@@ -6,6 +6,36 @@ Vulkan 공부 겸 엔진 개발 기록.
 
 ## 구현 기록
 
+### 2026-06-03 — 풀 텍스처, blade-field, grass shadow 실험
+- 풀 렌더링을 기존 절차 alpha texture 중심에서 외부 foliage atlas 기반으로 확장했다.
+  - 기본 경로: `assets/textures/vegetation/grass_blades/color.png`
+  - opacity mask 경로: `assets/textures/vegetation/grass_blades/opacity.png`
+  - 두 파일 중 하나만 있거나 크기가 다르면 런타임 에러로 처리한다.
+  - 파일이 없으면 기존 `assets/textures/grass.png` 또는 절차 fallback으로 동작한다.
+- grass descriptor를 Color/Opacity 분리 구조로 바꿨다.
+  - 기존 grass color sampler와 별개로 opacity sampler를 binding 4에 추가했다.
+  - 일반 grass fragment shader는 opacity mask로 alpha test를 수행한다.
+  - 향후 normal/roughness/AO 같은 foliage material map을 추가할 때 color atlas를 다시 repack하지 않아도 된다.
+- Foliage006 계열 atlas에 맞춰 grass card UV rect를 직접 지정했다.
+  - 큰 clump 반복감을 줄이기 위해 낮고 촘촘한 blade-field cluster 형태를 유지한다.
+  - 풀 scale/density를 한 차례 낮춰 과한 해초 느낌을 완화했다.
+  - shader tint, root darkening, wind sway, distance fade도 함께 조정했다.
+- 시각 실험 중 풀 아래 fake contact patch를 잠깐 추가했으나 실패로 판단하고 제거했다.
+  - 별도 `grassContact` 메쉬/버퍼/렌더링은 화면에서 그림자가 아니라 동그란 얼룩처럼 보여 부적합했다.
+  - 이 경로는 현재 코드에 남기지 않았다.
+- 풀 카드 자체를 shadow pass에 넣는 실험을 추가했다.
+  - 새 셰이더: `shaders/shadow_grass.vert`, `shaders/shadow_grass.frag`
+  - CMake shader 목록과 post-build copy에 `shadow_grass.*`를 등록했다.
+  - grass shadow pipeline은 opacity mask를 샘플해 투명 부분을 `discard`하고, 가까운 청크만 shadow map에 depth를 쓴다.
+  - 현재 결과는 실제 그림자이긴 하지만, 화면에서는 길쭉한 붓자국/얼룩처럼 읽혀 어색하다.
+  - 다음 세션에서 1순위로 판단할 것: grass shadow를 강하게 제한할지, 풀 전체 shadow caster를 끄고 바닥/풀 셰이딩 쪽으로 우회할지.
+- 빌드는 사용자 담당이라 이 세션에서는 실행하지 않았다. 정적 확인으로 `git diff --check`만 통과했다.
+
+다음 세션 권장 판단:
+- 현재 `shadow_grass` 실험은 그대로 두고 먼저 높이/알파/거리/확률 제한을 강하게 걸어 본다.
+- 그래도 길쭉한 얼룩이 남으면 grass shadow pass를 제거하고, grass root shading + ground grass texture/detail + 낮은 대비 material breakup으로 방향을 바꾼다.
+- GTX 1660 Super 권장 사양 기준으로 풀은 품질 투자처지만, 화면에 티 나는 가짜 얼룩이나 과도한 개별 풀 그림자는 목표 스타일과 맞지 않는다.
+
 ### Vulkan 초기화 + 첫 삼각형
 - GLFW 창 생성 (`Window` 클래스, RAII 방식)
 - Vulkan Instance, Validation Layer, Surface, Physical/Logical Device 초기화

@@ -41,9 +41,9 @@ src/
 - **청크 메시**: Hidden Face Culling, 청크별 vertex/index 버퍼, dirty만 리빌드(프레임당 N개 제한)
 - **컬링**: 청크 AABB frustum culling (메인패스 + shadow 라이트 프러스텀)
 - **오브젝트**: `ObjectType`별 공유 메시 + 청크별 타입 그룹 인스턴스 버퍼(tree/rock/workbench/fence/stone fence). 오브젝트 변경 시에만 `objectsDirty`로 재빌드
-- **식생/지면 dressing**: 절차 grass alpha texture + 낮은 blade-field card cluster + 청크별 grass instance buffer + 좌표 기반 density field + shader 기반 grass tint/wind/fade. 별도 ground dressing buffer로 잔돌/패치 placement도 검증 중. 둘 다 저장하지 않는 시각 dressing layer이며 shadow caster는 아님
+- **식생/지면 dressing**: 외부 grass blade Color/Opacity 텍스처 + 낮은 blade-field card cluster + 청크별 grass instance buffer + 좌표 기반 density field + shader 기반 grass tint/wind/fade. 별도 ground dressing buffer로 잔돌/패치 placement도 검증 중. 저장하지 않는 시각 dressing layer가 기본이며, 현재는 가까운 grass card만 alpha-tested shadow pass에 넣는 실험 상태
 - **조명 스택**: ambient + sun diffuse(dayFactor) + shadow + fog (4-layer)
-- **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어, 밤엔 shadow geometry draw 스킵
+- **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어+실험적 grass alpha caster, 밤엔 shadow geometry draw 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
 - 색/재질: 지형과 StaticProp 오브젝트는 `sampler2DArray` 기반 material layer + vertex color tint를 사용한다. terrain layer는 절차 패턴 fallback 위에 `assets/textures/terrain/*.png` authored Color texture를 layer별 override로 적용할 수 있고, 오브젝트는 WOOD/LEAVES/STONE layer를 재사용하는 1차 mapping을 적용했다. grass는 alpha texture이며, `assets/textures/grass.png`가 있으면 `stb_image` 기반 파일 텍스처로 교체할 수 있다. 다음 단계에서 material-lite(albedo + tint + roughness/specular 계열 상수), texture strength/stylized albedo 보정, water 전용 표현을 확장한다
 - **DevUI / 프로파일링**: `PASTEL_DEV_BUILD`에서 Dear ImGui F3 패널을 post pass 위에 렌더링. 자체 게임 UI도 post AA 이후에 렌더링해 픽셀 폰트가 AA에 의해 깨지지 않게 한다. `VkQueryPool` timestamp로 total/shadow/scene/post/imgui GPU 구간 시간을 표시
@@ -136,7 +136,7 @@ src/
 - 목표: 풀 텍스처 1장 + 낮은 blade-field card cluster + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.
 - 성능 기준: GTX 1050 Ti 최소 60fps 안에서 grass는 핵심 비주얼 투자처다. cluster당 card 수, density, texture 품질, wind, LOD/fade를 DevUI/GPU timing으로 보며 적극적으로 올린다.
 - 이후 확장: DevUI density/거리/scale 튜닝, card/texture variant, 거리 LOD 또는 원거리 density fade. 단순히 큰 clump를 키우는 방향은 반복 오브젝트처럼 읽히므로 피하고, 작은 blade가 바닥과 섞여 풀밭 면으로 읽히는 방향을 유지한다.
-- 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, 낮은 blade-field cluster mesh, 청크별 instance buffer, 좌표 기반 density field, shader 기반 tint/wind/fade, dense patch 다중 cluster 1차까지 연결 완료. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 크게 축소했다. 다음 개선은 grass density/색 보정, 낮은 대비의 ground grass texture/detail, material-lite(AO/roughness/normal 선별), ground dressing 텍스처화 방향.
+- 현재 상태: 외부 grass blade Color/Opacity 텍스처 로딩, alpha-test grass pipeline, 낮은 blade-field cluster mesh, 청크별 instance buffer, 좌표 기반 density field, shader 기반 tint/wind/fade, dense patch 다중 cluster 1차까지 연결 완료. 가까운 grass card를 shadow map에 넣는 alpha-tested shadow pass도 실험적으로 추가했지만, 현재 화면에서는 길쭉한 얼룩처럼 읽혀 어색하다. 다음 세션에서 높이/알파/거리/확률을 강하게 제한하거나 제거 여부를 판단한다. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 크게 축소했다. 다음 개선은 grass density/색 보정, 낮은 대비의 ground grass texture/detail, material-lite(AO/roughness/normal 선별), ground dressing 텍스처화 방향.
 
 ### Grid 규칙 vs Organic 표현 — **결정**
 - 농사·설치/철거·충돌·저장 좌표는 grid 기반으로 유지한다. 플레이어 규칙은 예측 가능해야 한다.
@@ -194,6 +194,6 @@ src/
 
 ## 알려진 이슈 / 메모
 
-- **grass/ground dressing**: alpha card + density field + 낮은 blade-field cluster + shader 기반 tint/wind/fade 1차는 완료. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 다음 핵심은 바닥 grass texture/detail, material-lite 맵 선별 사용, ground dressing 텍스처화다.
+- **grass/ground dressing**: 외부 foliage Color/Opacity 텍스처 + alpha card + density field + 낮은 blade-field cluster + shader 기반 tint/wind/fade 1차는 완료. grass shadow pass는 실험적으로 들어갔지만 현재는 길쭉한 그림자 얼룩이 어색하므로 다음 세션의 1순위 튜닝/롤백 후보. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 다음 핵심은 바닥 grass texture/detail, material-lite 맵 선별 사용, ground dressing 텍스처화다.
 - **작물**: 현재 voxel 타일(`WHEAT` + `TileState`)로 처리. 장기적으로 별도 `Crop` 인스턴스 레이어 분리 검토.
 - 그림자 최소 밝기 `max(shadow, 0.4)` 는 파스텔 톤 유지를 위한 **의도된 스타일**(버그 아님).
