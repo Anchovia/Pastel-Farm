@@ -356,7 +356,12 @@ bool World::load(const std::string& path, glm::vec3& outPlayerPos, float& outGam
 // farmland below it was watered. Farmland then dries out (must re-water daily).
 
 void World::growthTick(int currentDay) {
-    for (auto& [coord, chunk] : m_chunks) {
+    // Applied to both loaded (m_chunks) and modified-unloaded chunks so crops
+    // progress consistently whether or not the player is nearby. Growth is
+    // water-gated (one stage per watered day, farmland dries daily), so an
+    // unloaded chunk advances at most one stage per watering — no day-delta
+    // catch-up needed (re-watering can't happen while the player is away).
+    auto tickChunk = [&](Chunk& chunk) {
         bool changed = false;
 
         // Grow wheat sitting on watered farmland
@@ -385,7 +390,10 @@ void World::growthTick(int currentDay) {
         }
 
         if (changed) chunk.dirty = true;
-    }
+    };
+
+    for (auto& [coord, chunk] : m_chunks)           tickChunk(chunk);
+    for (auto& [coord, chunk] : m_modifiedUnloaded) tickChunk(chunk);
 }
 
 World::HarvestResult World::tryHarvestObject(int x, int y, ItemType tool,

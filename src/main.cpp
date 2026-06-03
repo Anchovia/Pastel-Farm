@@ -281,6 +281,9 @@ int main() {
             double now = glfwGetTime();
             float  dt  = static_cast<float>(now - lastTime);
             lastTime = now;
+            // Clamp dt: after a stall/resize/debugger pause a huge frame would jump
+            // time, growth, and movement (and tunnel through collision) in one step.
+            if (dt > 0.1f) dt = 0.1f;
 
             PlayerInput input = inputManager.pollInput();
 #ifdef PASTEL_DEV_BUILD
