@@ -64,7 +64,7 @@ void main() {
     if (dayFactor > 0.01 && projCoords.z >= 0.0 && projCoords.z <= 1.0) {
         float NdotL = max(dot(normal, lightDir), 0.0);
         float bias  = mix(0.0015, 0.0003, NdotL);
-        float texel = 1.0 / 2048.0;
+        float texel = 1.0 / 4096.0; // must match SHADOW_MAP_SIZE
         shadow = 0.0;
         for (int x = -2; x <= 2; x++)
             for (int y = -2; y <= 2; y++)
