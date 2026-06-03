@@ -15,7 +15,9 @@
 - 성능 기준: 최소 GTX 1050 Ti / 1080p / 60fps, 권장 GTX 1660 Super급. 초저사양 데모가 아니라 **최적화된 고품질 상용 게임**이 목표
 - 최신 기법은 선별적으로 사용한다: 텍스처 매핑, material-lite, 고품질 식생, AA, shadow 품질 옵션, post 효과를 성능 예산 안에서 적극 도입
 - Vulkan 직접 제어, 게임과 엔진 동시 개발
-- 렌더러 원칙: **단순함 + 명시적 제어 + 유지보수성**
+- **품질 기본값 (중요 — 반복 위반된 항목)**: 비주얼/렌더링 작업은 *제대로 된 고품질 기법*을 1660 Super 예산 안에서 **기본값**으로 택한다. 기능 제거·가짜·축소(그림자 끄기, blob 그림자, 64² 텍스처 고수, CSM "오버킬" 회피, 해상도 대신 PCF만 키우기 등)를 먼저 택하지 않는다. 현재 코드가 미니멀해 보이는 건 placeholder이지 품질 목표가 아니다. CSM·밉맵·이방성·고해상도 shadow map·soft shadow는 anti-goal이 아니라 **권장 품질 기법**이다
+- 렌더러 원칙: **명시적 제어 + 유지보수성** (단, "단순함"은 *코드 구조*에 적용되는 원칙이지 *비주얼 품질을 낮추라는 뜻이 아니다*)
+- **정공법 우선 (안정성·확장성·호환성 — 중요)**: 검증된 표준·Vulkan 관용(idiomatic) 구현을 택한다 — 대부분의 엔진/레퍼런스(SaschaWillems·Khronos Vulkan-Samples·LearnOpenGL, `VULKAN_REFERENCES.md`)가 실제로 쓰는 방식. 도전적·실험적·비표준 우회로 표준 기법의 일부를 **스킵·무시·컷오프하지 않는다** — 그러면 깨지기 쉽고 호환·확장이 나빠진다. 표준 기법은 *제대로, 완전하게* 구현하고, 나중에 기능을 여러 개 붙여도 자연스럽게 맞물리는 구조를 우선한다. "단순함"은 *표준 정공법*을 쓰라는 뜻이지 *새로운 지름길을 발명하라는 게 아니다*
 
 ---
 
@@ -140,6 +142,15 @@ src/
 - 이후 확장: DevUI density/거리/scale 튜닝, card/texture variant, 거리 LOD 또는 원거리 density fade. 단순히 큰 clump를 키우는 방향은 반복 오브젝트처럼 읽히므로 피하고, 작은 blade가 바닥과 섞여 풀밭 면으로 읽히는 방향을 유지한다.
 - 현재 상태: 외부 grass blade Color/Opacity 텍스처 로딩, alpha-test grass pipeline, 낮은 blade-field cluster mesh, 청크별 instance buffer, 좌표 기반 density field, shader 기반 tint/wind/fade, dense patch 다중 cluster 1차까지 연결 완료. 가까운 grass card를 shadow map에 넣는 alpha-tested shadow pass도 실험적으로 추가했지만, 현재 화면에서는 길쭉한 얼룩처럼 읽혀 어색하다. 다음 세션에서 높이/알파/거리/확률을 강하게 제한하거나 제거 여부를 판단한다. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 크게 축소했다. 다음 개선은 grass density/색 보정, 낮은 대비의 ground grass texture/detail, material-lite(AO/roughness/normal 선별), ground dressing 텍스처화 방향.
 
+### 2.5D 고품질 잔디·룩 레시피 — **결정** (AAA 2.5D 관행 교차검증, 2026-06-03)
+> 고정 시점 2.5D는 카메라가 잔디를 옆/바닥에서 들여다보지 않으므로, "잔디 한 포기당 삼각형 수"보다 **조명·색·접지 표현**이 체감 품질을 좌우한다. 덕코프류 룩의 핵심은 초고사양 메시가 아니라 *일관된 아트 + 제한된 카메라용 최적화된 표현*이다.
+
+- **잔디 셰이딩 스택(우선순위순)**: ① 개체별 색 랜덤(반복감 제거) → ② height gradient(밑동 짙은 녹색 → 끝 밝은/노란 녹색) → ③ base/접지 AO(밑동 어둡게) → ④ **translucency/backlight(역광 시 노랗게 발광 — "진짜 잔디" 인상의 최대 요소, 저비용)** → ⑤ wind(현재 sin sway, 후에 wind noise map) → ⑥ 거리 fade/density falloff. 현재 ①②⑤⑥ 일부 + ③ 부분(`fragRootShade`) 구현, **④ 미구현(최우선 후보)**.
+- **그림자 정책 — 결정**: 캐릭터/나무/오브젝트/건물 = 실시간 shadow map(필요 시 CSM + soft). **잔디는 그림자를 *받기만* 하고 개별 잔디는 *쏘지 않는다*** — 얇은 날 그림자는 단일 shadow map에서 ~1텍셀 폭이라 sun sweep에 깜빡이고 비용 대비 효과가 낮다(AAA 2.5D 표준). 대신 **ground contact AO / 어두운 패치**로 잔디를 바닥에 앉힌다. 작은 소품은 contact/blob shadow. (실험적 `shadow_grass` 캐스터는 이 정책에 따라 비활성화 — cleanup으로 완전 제거 예정.)
+- **땅이 좋아 보이는 진짜 이유 = terrain blending**: 잔디 자체보다 흙/잔디/길/어두운 접촉부가 자연스럽게 섞이는 것. terrain albedo + noise color variation + dirt/grass blend mask + ground AO.
+- **스코프(우리 규모)**: GPU-driven(compute frustum/occlusion cull + `vkCmdDrawIndexedIndirect` + mesh shader 절차 생성)은 100만~1000만 포기 오픈월드용이다. 우리는 2.5D + fog 57유닛 제한이라 청크별 instancing + 단순 cull로 충분 → **규모상 보류**(성능 미달이라서가 아님). 실제 draw 병목이 측정되면 indirect/compute cull로 승격.
+- **라이팅 톤**: 따뜻한 태양광 + 차가운(푸른 회색/녹색) 그림자 + 그림자도 완전 검지 않음 — 현재 `max(shadow,0.4)` + hemisphere ambient와 방향 일치.
+
 ### Grid 규칙 vs Organic 표현 — **결정**
 - 농사·설치/철거·충돌·저장 좌표는 grid 기반으로 유지한다. 플레이어 규칙은 예측 가능해야 한다.
 - 자연 환경은 grid를 그대로 드러내지 않는다. 큰 잔디/흙 면을 타일별 색 랜덤으로 흔들면 격자감이 더 강해지므로 금지.
@@ -176,7 +187,7 @@ src/
 - 청크 메시 DEVICE_LOCAL — 현재도 staging path가 존재하나, 동적 청크 메시/식생 규모가 커지고 GPU vertex fetch 병목이 보이면 우선순위 상승
 
 ### 명시적 비목표 (Anti-goals) — rule of 3 / 실제 병목 전엔 **안 함**
-개인 Vulkan 엔진이 "AAA 체크리스트"에 빠져 게임을 못 내는 함정 방어선. 단, 이것은 저품질을 목표로 하자는 뜻이 아니다. 품질에 직접 기여하는 텍스처, AA, shadow 옵션, material-lite는 적극 검토한다.
+개인 Vulkan 엔진이 "AAA 체크리스트"에 빠져 게임을 못 내는 함정 방어선. **단, 이것은 저품질을 목표로 하자는 뜻이 절대 아니다 — anti-goal은 "아키텍처/스코프 비대화"를 막는 것이지 "렌더링 품질"을 낮추라는 게 아니다.** 품질에 직접 기여하는 텍스처(밉맵·이방성·고해상도 authored), AA, shadow 품질(고해상도·CSM·soft), material-lite는 **적극 도입**한다. CSM·밉맵·이방성은 anti-goal이 아니다.
 - **ECS 전면 전환** — 오브젝트가 sparse, OOP로 충분. (필요 시 hybrid SoA만 국소 적용)
 - **Render Graph / FrameGraph** — 풀 그래프 X. 경량 `IRenderPass`까지만.
 - **Asset DB / Material 노드그래프** — 에셋 수가 늘기 전엔 보류. 단, TextureResource/helper와 material-lite는 반복이 생기는 즉시 도입 가능.
@@ -196,7 +207,7 @@ src/
 
 ## 알려진 이슈 / 메모
 
-- **grass/ground dressing**: 외부 foliage Color/Opacity 텍스처 + alpha card + density field + 낮은 blade-field cluster + shader 기반 tint/wind/fade 1차는 완료. grass shadow pass는 실험적으로 들어갔지만 현재는 길쭉한 그림자 얼룩이 어색하므로 다음 세션의 1순위 튜닝/롤백 후보. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 다음 핵심은 바닥 grass texture/detail, material-lite 맵 선별 사용, ground dressing 텍스처화다.
+- **grass/ground dressing**: 외부 foliage Color/Opacity 텍스처 + alpha card + density field + 낮은 blade-field cluster + shader 기반 tint/wind/fade 1차는 완료. grass shadow 캐스터는 **비활성화 결정** — 개별 잔디 cast shadow는 단일 shadow map에서 ~1텍셀 폭이라 sun sweep에 깜빡이고 2.5D에선 비표준이라, 그라운딩은 **ground contact AO + base 어둡게**로 대체한다('2.5D 고품질 잔디·룩 레시피' 참조). 캐스터 파이프라인/셰이더 완전 제거는 cleanup 예정. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 다음 핵심은 바닥 grass texture/detail, material-lite 맵 선별 사용, ground dressing 텍스처화다.
 - **작물**: 현재 voxel 타일(`WHEAT` + `TileState`)로 처리. 장기적으로 별도 `Crop` 인스턴스 레이어 분리 검토.
 - 그림자 최소 밝기 `max(shadow, 0.4)` 는 파스텔 톤 유지를 위한 **의도된 스타일**(버그 아님).
 
@@ -207,4 +218,4 @@ src/
 - **일출/일몰 줄무늬 = Shadow Acne (Moiré)**: 그림자지지 않아야 할 면에 생기는 잘못된 self-shadowing. `chunk.frag`의 bias `mix(0.0015, 0.0003, NdotL)`는 slope-scaled bias **모양(수직→작게, grazing→크게)이 LearnOpenGL 권장과 정확히 일치**한다 — "bias가 꺼져 있다"가 아니라 **grazing 끝값(0.0015)이 약하고 저해상도와 겹쳐** 일출/일몰에 acne가 남는 것. **해법 순서: ① frustum 축소(해상도↑ — acne를 peter-panning 부작용 없이 줄임) → ② 그래도 남으면 shader bias의 grazing 끝값 소폭 상향(peter-panning 주시).** front-face culling은 청크가 hidden-face-culled = 단면 메시라 적용 불가(LearnOpenGL p18 "단면 object엔 불가" 단서와 일치). 하드웨어 caster depthBias(현재 청크 0/0, 오브젝트는 1.5/1.2)는 선택적 보조 레버.
 - **텍스처 필터링 부재**: 전 텍스처 경로가 `mipLevels=1`, `mipmapMode=NEAREST`, 이방성 필터링 미사용 → 원거리 minification aliasing("자글자글"). 표준: **밉맵 + trilinear(`LINEAR_MIPMAP_LINEAR`) + anisotropic**(아이소메트릭은 항상 비스듬한 시점이라 aniso 효과 큼). 단 64×64 절차 텍스처는 magnification 흐림/계단이라 필터링으론 못 고치고 **원본 해상도 상향(512²+)**이 필요(LearnOpenGL #4 "텍스처가 애초에 작으면"). GTX 1660 Super 예산 충분.
 - **시작 시 흰 화면(5~10초)**: world/청크 로드는 이미 Loading 상태에서 처리된다. 실제 원인은 **`VulkanContext` 생성자의 동기 초기화**(파이프라인 약 15개 드라이버 컴파일 + 텍스처 업로드)가 창이 이미 보이는 상태에서 첫 present 전까지 블록하기 때문이다. 메인 메뉴조차 이 init 뒤에 그려지므로 "텍스처 로딩을 START 후로 이동"으로는 해결되지 않는다. 완화책: 첫 프레임 전까지 창 숨김(`GLFW_VISIBLE=false`→첫 present 후 `glfwShowWindow`), **`VkPipelineCache`** 도입(2회차부터 컴파일 단축), 필요 시 스플래시 1프레임.
-- **렌더 결함 수정 우선순위(개정)**: ① 그림자 light frustum 축소(range↓, 부작용 없는 acne+blocky 완화) → ② shader slope-bias grazing 끝값 상향(필요 시) → ③ grass shadow caster 제한/제거(DEVLOG 1순위) → ④ 텍스처 mipmap+trilinear+anisotropic+원본 해상도 → ⑤ 흰 화면(창 지연표시 + pipeline cache). 장기: CSM(근거리 품질), normal mapping(고사양 질감), shadow 파이프라인 헬퍼 추출.
+- **렌더 결함 수정 우선순위(개정, 2026-06-03 진행 반영)**: ✅ light frustum 축소(range 80→45) + ✅ texel snapping + ✅ soft PCF 5×5 + ✅ grass shadow 캐스터 비활성화(결정) 까지 완료 → **다음: ① 잔디 리얼리즘(translucency/backlight + 색·gradient 강화 → ground contact AO) → ② 텍스처 mipmap+이방성+terrain blending → ③ 그림자 해상도 4096/CSM+soft·소품 contact/blob shadow → ④ 흰 화면(창 지연표시 + pipeline cache) → ⑤ post: bloom/SSAO.** shader slope-bias grazing은 해상도/PCF로 충분하면 생략. 큰 작업(CSM, shadow 파이프라인 헬퍼 추출, grass shadow 캐스터 완전 제거 cleanup)은 위 순서 안에서.

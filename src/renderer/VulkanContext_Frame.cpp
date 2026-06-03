@@ -186,9 +186,12 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
                 }
             }
 
-            // Nearby grass cards write alpha-tested depth into the shadow map. This is
-            // more expensive than visual-only grass, so keep it chunk-cull limited.
-            if (!m_shadowGrassDescriptorSets.empty()) {
+            // Grass shadow casting disabled: thin alpha-card blades are ~1 texel wide in
+            // the shadow map, so they alias/flicker badly as the sun sweeps (DEVLOG
+            // 2026-06-03, confirmed via capture). Grass still receives shadow + uses root
+            // darkening for grounding; only the noisy casting is removed. Flip to re-enable.
+            constexpr bool kGrassCastsShadow = false;
+            if (kGrassCastsShadow && !m_shadowGrassDescriptorSets.empty()) {
                 static constexpr float GRASS_SHADOW_RADIUS = 56.0f;
                 static constexpr float GRASS_SHADOW_RADIUS_SQ = GRASS_SHADOW_RADIUS * GRASS_SHADOW_RADIUS;
 
@@ -570,7 +573,11 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
         m_sunDir    = glm::normalize(glm::vec3(cosf(azimuth), sinf(azimuth), elevation));
         m_dayFactor = elevation; // 0 at midnight, 1 at noon
 
-        const float range = 80.0f;
+        // Light frustum half-extent. Kept tight to the visible (un-fogged) range so
+        // the 2048 shadow map spends its resolution where it shows: fog fully hides
+        // geometry past ~57 units, so a smaller box ~doubles effective texel density
+        // and cuts the blocky-edge shimmer that crawls as the sun rotates.
+        const float range = 45.0f;
         glm::mat4 lightView = glm::lookAt(
             frame.playerPosition + m_sunDir * 150.0f,
             frame.playerPosition,

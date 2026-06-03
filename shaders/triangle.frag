@@ -32,10 +32,10 @@ void main() {
         float bias  = mix(0.0015, 0.0003, NdotL);
         float texel = 1.0 / 2048.0;
         shadow = 0.0;
-        for (int x = -1; x <= 1; x++)
-            for (int y = -1; y <= 1; y++)
+        for (int x = -2; x <= 2; x++)
+            for (int y = -2; y <= 2; y++)
                 shadow += texture(shadowMap, vec3(projCoords.xy + vec2(x, y) * texel, projCoords.z - bias));
-        shadow /= 9.0;
+        shadow /= 25.0;
     }
     float shadowFactor = max(shadow, 0.4);
 

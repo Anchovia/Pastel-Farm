@@ -6,6 +6,21 @@ Vulkan 공부 겸 엔진 개발 기록.
 
 ## 구현 기록
 
+### 2026-06-03 — 그림자 품질 패스 + 품질/정공법 원칙 명문화
+
+**렌더링 방향 리셋 (문서/메모리):** 매 세션 저사양 워크어라운드로 회귀하던 문제를 구조적으로 차단.
+- `README`/`ARCHITECTURE`/`CLAUDE.md`/`AGENTS.md`에 **"품질 기본값"**(권장 1660 Super 예산으로 고품질 기법 기본값, 저사양 워크어라운드·제거·가짜·축소 금지)과 **"정공법 우선"**(표준·Vulkan idiomatic·확장성, 표준 기법의 스킵/무시/컷오프 금지) 원칙 명문화. "Simplicity First"는 *코드 구조*에만 적용되고 *렌더링 품질·표준성*엔 적용 안 됨을 못박음.
+- AAA 2.5D 관행 교차검증으로 ARCHITECTURE에 **"2.5D 고품질 잔디·룩 레시피"** 결정 블록 추가: 잔디 셰이딩 스택(개체 색 랜덤 → height gradient → base AO → translucency/backlight → wind → fade), 그림자 정책(캐릭터/나무/오브젝트만 실시간 shadow, 잔디는 받기만·안 쏨 + ground contact AO로 그라운딩), terrain blending, GPU-driven은 *규모상* 보류.
+
+**그림자 떨림(shimmering)/acne 작업 (uncommitted):**
+- texel snapping: 라이트 직교 투영을 월드 원점 기준 텍셀 격자에 스냅(`VulkanContext_Frame.cpp`). translation 떨림 방지용 표준 stabilization. 단독 효과는 미미 — 잔디·돌 떨림의 주원인은 해상도/얇은 그림자였음.
+- light frustum 축소 **range 80→45**: fog(57) 밖은 안 보이므로 실효 해상도 ~1.8배. **나무 그림자 떨림 확실히 개선.**
+- soft PCF **3×3→5×5** (`chunk`/`grass`/`triangle.frag`, texel 1/2048 유지).
+- **grass shadow 캐스터 비활성화** (`kGrassCastsShadow=false`): 얇은 풀 그림자는 단일 shadow map에서 ~1텍셀이라 sun sweep에 깜빡임 + PCF로 못 잡음. AAA 2.5D 표준대로 잔디는 cast 안 하고 ground contact AO로 그라운딩하는 방향 결정. 파이프라인/셰이더 완전 제거는 cleanup 예정.
+- 빌드 관찰: 나무 그림자 개선 / 잔디·돌은 잔디 캐스터 제거로 떨림 사라짐(단 그라운딩이 휑함 → 다음 트랙에서 보강).
+
+**다음 세션:** 트랙 ① 잔디 리얼리즘(translucency/backlight + 색·gradient → ground contact AO) → ② 텍스처 mipmap/이방성/terrain blending → ③ 그림자 해상도 4096/CSM+soft·소품 contact shadow → ④ 흰 화면 → ⑤ post(bloom/SSAO). 상세는 `ARCHITECTURE` "렌더 품질 결함" + "2.5D 고품질 잔디·룩 레시피".
+
 ### 2026-06-03 — 풀 텍스처, blade-field, grass shadow 실험
 - 풀 렌더링을 기존 절차 alpha texture 중심에서 외부 foliage atlas 기반으로 확장했다.
   - 기본 경로: `assets/textures/vegetation/grass_blades/color.png`
