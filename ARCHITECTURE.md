@@ -108,7 +108,7 @@ src/
 - ✅ layer별 texture strength 1차: grass/leaves는 낮게, dirt/farmland/stone은 높게, wood/wheat는 중간값으로 조절해 재질별 texture 존재감을 분리
 - material-lite: full PBR 전환 전, albedo + tint + AO/roughness/specular 상수로 재질 차이를 표현. Normal map은 스타일과 충돌하지 않는 약한 강도로만 검토하고, displacement map은 실제 변위가 아니라 height mask/ground detail/density 보조 데이터 후보로 둔다
 - shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
-- **그림자 안정화/품질 (우선순위↑, '알려진 이슈 / 렌더 품질 결함' 참조)**: ① 라이트 행렬 texel snapping으로 shimmering 제거 → ② 청크 캐스터 slope-scaled + normal-offset bias로 일출/일몰 acne 제거 → ③ 이후에도 원거리 품질이 부족하면 CSM(`shadowmappingcascade`) 도입 → ④ 1660급 예산에서 PCF 커널 확대/PCSS는 선택지. 단일 2048² 맵 + 셰이더 고정 bias 의존이 현재 한계.
+- **그림자 안정화/품질 (우선순위↑)**: 구체 순서는 '알려진 이슈 / 렌더 품질 결함'의 개정 우선순위를 단일 출처로 따른다 — light frustum 축소(range↓, 부작용 없는 1순위) → shader slope-bias grazing 끝값 상향 → 원거리 부족 시 CSM(`shadowmappingcascade`) → PCF 커널 확대/PCSS(선택). 단일 2048² 맵 + 헐렁한 frustum이 현재 한계.
 - **텍스처 필터링 품질 (우선순위↑)**: 밉맵 생성 + 이방성 필터링을 표준으로 도입한다(현재 둘 다 없음 — 원거리/grazing aliasing의 주원인). 해상도 상향(64²→512²+)은 그다음.
 - terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
 - height fog / vegetation variation / ground material detail / sky tint / LUT
@@ -200,11 +200,11 @@ src/
 - **작물**: 현재 voxel 타일(`WHEAT` + `TileState`)로 처리. 장기적으로 별도 `Crop` 인스턴스 레이어 분리 검토.
 - 그림자 최소 밝기 `max(shadow, 0.4)` 는 파스텔 톤 유지를 위한 **의도된 스타일**(버그 아님).
 
-### 렌더 품질 결함 (2026-06-03 코드 분석)
-> 짚인 체감 문제들의 근본 원인은 아트가 아니라 업계 표준 기법 누락이다. 구조는 좋아 국소 추가로 해결 가능(전면 재작성 아님).
+### 렌더 품질 결함 (2026-06-03 코드 분석, LearnOpenGL shadow/texture 개념으로 교차검증)
+> 짚인 체감 문제들의 근본 원인은 아트가 아니라 업계 표준 기법 누락이다. 구조는 좋아 국소 추가로 해결 가능(전면 재작성 아님). 진단은 LearnOpenGL의 shadow acne/peter-panning/blocky/frustum-fit/PCF/CSM, texture mipmap/anisotropic 개념과 일치함을 확인했다.
 
-- **그림자 shimmering (일렁임/반짝임)**: 라이트 직교 행렬을 매 프레임 플레이어 연속 좌표·태양 위치로 재계산하는데 **texel 스냅(stabilization)이 없다**(`VulkanContext_Frame.cpp` 라이트 MVP 계산). lit/shadow 경계가 프레임마다 텍셀 단위로 깜빡여 "불타는 듯 반짝이는" 일렁임이 생긴다. directional shadow의 표준 결함이며 해법도 표준: 라이트 투영 원점을 worldUnitsPerTexel 단위로 floor 스냅. **수정 1순위.**
-- **일출/일몰 줄무늬 (shadow acne)**: 청크(지면) 캐스터 파이프라인이 `depthBiasConstant/Slope = 0/0`(`VulkanContext_Init.cpp` `createShadowPipeline`)이라 하드웨어 slope-scaled bias가 사실상 꺼져 있고, acne 제어를 `chunk.frag`의 고정 bias `mix(0.0015, 0.0003, NdotL)`에만 의존한다. 빛이 스치는 각이 되는 일출/일몰에 자기 그림자가 줄무늬(moiré)로 찍힌다. 오브젝트 캐스터는 이미 slope/constant bias(1.2/1.5)를 쓰므로, 청크 캐스터에도 slope-scaled + normal-offset bias(+front-face cull 재검토)를 적용한다.
-- **텍스처 필터링 부재**: 모든 텍스처 생성 경로가 `mipLevels=1`, `mipmapMode=NEAREST`, 이방성 필터링 미사용이다. 원거리·grazing 지면/풀이 지글거리고(aliasing), 64×64 절차 텍스처는 placeholder 등급이다. 아트 교체 전에 **밉맵 생성 + 이방성 필터링**만으로도 질감 체감이 크게 오른다(GTX 1660 Super 예산 충분). 해상도 상향은 그다음.
-- **시작 시 흰 화면(5~10초)**: world/청크 로드는 이미 Loading 상태에서 처리된다. 흰 화면의 실제 원인은 **`VulkanContext` 생성자의 동기 초기화**(파이프라인 약 15개 드라이버 컴파일 + 텍스처 업로드)가 창이 이미 보이는 상태에서 첫 present 전까지 블록하기 때문이다. 메인 메뉴조차 이 init 뒤에 그려지므로 "텍스처 로딩을 START 후로 이동"으로는 해결되지 않는다. 완화책: 첫 프레임 전까지 창 숨김(`GLFW_VISIBLE=false`→첫 present 후 `glfwShowWindow`), **`VkPipelineCache`** 도입(2회차부터 컴파일 단축), 필요 시 스플래시 1프레임.
-- **렌더 결함 수정 우선순위**: ① 그림자 texel snapping → ② 청크 캐스터 slope/normal-offset bias → ③ 텍스처 밉맵+이방성 → ④ 흰 화면(창 지연표시 + pipeline cache). 큰 작업(CSM, shadow 파이프라인 헬퍼 추출)은 그 뒤.
+- **그림자 "빤짝임/일렁임" (blocky shadow aliasing)**: 주원인은 **그림자 맵 실효 해상도 부족**이다. 라이트 직교 박스 half-extent `range=80`(`VulkanContext_Frame.cpp`) → 160유닛을 2048텍셀에 펴서 텍셀당 ~0.078유닛인데, fog가 57유닛에서 가려 그 너머는 보이지도 않는다(해상도 절반 이상 낭비). 저해상도 계단(blocky) 에지가 태양이 천천히 회전하며 기어다녀 "불타듯 반짝"인다. **표준 해법: light frustum을 가시 범위에 맞게 축소(range↓) → 실효 해상도↑** (LearnOpenGL "blocky shadows: frustum을 scene에 딱 맞게"). texel snapping은 **적용 완료** — 플레이어 이동에 의한 translation 떨림 방지용 표준 stabilization이나, 회전 기반 blocky aliasing은 못 잡으므로 주 해법이 아니다.
+- **일출/일몰 줄무늬 = Shadow Acne (Moiré)**: 그림자지지 않아야 할 면에 생기는 잘못된 self-shadowing. `chunk.frag`의 bias `mix(0.0015, 0.0003, NdotL)`는 slope-scaled bias **모양(수직→작게, grazing→크게)이 LearnOpenGL 권장과 정확히 일치**한다 — "bias가 꺼져 있다"가 아니라 **grazing 끝값(0.0015)이 약하고 저해상도와 겹쳐** 일출/일몰에 acne가 남는 것. **해법 순서: ① frustum 축소(해상도↑ — acne를 peter-panning 부작용 없이 줄임) → ② 그래도 남으면 shader bias의 grazing 끝값 소폭 상향(peter-panning 주시).** front-face culling은 청크가 hidden-face-culled = 단면 메시라 적용 불가(LearnOpenGL p18 "단면 object엔 불가" 단서와 일치). 하드웨어 caster depthBias(현재 청크 0/0, 오브젝트는 1.5/1.2)는 선택적 보조 레버.
+- **텍스처 필터링 부재**: 전 텍스처 경로가 `mipLevels=1`, `mipmapMode=NEAREST`, 이방성 필터링 미사용 → 원거리 minification aliasing("자글자글"). 표준: **밉맵 + trilinear(`LINEAR_MIPMAP_LINEAR`) + anisotropic**(아이소메트릭은 항상 비스듬한 시점이라 aniso 효과 큼). 단 64×64 절차 텍스처는 magnification 흐림/계단이라 필터링으론 못 고치고 **원본 해상도 상향(512²+)**이 필요(LearnOpenGL #4 "텍스처가 애초에 작으면"). GTX 1660 Super 예산 충분.
+- **시작 시 흰 화면(5~10초)**: world/청크 로드는 이미 Loading 상태에서 처리된다. 실제 원인은 **`VulkanContext` 생성자의 동기 초기화**(파이프라인 약 15개 드라이버 컴파일 + 텍스처 업로드)가 창이 이미 보이는 상태에서 첫 present 전까지 블록하기 때문이다. 메인 메뉴조차 이 init 뒤에 그려지므로 "텍스처 로딩을 START 후로 이동"으로는 해결되지 않는다. 완화책: 첫 프레임 전까지 창 숨김(`GLFW_VISIBLE=false`→첫 present 후 `glfwShowWindow`), **`VkPipelineCache`** 도입(2회차부터 컴파일 단축), 필요 시 스플래시 1프레임.
+- **렌더 결함 수정 우선순위(개정)**: ① 그림자 light frustum 축소(range↓, 부작용 없는 acne+blocky 완화) → ② shader slope-bias grazing 끝값 상향(필요 시) → ③ grass shadow caster 제한/제거(DEVLOG 1순위) → ④ 텍스처 mipmap+trilinear+anisotropic+원본 해상도 → ⑤ 흰 화면(창 지연표시 + pipeline cache). 장기: CSM(근거리 품질), normal mapping(고사양 질감), shadow 파이프라인 헬퍼 추출.

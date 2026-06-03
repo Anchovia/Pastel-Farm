@@ -577,6 +577,18 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
             glm::vec3(0.0f, 0.0f, 1.0f));
         glm::mat4 lightProj = glm::ortho(-range, range, -range, range, 1.0f, 300.0f);
         lightProj[1][1] *= -1.0f;
+
+        // Texel snapping: anchor the shadow texel grid to world space so the projected
+        // scene shifts in whole-texel steps. Removes per-frame shadow edge shimmering.
+        // World origin is the fixed reference; ortho keeps w == 1 so no perspective divide.
+        glm::mat4 unsnapped = lightProj * lightView;
+        glm::vec4 originLS  = unsnapped * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        float texelScale    = (float)SHADOW_MAP_SIZE * 0.5f;
+        glm::vec2 inTexels  = glm::vec2(originLS) * texelScale;
+        glm::vec2 offset    = (glm::round(inTexels) - inTexels) / texelScale;
+        lightProj[3][0]    += offset.x;
+        lightProj[3][1]    += offset.y;
+
         m_lightMVP = lightProj * lightView;
         m_shadowCenter = frame.playerPosition;
     }
