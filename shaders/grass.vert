@@ -7,6 +7,7 @@ layout(binding = 0) uniform UniformBufferObject {
     vec4 lightDir;
     mat4 lightMVP;
     vec4 fogColor;
+    vec4 animationParams;
 } ubo;
 
 layout(location = 0) in vec3 inPosition;
@@ -21,6 +22,7 @@ layout(location = 1)      out vec2 fragUV;
 layout(location = 2)      out vec4 fragPosLightSpace;
 layout(location = 3)      out float fragViewDepth;
 layout(location = 4)      out vec3 fragTint;
+layout(location = 5)      out float fragFade;
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -39,6 +41,15 @@ void main() {
     vec3 p = inPosition;
     p.xy *= mix(0.88, 1.14, h0);
     p.z  *= mix(0.86, 1.12, h1);
+
+    float topFactor = smoothstep(0.20, 1.0, 1.0 - inUV.y);
+    vec2 windDir = normalize(vec2(0.82, 0.42));
+    float time = ubo.animationParams.x;
+    float gust = 0.65 + 0.35 * sin(time * 0.45 + instancePos.x * 0.11 + instancePos.y * 0.07);
+    float wave = sin(time * 2.40 + instancePos.x * 1.30 + instancePos.y * 1.70 + h0 * 6.2831853);
+    float cross = sin(time * 1.30 + instancePos.x * 0.60 - instancePos.y * 0.80 + h1 * 6.2831853);
+    p.xy += windDir * (wave * 0.018 * gust + cross * 0.006) * topFactor;
+
     p   *= instanceScale;
 
     vec3 rp = vec3(p.x * c - p.y * s, p.x * s + p.y * c, p.z);
@@ -48,10 +59,12 @@ void main() {
     vec3 rn = vec3(n.x * c - n.y * s, n.x * s + n.y * c, n.z);
 
     vec4 viewPos      = ubo.view * vec4(worldPos, 1.0);
+    float viewDepth   = -viewPos.z;
     gl_Position       = ubo.proj * viewPos;
     fragNormal        = rn;
     fragUV            = inUV;
     fragPosLightSpace = ubo.lightMVP * vec4(worldPos, 1.0);
-    fragViewDepth     = -viewPos.z;
-    fragTint          = mix(vec3(0.88, 0.98, 0.82), vec3(1.10, 1.05, 0.78), h2);
+    fragViewDepth     = viewDepth;
+    fragTint          = mix(vec3(0.92, 1.06, 0.78), vec3(1.18, 1.14, 0.70), h2);
+    fragFade          = clamp(1.0 - smoothstep(36.0, 62.0, viewDepth), 0.0, 1.0);
 }

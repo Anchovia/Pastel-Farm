@@ -930,6 +930,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `buildGrassDressingBuffer()`에서 grass 배치 확률을 `0.06 + density * 0.40` → `0.08 + density * 0.48`로 올리고, scale/jitter/variant 범위를 조금 넓혀 빈 잔디 바닥을 card가 더 채우게 했다.
 - 유저 빌드/스크린샷 검증 결과: grass가 이전보다 풍성해졌고, DevUI 기준 scene GPU 시간이 약 1.0ms 수준으로 유지됐다. 일부 균등 배치 느낌은 남아 있으므로 다음 개선은 density patch 대비, wind sway, 거리 LOD/fade, card/tint variant로 본다.
 
+### Reference grass blade-field 1차 (Task #5b)
+- 레퍼런스 스크린샷 기준으로 기존 3-card clump는 "큰 풀 오브젝트를 반복 배치한" 느낌이 강해 최종 방향으로 부적합하다고 판단했다. grass 전용 파이프라인, alpha test, instance buffer, density field, dirty gate는 유지하고, **아트 모델**만 낮고 촘촘한 blade-field로 전환했다.
+- `FrameRenderData`와 UBO에 `gameTime`/`animationParams.x`를 추가해 grass shader가 시간 기반 wind sway를 쓸 수 있게 했다. 다른 렌더 경로는 기존 UBO 필드를 그대로 사용한다.
+- `m_grassCardMesh`를 큰 3-card clump에서 여러 개의 작고 얇은 blade card cluster로 교체했다. 첫 시도는 너무 가늘고 어두워 거의 보이지 않았고, 후속 보정에서 card 폭/높이/개수, texture alpha, tint, density를 키워 화면에서 풀밭으로 읽히게 조정했다.
+- `createGrassTexture()`의 절차 RGBA mask를 두꺼운 tuft 중심에서 얇은 grass blade 중심으로 다시 그렸다. base/tip 색 대비와 alpha를 올려 현재 카메라 거리에서도 사라지지 않게 했다.
+- `buildGrassDressingBuffer()`는 dense patch에서 한 타일에 여러 작은 cluster를 만들 수 있게 바꿨다. sparse 구간은 여전히 비워 전체가 균일한 도장처럼 보이지 않게 유지한다.
+- `grass.vert`는 짧은 blade에 맞춰 약한 wind sway, per-instance tint, 거리 fade 값을 계산한다. `grass.frag`는 fade 기반 alpha cutoff를 사용하되, 가까운 풀은 충분히 남도록 cutoff를 낮췄다.
+- 유저 빌드/스크린샷 검증 결과: 첫 blade-field 시도는 거의 보이지 않았으나, 2차 보정 후 이전보다 풀밭 면으로 읽히는 결과가 나왔다. DevUI 기준 scene GPU 시간은 약 0.56ms 수준으로 여유가 있다. 다음 격차는 grass 자체보다 바닥 grass material, ground breakup, material-lite(AO/roughness/normal 선별 사용), 조명/후처리 쪽에서 줄인다.
+- 에셋 맵 운용 판단: `Color`는 즉시 바닥 material에 유효하고, `AmbientOcclusion`/`Roughness`는 material-lite에서 약하게 쓰는 후보. `Normal`은 로우폴리/플랫 셰이딩과 충돌할 수 있어 약한 강도로 검토한다. `Displacement`는 현재 구조에서 실제 변위로 바로 쓰지 않고, height mask/ground detail/density 보조 데이터로 검토한다.
+
 ---
 
 ## 게임 설계 메모
@@ -954,13 +964,13 @@ World
 ├─ Terrain    32×32×8 청크 기반 voxel 지형
 ├─ TileState  growthStage / lastUpdatedDay / watered
 ├─ StaticProp ObjectType(tree/rock/workbench/fence/stone fence)
-└─ Dressing   grass alpha card 등 저장하지 않는 시각 레이어
+└─ Dressing   grass blade-field alpha card 등 저장하지 않는 시각 레이어
 ```
 
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass(FXAA/SMAA 1x), post 이후 UI overlay를 분리해 그린다.
-- 다음 비주얼 개선은 material-lite, 실제 texture file loading/authored texture, high-quality grass(wind/LOD/variant), ground dressing 텍스처화, water 전용 표현이 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
+- 다음 비주얼 개선은 ground grass texture/detail, material-lite(AO/roughness/normal 선별), grass density/색/LOD 후속 튜닝, ground dressing 텍스처화, water 전용 표현이 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
 
 ---
 

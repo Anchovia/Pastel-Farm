@@ -41,7 +41,7 @@ src/
 - **청크 메시**: Hidden Face Culling, 청크별 vertex/index 버퍼, dirty만 리빌드(프레임당 N개 제한)
 - **컬링**: 청크 AABB frustum culling (메인패스 + shadow 라이트 프러스텀)
 - **오브젝트**: `ObjectType`별 공유 메시 + 청크별 타입 그룹 인스턴스 버퍼(tree/rock/workbench/fence/stone fence). 오브젝트 변경 시에만 `objectsDirty`로 재빌드
-- **식생/지면 dressing**: 절차 grass alpha texture + 3-card clump mesh + 청크별 grass instance buffer + 좌표 기반 density field + shader 기반 grass tint/card variation. 별도 ground dressing buffer로 잔돌/패치 placement도 검증 중. 둘 다 저장하지 않는 시각 dressing layer이며 shadow caster는 아님
+- **식생/지면 dressing**: 절차 grass alpha texture + 낮은 blade-field card cluster + 청크별 grass instance buffer + 좌표 기반 density field + shader 기반 grass tint/wind/fade. 별도 ground dressing buffer로 잔돌/패치 placement도 검증 중. 둘 다 저장하지 않는 시각 dressing layer이며 shadow caster는 아님
 - **조명 스택**: ambient + sun diffuse(dayFactor) + shadow + fog (4-layer)
 - **그림자**: 2048² shadow map, 3×3 PCF, 캐스터=청크+`ObjectDef.castShadow` 오브젝트+플레이어, 밤엔 shadow geometry draw 스킵
 - **day/night**: `timeOfDay`로 태양 방향/하늘색/안개색/조도 변화
@@ -86,8 +86,8 @@ src/
 - height fog
 - ✅ vegetation alpha card 1차 — 절차 grass texture + alpha test + shadow 제외 + 청크별 dirty gate. **완료**
 - ✅ density field 기반 grass dressing 1차 — 균등 확률 대신 patch density + open grass bias + density 기반 offset/scale variation 적용. **완료**
-- ✅ high-quality grass 1차 — 3-card clump + density/scale 상향으로 grass card가 바닥 디테일을 더 채우게 조정. **완료**
-- 다음 비주얼 후보: material-lite · grass wind/LOD/variant · ground dressing 텍스처화 · water 전용 표현 · shadow quality options · height fog · SMAA T2x/S2x 또는 MSAA/alpha-to-coverage
+- ✅ high-quality grass 1차 — 3-card clump + density/scale 상향 후, 레퍼런스 피드백을 반영해 낮고 촘촘한 blade-field cluster + 약한 wind/fade/tint 1차로 전환. **완료**
+- 다음 비주얼 후보: grass density/색 보정 · ground grass texture/detail · material-lite(AO/roughness/normal 선별) · ground dressing 텍스처화 · water 전용 표현 · shadow quality options · height fog · SMAA T2x/S2x 또는 MSAA/alpha-to-coverage
 - 비고: grading/split-tone·fog·shadow·AO는 **이미 구현** → 격차는 튜닝 + 위 추가뿐
 
 **Tier 3 — 확장 (rule of 3 도달 시)**
@@ -106,10 +106,10 @@ src/
 - ✅ authored terrain texture override 1차: `assets/textures/terrain/*.png`가 있으면 terrain texture array layer를 파일 이미지로 덮어쓴다. water는 전용 pass 전까지 절차 fallback 유지
 - ✅ texture tone 안정화 1차: `chunk.frag`에서 raw texture 곱셈 대신 luma 기반 `materialDetail`을 만들어 vertex color 주 색감 + authored texture 표면 질감 구조로 정리
 - ✅ layer별 texture strength 1차: grass/leaves는 낮게, dirt/farmland/stone은 높게, wood/wheat는 중간값으로 조절해 재질별 texture 존재감을 분리
-- material-lite: full PBR 전환 전, albedo + tint + roughness/specular 상수로 재질 차이를 표현
+- material-lite: full PBR 전환 전, albedo + tint + AO/roughness/specular 상수로 재질 차이를 표현. Normal map은 스타일과 충돌하지 않는 약한 강도로만 검토하고, displacement map은 실제 변위가 아니라 height mask/ground detail/density 보조 데이터 후보로 둔다
 - shadow quality options: shadow map 해상도/PCF 샘플/거리 옵션, contact/blob shadow, 넓은 맵 이후 CSM 검토
 - terrain breakup은 타일별 vertex color 랜덤이 아니라 비격자 dressing layer로 처리(풀 clump, 잔돌, 흙/마른 풀 패치, 길 가장자리)
-- height fog / vegetation variation / wind / sky tint / LUT
+- height fog / vegetation variation / ground material detail / sky tint / LUT
 
 ### 다음 실행 순서 — 결정
 다음 세션/작업은 아래 순서를 따른다. 큰 material/PBR 시스템이나 render graph로 먼저 가지 않는다.
@@ -124,18 +124,19 @@ src/
 8. ✅ **Texture tone 4c**: `fragColor * rawTexture`를 luma/chroma 기반 `materialDetail`로 안정화해 texture는 질감, vertex color는 주 색감 역할을 유지. **완료**
 9. ✅ **Layer별 texture strength 4d**: grass/leaves/dirt/stone/wood/farmland 등 material layer별 texture 영향도를 shader에서 분리. **완료**
 10. ✅ **High-quality grass 5a**: 3-card clump, grass 배치 확률/scale 상향, DevUI scene timing 확인. **완료**
-11. **Grass wind/LOD/variant**: wind sway, 거리 fade/LOD, patch 대비, card/tint variant는 후속으로 확장한다.
-12. **Material-lite / mipmap/sampler**: roughness/specular 상수와 mipmap/sampler 정책은 필요 확인 후 확장한다.
-13. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
+11. ✅ **Reference grass blade-field 5b**: 큰 clump 반복감을 줄이기 위해 낮고 촘촘한 blade-field card cluster로 전환하고, 시간 기반 약한 wind sway, 거리 fade, tint, dense patch 다중 cluster를 적용. **완료**
+12. **Ground texture / material-lite**: grass 바닥 Color texture를 먼저 적용하고, AO/roughness는 material-lite에서 약하게 사용한다. Normal은 스타일 충돌 여부를 본 뒤 낮은 강도로 검토하고, displacement는 직접 변위보다 height/density 보조로 우선 검토한다.
+13. **Grass 후속 튜닝**: density/색/거리 fade/LOD, card texture variant는 스크린샷 피드백과 DevUI timing을 보며 좁게 조정한다.
+14. ✅ **SMAA 품질 확장**: diagonal detection 포팅 + Ultra 프리셋(diag 16) 도달, edge detection을 perceptual 감마 공간으로 전환해 밤 AA 수정. **완료.** 남은 축(T2x/S2x·MSAA·grade/tonemap→AA 구조 전환)은 HDR/톤매핑 도입 시 별도 검토.
 
 이 순서는 "품질을 올리되, 매 단계가 화면에 바로 기여하고 기존 구조와 자연스럽게 맞물리는" 경로다.
 
 ### Vegetation Alpha Card — **방향**
 - 참고 이미지 수준의 자연스러운 풀밭은 단순 삼각형 기하 clump보다 alpha card 방식이 맞다. 기하 blade는 멀리서 삐쭉한 바늘처럼 보이기 쉽다.
-- 목표: 풀 텍스처 1장 + 3-card/부채꼴 card clump + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.
-- 성능 기준: GTX 1050 Ti 최소 60fps 안에서 grass는 핵심 비주얼 투자처다. clump당 card 수, density, texture 품질, wind, LOD/fade를 DevUI/GPU timing으로 보며 적극적으로 올린다.
-- 이후 확장: DevUI density/거리/scale 튜닝, wind sway(vertex shader), card/texture variant, 거리 LOD 또는 원거리 density fade. 필요하면 단순 X-card를 넘어 부채꼴 card나 다중 card clump도 검토.
-- 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, 3-card clump mesh, 청크별 instance buffer, 좌표 기반 density field, shader 기반 tint/card variation, density/scale 상향 1차까지 연결 완료. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 거의 안 보이는 수준으로 축소했다. 다음 개선은 wind, 거리 LOD/fade, patch 대비, 낮은 대비의 ground texture/card detail 방향.
+- 목표: 풀 텍스처 1장 + 낮은 blade-field card cluster + instancing + 좌표 기반 결정론 배치. GRASS 전체 균등 배치가 아니라 숲 가장자리/물가/빈 잔디 영역 등 density rule로 조절.
+- 성능 기준: GTX 1050 Ti 최소 60fps 안에서 grass는 핵심 비주얼 투자처다. cluster당 card 수, density, texture 품질, wind, LOD/fade를 DevUI/GPU timing으로 보며 적극적으로 올린다.
+- 이후 확장: DevUI density/거리/scale 튜닝, card/texture variant, 거리 LOD 또는 원거리 density fade. 단순히 큰 clump를 키우는 방향은 반복 오브젝트처럼 읽히므로 피하고, 작은 blade가 바닥과 섞여 풀밭 면으로 읽히는 방향을 유지한다.
+- 현재 상태: 절차 RGBA grass texture, alpha-test grass pipeline, 낮은 blade-field cluster mesh, 청크별 instance buffer, 좌표 기반 density field, shader 기반 tint/wind/fade, dense patch 다중 cluster 1차까지 연결 완료. ground dressing은 저장하지 않는 좌표 기반 placement layer로 유효하지만, geometry placeholder는 과했기 때문에 cleanup에서 크게 축소했다. 다음 개선은 grass density/색 보정, 낮은 대비의 ground grass texture/detail, material-lite(AO/roughness/normal 선별), ground dressing 텍스처화 방향.
 
 ### Grid 규칙 vs Organic 표현 — **결정**
 - 농사·설치/철거·충돌·저장 좌표는 grid 기반으로 유지한다. 플레이어 규칙은 예측 가능해야 한다.
@@ -193,6 +194,6 @@ src/
 
 ## 알려진 이슈 / 메모
 
-- **grass/ground dressing**: alpha card + density field + shader 기반 tint/card variation 1차는 완료. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 현재는 거의 안 보이는 기준 화면으로 두고, 다음 핵심은 텍스처/알파 기반 디테일 전환과 wind.
+- **grass/ground dressing**: alpha card + density field + 낮은 blade-field cluster + shader 기반 tint/wind/fade 1차는 완료. ground dressing 1차는 구조 검증에는 성공했고, 과했던 갈색 patch/pebble placeholder는 cleanup에서 크게 축소했다. 다음 핵심은 바닥 grass texture/detail, material-lite 맵 선별 사용, ground dressing 텍스처화다.
 - **작물**: 현재 voxel 타일(`WHEAT` + `TileState`)로 처리. 장기적으로 별도 `Crop` 인스턴스 레이어 분리 검토.
 - 그림자 최소 밝기 `max(shadow, 0.4)` 는 파스텔 톤 유지를 위한 **의도된 스타일**(버그 아님).

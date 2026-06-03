@@ -547,7 +547,7 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
         m_lightMVP = lightProj * lightView;
     }
 
-    updateUniformBuffer(m_currentFrame, frame.camera);
+    updateUniformBuffer(m_currentFrame, frame.camera, frame.gameTime);
     updatePlayerInstanceBuffer(frame.playerPosition);
     updateDropInstanceBuffer(frame.drops);
     updateSelectorInstanceBuffer(frame.targetTile);
@@ -595,7 +595,7 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
 // ============================================================
 //  Per-frame update functions
 // ============================================================
-void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& camera) {
+void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& camera, float gameTime) {
     UniformBufferObject ubo{};
     ubo.model    = glm::mat4(1.0f);
     ubo.view     = camera.view();
@@ -603,6 +603,7 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& cam
     ubo.lightDir = glm::vec4(m_sunDir, m_dayFactor); // w = dayFactor (0=night, 1=noon)
     ubo.lightMVP = m_lightMVP;
     ubo.fogColor = glm::vec4(m_skyColor[0], m_skyColor[1], m_skyColor[2], 1.0f);
+    ubo.animationParams = glm::vec4(gameTime, 0.0f, 0.0f, 0.0f);
     memcpy(m_uniformBuffers[currentFrame].mapped, &ubo, sizeof(ubo));
 }
 

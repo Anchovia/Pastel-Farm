@@ -349,7 +349,7 @@ int main() {
             ctx.drawFrame(FrameRenderData{
                 camera, gameState.player().position(), gameState.targetTile(),
                 gameState.selectedSlot(), gameState.inventory(), gameState.timeOfDay(),
-                gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench(),
+                gameState.time(), gameState.inventoryOpen(), gameState.day(), gameState.drops(), gameState.nearWorkbench(),
                 app.mainMenu(), app.settings(), app.loading(), app.paused(), settings.vsync, settings.aaMode
             });
 

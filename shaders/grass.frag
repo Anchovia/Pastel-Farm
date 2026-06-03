@@ -17,11 +17,13 @@ layout(location = 1)      in vec2 fragUV;
 layout(location = 2)      in vec4 fragPosLightSpace;
 layout(location = 3)      in float fragViewDepth;
 layout(location = 4)      in vec3 fragTint;
+layout(location = 5)      in float fragFade;
 layout(location = 0) out vec4 outColor;
 
 void main() {
     vec4 texel = texture(grassTex, fragUV);
-    if (texel.a < 0.35) discard;
+    float alphaCutoff = mix(0.42, 0.18, fragFade);
+    if (texel.a < alphaCutoff) discard;
 
     vec3  normal    = normalize(gl_FrontFacing ? fragNormal : -fragNormal);
     vec3  lightDir  = normalize(ubo.lightDir.xyz);

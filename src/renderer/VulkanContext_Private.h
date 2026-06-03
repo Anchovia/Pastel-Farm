@@ -16,6 +16,7 @@ struct UniformBufferObject {
     glm::vec4 lightDir; // xyz = toward sun, w = dayFactor (0=night, 1=noon)
     glm::mat4 lightMVP; // light-space transform for shadow map lookup
     glm::vec4 fogColor; // rgb = sky color at current time of day
+    glm::vec4 animationParams; // x = game time seconds, yzw reserved
 };
 
 struct PostPushConstants {

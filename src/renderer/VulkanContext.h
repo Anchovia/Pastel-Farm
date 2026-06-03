@@ -98,6 +98,7 @@ struct FrameRenderData {
     int                                      hotbarSelected;
     const std::array<ItemStack, INV_SLOTS>&  inventory;
     float                                    timeOfDay;
+    float                                    gameTime;
     bool                                     inventoryOpen;
     int                                      day;
     const std::vector<DroppedItem>&          drops;
@@ -198,7 +199,7 @@ private:
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
-    void updateUniformBuffer(uint32_t currentFrame, const Camera& camera);
+    void updateUniformBuffer(uint32_t currentFrame, const Camera& camera, float gameTime);
     void updatePlayerInstanceBuffer(const glm::vec3& playerPosition);
     void updateSelectorInstanceBuffer(const std::optional<glm::ivec3>& targetTile);
     void createDepthResources();

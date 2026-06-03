@@ -873,26 +873,32 @@ void VulkanContext::createObjectMeshes() {
     uploadMesh(m_grassClumpMesh, verts);
     }
 
-    // ---- GRASS CARD: X-crossed alpha-card quads, instanced by the future grass pipeline ----
+    // ---- GRASS CARD: small blade-field cluster, instanced by the grass pipeline ----
     {
     std::vector<GrassCardVertex> verts;
-    auto card = [&](float angle) {
-        const float halfW = 0.34f;
-        const float h     = 0.52f;
+    auto bladeCard = [&](float angle, glm::vec2 base, float halfW, float h, float lean) {
         const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
         const glm::vec3 side = dir * halfW;
+        const glm::vec3 leanOff = {-dir.y * lean, dir.x * lean, 0.0f};
+        const glm::vec3 b = {base.x, base.y, 0.0f};
         const glm::vec3 n    = {-dir.y, dir.x, 0.0f};
 
-        const GrassCardVertex bl{{-side.x, -side.y, 0.0f}, n, {0.0f, 1.0f}};
-        const GrassCardVertex br{{ side.x,  side.y, 0.0f}, n, {1.0f, 1.0f}};
-        const GrassCardVertex tr{{ side.x,  side.y, h   }, n, {1.0f, 0.0f}};
-        const GrassCardVertex tl{{-side.x, -side.y, h   }, n, {0.0f, 0.0f}};
+        const GrassCardVertex bl{b - side, n, {0.0f, 1.0f}};
+        const GrassCardVertex br{b + side, n, {1.0f, 1.0f}};
+        const GrassCardVertex tr{b + side * 0.42f + leanOff + glm::vec3(0.0f, 0.0f, h), n, {1.0f, 0.0f}};
+        const GrassCardVertex tl{b - side * 0.42f + leanOff + glm::vec3(0.0f, 0.0f, h), n, {0.0f, 0.0f}};
 
         verts.insert(verts.end(), {bl, br, tr, bl, tr, tl});
     };
-    card(0.0f);
-    card(2.0943951f);
-    card(4.1887902f);
+    bladeCard(0.10f,       {-0.20f, -0.08f}, 0.055f, 0.48f,  0.044f);
+    bladeCard(1.05f,       { 0.02f, -0.17f}, 0.047f, 0.42f, -0.032f);
+    bladeCard(2.05f,       { 0.20f, -0.02f}, 0.050f, 0.45f,  0.038f);
+    bladeCard(3.18f,       {-0.04f,  0.15f}, 0.042f, 0.36f, -0.026f);
+    bladeCard(4.15f,       { 0.13f,  0.15f}, 0.045f, 0.39f,  0.030f);
+    bladeCard(5.20f,       {-0.17f,  0.11f}, 0.043f, 0.37f, -0.024f);
+    bladeCard(0.70f,       { 0.00f,  0.00f}, 0.052f, 0.50f,  0.040f);
+    bladeCard(2.62f,       {-0.10f, -0.19f}, 0.040f, 0.34f,  0.020f);
+    bladeCard(4.72f,       { 0.19f,  0.07f}, 0.040f, 0.35f, -0.020f);
     uploadGrassCardMesh(m_grassCardMesh, verts);
     }
 }
@@ -907,7 +913,7 @@ void VulkanContext::createGrassTexture() {
         return;
     }
 
-    // A small grass-tuft mask: curved tapering blades drawn into alpha, with a
+    // A slim grass-blade mask: narrow tapering blades drawn into alpha, with a
     // base-dark / tip-light green. Kept isolated so a file-loaded image (stb_image) can
     // replace just this pixel fill later — pipeline/descriptor/mesh stay identical.
     const uint32_t W = 64, H = 64;
@@ -933,18 +939,16 @@ void VulkanContext::createGrassTexture() {
 
     struct Blade { float baseX, midX, tipX, height, halfW, shade; };
     static const Blade blades[] = {
-        {0.50f, 0.49f, 0.52f, 1.00f, 0.110f, 1.00f},
-        {0.36f, 0.26f, 0.17f, 0.88f, 0.080f, 0.92f},
-        {0.64f, 0.74f, 0.86f, 0.86f, 0.080f, 1.04f},
-        {0.44f, 0.36f, 0.27f, 0.72f, 0.064f, 0.96f},
-        {0.56f, 0.64f, 0.75f, 0.70f, 0.064f, 1.08f},
-        {0.27f, 0.18f, 0.09f, 0.58f, 0.048f, 0.88f},
-        {0.73f, 0.82f, 0.93f, 0.58f, 0.048f, 0.90f},
-        {0.47f, 0.52f, 0.60f, 0.62f, 0.052f, 1.06f},
-        {0.53f, 0.48f, 0.40f, 0.54f, 0.046f, 0.94f},
+        {0.50f, 0.50f, 0.54f, 1.00f, 0.075f, 1.08f},
+        {0.40f, 0.34f, 0.24f, 0.84f, 0.052f, 0.94f},
+        {0.60f, 0.66f, 0.78f, 0.80f, 0.052f, 1.02f},
+        {0.46f, 0.41f, 0.32f, 0.62f, 0.040f, 0.88f},
+        {0.55f, 0.62f, 0.72f, 0.58f, 0.040f, 0.96f},
+        {0.32f, 0.25f, 0.16f, 0.54f, 0.034f, 0.82f},
+        {0.68f, 0.76f, 0.88f, 0.52f, 0.034f, 0.86f},
     };
-    const glm::vec3 baseCol = {0.15f, 0.33f, 0.12f};
-    const glm::vec3 tipCol  = {0.48f, 0.68f, 0.25f};
+    const glm::vec3 baseCol = {0.16f, 0.34f, 0.12f};
+    const glm::vec3 tipCol  = {0.58f, 0.72f, 0.26f};
 
     for (const Blade& b : blades) {
         for (uint32_t y = 0; y < H; y++) {
@@ -954,8 +958,8 @@ void VulkanContext::createGrassTexture() {
             const float u = t / b.height;
             const float su = smooth(u);
             const float cx = glm::mix(glm::mix(b.baseX, b.midX, su), b.tipX, su * su);
-            const float halfW = b.halfW * powf(1.0f - u, 1.35f);
-            const float feather = 1.35f / (float)W;
+            const float halfW = b.halfW * powf(1.0f - u, 1.45f);
+            const float feather = 1.25f / (float)W;
             const glm::vec3 col = glm::mix(baseCol, tipCol, smooth(u)) * b.shade;
 
             const int x0 = (int)((cx - halfW - feather) * W);
@@ -964,7 +968,7 @@ void VulkanContext::createGrassTexture() {
                 const float px = ((float)x + 0.5f) / (float)W;
                 const float dist = fabsf(px - cx);
                 const float a = clamp01((halfW + feather - dist) / feather);
-                writePixel(x, (int)y, col, a * (0.72f + 0.28f * u));
+                writePixel(x, (int)y, col, a * (0.76f + 0.24f * u));
             }
         }
     }
