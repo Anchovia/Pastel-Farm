@@ -27,6 +27,10 @@ Before implementing:
 
 Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
+**Scope — applies to code architecture, NOT rendering quality.** For visual/rendering work, default to the proper high-quality technique within the GTX 1660 Super budget (high-resolution / CSM shadows, mipmaps + anisotropic filtering, authored textures, soft shadows, material-lite). Do NOT cheapen visuals or remove/fake features to be "simple" or "low-spec" — the minimal-looking code (64² textures, flat shading, 2048 shadow map) is placeholder, and the target is high-quality stylized (README 목표 / DESIGN: 덕코프류 north star). If a cheaper visual path is genuinely better, say so explicitly and let the user decide — never pick it silently.
+
+**Conventional over clever — and "simple" means standard, not hacky.** Use the mainstream, Vulkan-idiomatic, well-documented implementation that most engines / references use (SaschaWillems, Khronos Vulkan-Samples, LearnOpenGL — see VULKAN_REFERENCES.md), and that future features can mesh into cleanly. Prioritize stability + extensibility + compatibility. Do NOT skip, ignore, or cut off parts of a standard technique to make it "easier" if that yields a non-standard, fragile, or hard-to-extend result — implement it properly. "Simplest" = the standard well-trodden path, not a novel shortcut.
+
 ## 3. Surgical Changes
 
 **Touch only what you must. Clean up only your own mess.**

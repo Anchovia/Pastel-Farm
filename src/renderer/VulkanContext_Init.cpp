@@ -873,43 +873,92 @@ void VulkanContext::createObjectMeshes() {
     uploadMesh(m_grassClumpMesh, verts);
     }
 
-    // ---- GRASS CARD: X-crossed alpha-card quads, instanced by the future grass pipeline ----
+    // ---- GRASS CARD: small blade-field cluster, instanced by the grass pipeline ----
     {
     std::vector<GrassCardVertex> verts;
-    auto card = [&](float angle) {
-        const float halfW = 0.34f;
-        const float h     = 0.52f;
+    auto bladeCard = [&](float angle, glm::vec2 base, float halfW, float h, float lean, glm::vec4 uv) {
         const glm::vec3 dir  = {cosf(angle), sinf(angle), 0.0f};
         const glm::vec3 side = dir * halfW;
+        const glm::vec3 leanOff = {-dir.y * lean, dir.x * lean, 0.0f};
+        const glm::vec3 b = {base.x, base.y, 0.0f};
         const glm::vec3 n    = {-dir.y, dir.x, 0.0f};
 
-        const GrassCardVertex bl{{-side.x, -side.y, 0.0f}, n, {0.0f, 1.0f}};
-        const GrassCardVertex br{{ side.x,  side.y, 0.0f}, n, {1.0f, 1.0f}};
-        const GrassCardVertex tr{{ side.x,  side.y, h   }, n, {1.0f, 0.0f}};
-        const GrassCardVertex tl{{-side.x, -side.y, h   }, n, {0.0f, 0.0f}};
+        const GrassCardVertex bl{b - side, n, {uv.x, uv.w}};
+        const GrassCardVertex br{b + side, n, {uv.z, uv.w}};
+        const GrassCardVertex tr{b + side * 0.42f + leanOff + glm::vec3(0.0f, 0.0f, h), n, {uv.z, uv.y}};
+        const GrassCardVertex tl{b - side * 0.42f + leanOff + glm::vec3(0.0f, 0.0f, h), n, {uv.x, uv.y}};
 
         verts.insert(verts.end(), {bl, br, tr, bl, tr, tl});
     };
-    card(0.0f);
-    card(2.0943951f);
-    card(4.1887902f);
+    // UV rects are measured from grass_blades/opacity.png so each card samples one atlas blade.
+    bladeCard(0.10f, {-0.20f, -0.08f}, 0.054f, 0.54f,  0.038f, {0.0742f, 0.0479f, 0.1152f, 0.9648f});
+    bladeCard(1.05f, { 0.02f, -0.17f}, 0.052f, 0.46f, -0.030f, {0.2061f, 0.0010f, 0.2461f, 0.4385f});
+    bladeCard(2.05f, { 0.20f, -0.02f}, 0.050f, 0.47f,  0.034f, {0.3779f, 0.0127f, 0.4160f, 0.4541f});
+    bladeCard(3.18f, {-0.04f,  0.15f}, 0.048f, 0.45f, -0.026f, {0.5254f, 0.0088f, 0.5566f, 0.4658f});
+    bladeCard(4.15f, { 0.13f,  0.15f}, 0.056f, 0.52f,  0.030f, {0.2178f, 0.4795f, 0.2627f, 0.9990f});
+    bladeCard(5.20f, {-0.17f,  0.11f}, 0.052f, 0.50f, -0.026f, {0.3799f, 0.5000f, 0.4189f, 0.9805f});
+    bladeCard(0.70f, { 0.00f,  0.00f}, 0.060f, 0.52f,  0.034f, {0.4971f, 0.5127f, 0.5605f, 0.9863f});
+    bladeCard(2.62f, {-0.10f, -0.19f}, 0.048f, 0.42f,  0.020f, {0.2061f, 0.0010f, 0.2461f, 0.4385f});
+    bladeCard(4.72f, { 0.19f,  0.07f}, 0.048f, 0.44f, -0.020f, {0.3799f, 0.5000f, 0.4189f, 0.9805f});
     uploadGrassCardMesh(m_grassCardMesh, verts);
     }
 }
 
 // ============================================================
-//  Procedural grass alpha texture
+//  Grass blade textures
 // ============================================================
 void VulkanContext::createGrassTexture() {
-    const std::string authoredGrassPath = "assets/textures/grass.png";
-    if (std::ifstream(authoredGrassPath, std::ios::binary).good()) {
-        m_grassTex = createTextureFromFile(authoredGrassPath, /*withSampler=*/true);
+    auto uploadImage = [&](const LoadedImageRGBA8& image) {
+        const VkDeviceSize imgSize = (VkDeviceSize)image.width * (VkDeviceSize)image.height * 4;
+        return createTexture((uint32_t)image.width, (uint32_t)image.height,
+            VK_FORMAT_R8G8B8A8_UNORM, image.pixels.data(), imgSize, /*withSampler=*/true);
+    };
+    auto makeOpacityFromAlpha = [](const LoadedImageRGBA8& source) {
+        LoadedImageRGBA8 opacity;
+        opacity.width = source.width;
+        opacity.height = source.height;
+        opacity.pixels.resize((size_t)source.width * (size_t)source.height * 4, 255);
+        for (size_t i = 0, count = (size_t)source.width * (size_t)source.height; i < count; i++) {
+            const uint8_t alpha = source.pixels[i * 4 + 3];
+            opacity.pixels[i * 4 + 0] = alpha;
+            opacity.pixels[i * 4 + 1] = alpha;
+            opacity.pixels[i * 4 + 2] = alpha;
+            opacity.pixels[i * 4 + 3] = 255;
+        }
+        return opacity;
+    };
+
+    const std::string grassColorPath = "assets/textures/vegetation/grass_blades/color.png";
+    const std::string grassOpacityPath = "assets/textures/vegetation/grass_blades/opacity.png";
+    const bool hasGrassColor = fileExists(grassColorPath);
+    const bool hasGrassOpacity = fileExists(grassOpacityPath);
+    if (hasGrassColor || hasGrassOpacity) {
+        if (!hasGrassColor || !hasGrassOpacity) {
+            throw std::runtime_error("Grass blade texture set requires both color.png and opacity.png");
+        }
+
+        LoadedImageRGBA8 colorImage = loadImageRGBA8(grassColorPath);
+        LoadedImageRGBA8 opacityImage = loadImageRGBA8(grassOpacityPath);
+        if (colorImage.width != opacityImage.width || colorImage.height != opacityImage.height) {
+            throw std::runtime_error("Grass blade color/opacity texture size mismatch");
+        }
+
+        m_grassTex = uploadImage(colorImage);
+        m_grassOpacityTex = uploadImage(opacityImage);
         return;
     }
 
-    // A small grass-tuft mask: curved tapering blades drawn into alpha, with a
-    // base-dark / tip-light green. Kept isolated so a file-loaded image (stb_image) can
-    // replace just this pixel fill later — pipeline/descriptor/mesh stay identical.
+    const std::string authoredGrassPath = "assets/textures/grass.png";
+    if (fileExists(authoredGrassPath)) {
+        LoadedImageRGBA8 image = loadImageRGBA8(authoredGrassPath);
+        m_grassTex = uploadImage(image);
+        m_grassOpacityTex = uploadImage(makeOpacityFromAlpha(image));
+        return;
+    }
+
+    // A slim grass-blade mask: narrow tapering blades drawn into alpha, with a
+    // base-dark / tip-light green. Kept as a fallback when authored foliage textures
+    // are not present.
     const uint32_t W = 64, H = 64;
     std::vector<uint8_t> pixels((size_t)W * H * 4, 0); // RGBA8, fully transparent
 
@@ -933,18 +982,16 @@ void VulkanContext::createGrassTexture() {
 
     struct Blade { float baseX, midX, tipX, height, halfW, shade; };
     static const Blade blades[] = {
-        {0.50f, 0.49f, 0.52f, 1.00f, 0.110f, 1.00f},
-        {0.36f, 0.26f, 0.17f, 0.88f, 0.080f, 0.92f},
-        {0.64f, 0.74f, 0.86f, 0.86f, 0.080f, 1.04f},
-        {0.44f, 0.36f, 0.27f, 0.72f, 0.064f, 0.96f},
-        {0.56f, 0.64f, 0.75f, 0.70f, 0.064f, 1.08f},
-        {0.27f, 0.18f, 0.09f, 0.58f, 0.048f, 0.88f},
-        {0.73f, 0.82f, 0.93f, 0.58f, 0.048f, 0.90f},
-        {0.47f, 0.52f, 0.60f, 0.62f, 0.052f, 1.06f},
-        {0.53f, 0.48f, 0.40f, 0.54f, 0.046f, 0.94f},
+        {0.50f, 0.50f, 0.54f, 1.00f, 0.075f, 1.08f},
+        {0.40f, 0.34f, 0.24f, 0.84f, 0.052f, 0.94f},
+        {0.60f, 0.66f, 0.78f, 0.80f, 0.052f, 1.02f},
+        {0.46f, 0.41f, 0.32f, 0.62f, 0.040f, 0.88f},
+        {0.55f, 0.62f, 0.72f, 0.58f, 0.040f, 0.96f},
+        {0.32f, 0.25f, 0.16f, 0.54f, 0.034f, 0.82f},
+        {0.68f, 0.76f, 0.88f, 0.52f, 0.034f, 0.86f},
     };
-    const glm::vec3 baseCol = {0.15f, 0.33f, 0.12f};
-    const glm::vec3 tipCol  = {0.48f, 0.68f, 0.25f};
+    const glm::vec3 baseCol = {0.16f, 0.34f, 0.12f};
+    const glm::vec3 tipCol  = {0.58f, 0.72f, 0.26f};
 
     for (const Blade& b : blades) {
         for (uint32_t y = 0; y < H; y++) {
@@ -954,8 +1001,8 @@ void VulkanContext::createGrassTexture() {
             const float u = t / b.height;
             const float su = smooth(u);
             const float cx = glm::mix(glm::mix(b.baseX, b.midX, su), b.tipX, su * su);
-            const float halfW = b.halfW * powf(1.0f - u, 1.35f);
-            const float feather = 1.35f / (float)W;
+            const float halfW = b.halfW * powf(1.0f - u, 1.45f);
+            const float feather = 1.25f / (float)W;
             const glm::vec3 col = glm::mix(baseCol, tipCol, smooth(u)) * b.shade;
 
             const int x0 = (int)((cx - halfW - feather) * W);
@@ -964,22 +1011,25 @@ void VulkanContext::createGrassTexture() {
                 const float px = ((float)x + 0.5f) / (float)W;
                 const float dist = fabsf(px - cx);
                 const float a = clamp01((halfW + feather - dist) / feather);
-                writePixel(x, (int)y, col, a * (0.72f + 0.28f * u));
+                writePixel(x, (int)y, col, a * (0.76f + 0.24f * u));
             }
         }
     }
 
+    std::vector<uint8_t> opacityPixels((size_t)W * H * 4, 255);
+    for (size_t i = 0, count = (size_t)W * H; i < count; i++) {
+        const uint8_t alpha = pixels[i * 4 + 3];
+        opacityPixels[i * 4 + 0] = alpha;
+        opacityPixels[i * 4 + 1] = alpha;
+        opacityPixels[i * 4 + 2] = alpha;
+        opacityPixels[i * 4 + 3] = 255;
+    }
+
     // Upload the procedural pixels through the shared texture helper. The grass card
-    // pipeline samples this with its own LINEAR/CLAMP sampler (withSampler=true).
+    // pipeline samples these with their own LINEAR/CLAMP samplers (withSampler=true).
     const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
     m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), imgSize, /*withSampler=*/true);
-}
-
-TextureResource VulkanContext::createTextureFromFile(const std::string& path, bool withSampler) {
-    LoadedImageRGBA8 image = loadImageRGBA8(path);
-    const VkDeviceSize imgSize = (VkDeviceSize)image.width * (VkDeviceSize)image.height * 4;
-    return createTexture((uint32_t)image.width, (uint32_t)image.height,
-        VK_FORMAT_R8G8B8A8_UNORM, image.pixels.data(), imgSize, withSampler);
+    m_grassOpacityTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, opacityPixels.data(), imgSize, /*withSampler=*/true);
 }
 
 TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
@@ -2519,6 +2569,174 @@ void VulkanContext::createShadowPlayerPipeline() {
 }
 
 // ============================================================
+//  Shadow pipeline for alpha-tested grass cards
+// ============================================================
+void VulkanContext::createShadowGrassPipeline() {
+    VkDescriptorSetLayoutBinding opacityBinding{};
+    opacityBinding.binding         = 0;
+    opacityBinding.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    opacityBinding.descriptorCount = 1;
+    opacityBinding.stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo setInfo{};
+    setInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    setInfo.bindingCount = 1;
+    setInfo.pBindings    = &opacityBinding;
+    if (vkCreateDescriptorSetLayout(m_device, &setInfo, nullptr, &m_shadowGrassDescriptorSetLayout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow grass descriptor set layout");
+
+    VkPushConstantRange pushRange{};
+    pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushRange.offset     = 0;
+    pushRange.size       = sizeof(glm::mat4);
+
+    VkPipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.setLayoutCount         = 1;
+    layoutInfo.pSetLayouts            = &m_shadowGrassDescriptorSetLayout;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges    = &pushRange;
+    if (vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &m_shadowGrassPipelineLayout) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow grass pipeline layout");
+
+    auto vert = readFile("shaders/shadow_grass.vert.spv");
+    auto frag = readFile("shaders/shadow_grass.frag.spv");
+    VkShaderModule vertMod = createShaderModule(vert);
+    VkShaderModule fragMod = createShaderModule(frag);
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vertMod;
+    stages[0].pName  = "main";
+    stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fragMod;
+    stages[1].pName  = "main";
+
+    VkVertexInputBindingDescription bindings[2]{};
+    bindings[0].binding   = 0;
+    bindings[0].stride    = sizeof(GrassCardVertex);
+    bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    bindings[1].binding   = 1;
+    bindings[1].stride    = sizeof(ObjectInstance);
+    bindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+
+    VkVertexInputAttributeDescription attrs[5]{};
+    attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(GrassCardVertex, pos) };
+    attrs[1] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(GrassCardVertex, uv)  };
+    attrs[2] = { 3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectInstance, pos)   };
+    attrs[3] = { 4, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, scale) };
+    attrs[4] = { 5, 1, VK_FORMAT_R32_SFLOAT,       offsetof(ObjectInstance, rot)   };
+
+    VkPipelineVertexInputStateCreateInfo vertInput{};
+    vertInput.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertInput.vertexBindingDescriptionCount   = 2;
+    vertInput.pVertexBindingDescriptions      = bindings;
+    vertInput.vertexAttributeDescriptionCount = 5;
+    vertInput.pVertexAttributeDescriptions    = attrs;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport{0.0f, 0.0f, (float)SHADOW_MAP_SIZE, (float)SHADOW_MAP_SIZE, 0.0f, 1.0f};
+    VkRect2D   scissor{{0, 0}, {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE}};
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports    = &viewport;
+    viewportState.scissorCount  = 1;
+    viewportState.pScissors     = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
+    rasterizer.cullMode                = VK_CULL_MODE_NONE;
+    rasterizer.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.depthBiasEnable         = VK_TRUE;
+    rasterizer.depthBiasConstantFactor = 0.2f;
+    rasterizer.depthBiasSlopeFactor    = 0.4f;
+    rasterizer.lineWidth               = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable  = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+    VkPipelineColorBlendStateCreateInfo colorBlend{};
+    colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount          = 2;
+    pipelineInfo.pStages             = stages;
+    pipelineInfo.pVertexInputState   = &vertInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState      = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState   = &multisampling;
+    pipelineInfo.pDepthStencilState  = &depthStencil;
+    pipelineInfo.pColorBlendState    = &colorBlend;
+    pipelineInfo.layout              = m_shadowGrassPipelineLayout;
+    pipelineInfo.renderPass          = m_shadowRenderPass;
+    pipelineInfo.subpass             = 0;
+
+    if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_shadowGrassPipeline) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow grass pipeline");
+
+    vkDestroyShaderModule(m_device, fragMod, nullptr);
+    vkDestroyShaderModule(m_device, vertMod, nullptr);
+}
+
+void VulkanContext::createShadowGrassDescriptors() {
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSize.descriptorCount = MAX_FRAMES_IN_FLIGHT;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes    = &poolSize;
+    poolInfo.maxSets       = MAX_FRAMES_IN_FLIGHT;
+    if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_shadowGrassDescriptorPool) != VK_SUCCESS)
+        throw std::runtime_error("Failed to create shadow grass descriptor pool");
+
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_shadowGrassDescriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool     = m_shadowGrassDescriptorPool;
+    allocInfo.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
+    allocInfo.pSetLayouts        = layouts.data();
+
+    m_shadowGrassDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    if (vkAllocateDescriptorSets(m_device, &allocInfo, m_shadowGrassDescriptorSets.data()) != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate shadow grass descriptor sets");
+
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorImageInfo opacityInfo{};
+        opacityInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        opacityInfo.imageView   = m_grassOpacityTex.view;
+        opacityInfo.sampler     = m_grassOpacityTex.sampler;
+
+        VkWriteDescriptorSet write{};
+        write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet          = m_shadowGrassDescriptorSets[i];
+        write.dstBinding      = 0;
+        write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.descriptorCount = 1;
+        write.pImageInfo      = &opacityInfo;
+        vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+    }
+}
+
+// ============================================================
 //  Shadow sampler
 // ============================================================
 void VulkanContext::createShadowSampler() {
@@ -2541,7 +2759,7 @@ void VulkanContext::createShadowSampler() {
 //  Descriptor set layout
 // ============================================================
 void VulkanContext::createDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding bindings[4]{};
+    VkDescriptorSetLayoutBinding bindings[5]{};
 
     bindings[0].binding         = 0;
     bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2563,9 +2781,14 @@ void VulkanContext::createDescriptorSetLayout() {
     bindings[3].descriptorCount = 1;
     bindings[3].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    bindings[4].binding         = 4; // grass opacity mask
+    bindings[4].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[4].descriptorCount = 1;
+    bindings[4].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
     VkDescriptorSetLayoutCreateInfo info{};
     info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    info.bindingCount = 4;
+    info.bindingCount = 5;
     info.pBindings    = bindings;
 
     if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
@@ -2595,7 +2818,7 @@ void VulkanContext::createDescriptorPool() {
     poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
     poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT * 3; // shadow + grass + terrain array
+    poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT * 4; // shadow + grass color + terrain array + grass opacity
 
     VkDescriptorPoolCreateInfo info{};
     info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -2635,12 +2858,17 @@ void VulkanContext::createDescriptorSets() {
         grassInfo.imageView   = m_grassTex.view;
         grassInfo.sampler     = m_grassTex.sampler;
 
+        VkDescriptorImageInfo grassOpacityInfo{};
+        grassOpacityInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        grassOpacityInfo.imageView   = m_grassOpacityTex.view;
+        grassOpacityInfo.sampler     = m_grassOpacityTex.sampler;
+
         VkDescriptorImageInfo terrainInfo{};
         terrainInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         terrainInfo.imageView   = m_terrainTex.view;
         terrainInfo.sampler     = m_terrainTex.sampler;
 
-        VkWriteDescriptorSet writes[4]{};
+        VkWriteDescriptorSet writes[5]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet          = m_descriptorSets[i];
         writes[0].dstBinding      = 0;
@@ -2669,7 +2897,14 @@ void VulkanContext::createDescriptorSets() {
         writes[3].descriptorCount = 1;
         writes[3].pImageInfo      = &terrainInfo;
 
-        vkUpdateDescriptorSets(m_device, 4, writes, 0, nullptr);
+        writes[4].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[4].dstSet          = m_descriptorSets[i];
+        writes[4].dstBinding      = 4;
+        writes[4].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[4].descriptorCount = 1;
+        writes[4].pImageInfo      = &grassOpacityInfo;
+
+        vkUpdateDescriptorSets(m_device, 5, writes, 0, nullptr);
     }
 }
 

@@ -38,13 +38,13 @@
 |------|--------------------|------------------------|
 | Texture upload | [`examples/texture`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texture) | grass/terrain/object texture mapping의 1순위 참고. staging buffer, image layout transition, sampler, descriptor update 패턴 비교 |
 | Texture array | [`examples/texturearray`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturearray) | terrain texture mapping 3a에 적용. `sampler2DArray` view, array layer copy, descriptor update 패턴의 비교 기준 |
-| Mipmap generation | [`examples/texturemipmapgen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturemipmapgen) | alpha card, terrain texture, object texture의 원거리 shimmer를 줄이기 위한 품질 후보 |
+| Mipmap generation | [`examples/texturemipmapgen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/texturemipmapgen) | **우선 도입 대상.** 현재 모든 텍스처가 밉맵·이방성 필터링 없음 → 원거리/grazing aliasing의 주원인. 밉 생성 + 이방성 필터링부터. 상세는 `ARCHITECTURE.md` 렌더 품질 결함/로드맵 |
 | Instancing | [`examples/instancing`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/instancing) | 현재 object/grass instancing과 직접 관련. `ObjectInstance` 확장, variant index, tint, wind phase를 넣을 때 비교 |
 | Indirect draw | [`examples/indirectdraw`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/indirectdraw) | 식생/오브젝트 종류와 draw 수가 크게 늘어난 뒤 후보. 지금은 청크별 직접 draw가 단순하고 충분함 |
 | Alpha to coverage | [`examples/alphatocoverage`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/alphatocoverage) | grass alpha card 품질 개선 후보. FXAA/SMAA 이후에도 alpha edge가 거칠면 MSAA 정책과 함께 검토 |
 | Multisampling | [`examples/multisampling`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/multisampling) | AA 품질 옵션 확장 시 참고. FXAA/SMAA는 post AA로 적용 완료. MSAA/alpha-to-coverage는 alpha edge 품질이 부족할 때 별도 검토 |
-| Shadow mapping | [`examples/shadowmapping`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmapping) | 이미 구현된 shadow pass의 bias/PCF/descriptor 비교용. 구조 전환 목적은 아님 |
-| Cascaded shadow mapping | [`examples/shadowmappingcascade`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmappingcascade) | 권장 사양/품질 옵션에서 원거리 그림자 품질이 문제가 될 때 후보. 지금은 단일 shadow map 유지 |
+| Shadow mapping | [`examples/shadowmapping`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmapping) | **재참조 대상.** 현재 shadow pass에 texel snapping 부재(shimmering)·청크 캐스터 slope bias 0(acne)이 확인됨. 이 샘플의 bias/PCF/stabilization 패턴을 수정 근거로 본다. 상세는 `ARCHITECTURE.md` 렌더 품질 결함 |
+| Cascaded shadow mapping | [`examples/shadowmappingcascade`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/shadowmappingcascade) | texel snapping + 청크 bias 수정 후에도 원거리 품질이 부족하면 도입(단일 2048² 맵 한계). texel snapping 자체도 이 샘플의 stabilization 패턴 참조. 상세는 `ARCHITECTURE.md` |
 | Offscreen rendering | [`examples/offscreen`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/offscreen) | 현재 post pass와 같은 계열. 추가 후처리, 미니맵, 반사 같은 기능 전 참고 |
 | Pipeline statistics | [`examples/pipelinestatistics`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/pipelinestatistics) | DevUI GPU timestamp 다음 단계 후보. 병목이 vertex/fragment 중 어디인지 볼 때 유용 |
 | Debug utils | [`examples/debugutils`](https://github.com/SaschaWillems/Vulkan/tree/master/examples/debugutils) | RenderDoc/validation 디버깅 개선 후보. `PASTEL_DEV_BUILD` 전용 객체 이름/구간 라벨 추가에 적합 |

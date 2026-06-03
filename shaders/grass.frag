@@ -11,17 +11,22 @@ layout(binding = 0) uniform UniformBufferObject {
 
 layout(binding = 1) uniform sampler2DShadow shadowMap;
 layout(binding = 2) uniform sampler2D grassTex;
+layout(binding = 4) uniform sampler2D grassOpacityTex;
 
 layout(location = 0)      in vec3 fragNormal;
 layout(location = 1)      in vec2 fragUV;
 layout(location = 2)      in vec4 fragPosLightSpace;
 layout(location = 3)      in float fragViewDepth;
 layout(location = 4)      in vec3 fragTint;
+layout(location = 5)      in float fragFade;
+layout(location = 6)      in float fragRootShade;
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    vec4 texel = texture(grassTex, fragUV);
-    if (texel.a < 0.35) discard;
+    vec3 texel = texture(grassTex, fragUV).rgb;
+    float alpha = texture(grassOpacityTex, fragUV).r;
+    float alphaCutoff = mix(0.34, 0.12, fragFade);
+    if (alpha < alphaCutoff) discard;
 
     vec3  normal    = normalize(gl_FrontFacing ? fragNormal : -fragNormal);
     vec3  lightDir  = normalize(ubo.lightDir.xyz);
@@ -36,10 +41,10 @@ void main() {
         float bias  = mix(0.0015, 0.0003, NdotL);
         float texelSize = 1.0 / 2048.0;
         shadow = 0.0;
-        for (int x = -1; x <= 1; x++)
-            for (int y = -1; y <= 1; y++)
+        for (int x = -2; x <= 2; x++)
+            for (int y = -2; y <= 2; y++)
                 shadow += texture(shadowMap, vec3(projCoords.xy + vec2(x, y) * texelSize, projCoords.z - bias));
-        shadow /= 9.0;
+        shadow /= 25.0;
     }
     float shadowFactor = max(shadow, 0.4);
 
@@ -49,9 +54,10 @@ void main() {
     vec3 ambientTint = mix(GROUND_AMBIENT, SKY_AMBIENT, hemi);
 
     float diff = max(dot(normal, lightDir), 0.0);
-    vec3 ambient = ambientTint * mix(0.10, 0.30, dayFactor);
+    vec3 ambient = ambientTint * mix(0.14, 0.34, dayFactor);
     vec3 direct  = vec3(diff * 0.7 * dayFactor * shadowFactor);
-    vec3 litColor = texel.rgb * fragTint * (ambient + direct);
+    vec3 litColor = texel * fragTint * (ambient + direct);
+    litColor = mix(litColor, litColor * vec3(0.50, 0.58, 0.38), fragRootShade * 0.42);
 
     // Fog
     const float FOG_START = 27.0;

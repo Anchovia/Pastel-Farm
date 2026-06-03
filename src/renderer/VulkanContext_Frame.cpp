@@ -186,6 +186,42 @@ void VulkanContext::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex
                 }
             }
 
+            // Grass shadow casting disabled: thin alpha-card blades are ~1 texel wide in
+            // the shadow map, so they alias/flicker badly as the sun sweeps (DEVLOG
+            // 2026-06-03, confirmed via capture). Grass still receives shadow + uses root
+            // darkening for grounding; only the noisy casting is removed. Flip to re-enable.
+            constexpr bool kGrassCastsShadow = false;
+            if (kGrassCastsShadow && !m_shadowGrassDescriptorSets.empty()) {
+                static constexpr float GRASS_SHADOW_RADIUS = 56.0f;
+                static constexpr float GRASS_SHADOW_RADIUS_SQ = GRASS_SHADOW_RADIUS * GRASS_SHADOW_RADIUS;
+
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowGrassPipeline);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_shadowGrassPipelineLayout, 0, 1, &m_shadowGrassDescriptorSets[m_currentFrame], 0, nullptr);
+                vkCmdPushConstants(cmd, m_shadowGrassPipelineLayout,
+                    VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &m_lightMVP);
+
+                for (auto& [coord, data] : m_chunkBuffers) {
+                    if (m_grassCardMesh.count == 0 || data.grassCount == 0) continue;
+
+                    glm::vec3 chunkMin = { coord.x * CHUNK_SIZE,       coord.y * CHUNK_SIZE,       0.0f };
+                    glm::vec3 chunkMax = { (coord.x + 1) * CHUNK_SIZE, (coord.y + 1) * CHUNK_SIZE, (float)CHUNK_DEPTH };
+                    if (!lightFrustum.containsAABB(chunkMin, chunkMax)) continue;
+
+                    const glm::vec2 chunkCenter = {
+                        (coord.x + 0.5f) * (float)CHUNK_SIZE,
+                        (coord.y + 0.5f) * (float)CHUNK_SIZE
+                    };
+                    const glm::vec2 d = chunkCenter - glm::vec2(m_shadowCenter);
+                    if (glm::dot(d, d) > GRASS_SHADOW_RADIUS_SQ) continue;
+
+                    VkBuffer     bufs[] = { m_grassCardMesh.vbuf, data.grassBuffer };
+                    VkDeviceSize offs[] = { 0, 0 };
+                    vkCmdBindVertexBuffers(cmd, 0, 2, bufs, offs);
+                    vkCmdDraw(cmd, m_grassCardMesh.count, data.grassCount, 0, 0);
+                }
+            }
+
             // Player cube casts a shadow too (always inside the light box — no cull)
             {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_shadowPlayerPipeline);
@@ -537,17 +573,34 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
         m_sunDir    = glm::normalize(glm::vec3(cosf(azimuth), sinf(azimuth), elevation));
         m_dayFactor = elevation; // 0 at midnight, 1 at noon
 
-        const float range = 80.0f;
+        // Light frustum half-extent. Kept tight to the visible (un-fogged) range so
+        // the 2048 shadow map spends its resolution where it shows: fog fully hides
+        // geometry past ~57 units, so a smaller box ~doubles effective texel density
+        // and cuts the blocky-edge shimmer that crawls as the sun rotates.
+        const float range = 45.0f;
         glm::mat4 lightView = glm::lookAt(
             frame.playerPosition + m_sunDir * 150.0f,
             frame.playerPosition,
             glm::vec3(0.0f, 0.0f, 1.0f));
         glm::mat4 lightProj = glm::ortho(-range, range, -range, range, 1.0f, 300.0f);
         lightProj[1][1] *= -1.0f;
+
+        // Texel snapping: anchor the shadow texel grid to world space so the projected
+        // scene shifts in whole-texel steps. Removes per-frame shadow edge shimmering.
+        // World origin is the fixed reference; ortho keeps w == 1 so no perspective divide.
+        glm::mat4 unsnapped = lightProj * lightView;
+        glm::vec4 originLS  = unsnapped * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        float texelScale    = (float)SHADOW_MAP_SIZE * 0.5f;
+        glm::vec2 inTexels  = glm::vec2(originLS) * texelScale;
+        glm::vec2 offset    = (glm::round(inTexels) - inTexels) / texelScale;
+        lightProj[3][0]    += offset.x;
+        lightProj[3][1]    += offset.y;
+
         m_lightMVP = lightProj * lightView;
+        m_shadowCenter = frame.playerPosition;
     }
 
-    updateUniformBuffer(m_currentFrame, frame.camera);
+    updateUniformBuffer(m_currentFrame, frame.camera, frame.gameTime);
     updatePlayerInstanceBuffer(frame.playerPosition);
     updateDropInstanceBuffer(frame.drops);
     updateSelectorInstanceBuffer(frame.targetTile);
@@ -595,7 +648,7 @@ void VulkanContext::drawFrame(const FrameRenderData& frame) {
 // ============================================================
 //  Per-frame update functions
 // ============================================================
-void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& camera) {
+void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& camera, float gameTime) {
     UniformBufferObject ubo{};
     ubo.model    = glm::mat4(1.0f);
     ubo.view     = camera.view();
@@ -603,6 +656,7 @@ void VulkanContext::updateUniformBuffer(uint32_t currentFrame, const Camera& cam
     ubo.lightDir = glm::vec4(m_sunDir, m_dayFactor); // w = dayFactor (0=night, 1=noon)
     ubo.lightMVP = m_lightMVP;
     ubo.fogColor = glm::vec4(m_skyColor[0], m_skyColor[1], m_skyColor[2], 1.0f);
+    ubo.animationParams = glm::vec4(gameTime, 0.0f, 0.0f, 0.0f);
     memcpy(m_uniformBuffers[currentFrame].mapped, &ubo, sizeof(ubo));
 }
 

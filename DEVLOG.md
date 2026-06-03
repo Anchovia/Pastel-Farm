@@ -6,6 +6,51 @@ Vulkan 공부 겸 엔진 개발 기록.
 
 ## 구현 기록
 
+### 2026-06-03 — 그림자 품질 패스 + 품질/정공법 원칙 명문화
+
+**렌더링 방향 리셋 (문서/메모리):** 매 세션 저사양 워크어라운드로 회귀하던 문제를 구조적으로 차단.
+- `README`/`ARCHITECTURE`/`CLAUDE.md`/`AGENTS.md`에 **"품질 기본값"**(권장 1660 Super 예산으로 고품질 기법 기본값, 저사양 워크어라운드·제거·가짜·축소 금지)과 **"정공법 우선"**(표준·Vulkan idiomatic·확장성, 표준 기법의 스킵/무시/컷오프 금지) 원칙 명문화. "Simplicity First"는 *코드 구조*에만 적용되고 *렌더링 품질·표준성*엔 적용 안 됨을 못박음.
+- AAA 2.5D 관행 교차검증으로 ARCHITECTURE에 **"2.5D 고품질 잔디·룩 레시피"** 결정 블록 추가: 잔디 셰이딩 스택(개체 색 랜덤 → height gradient → base AO → translucency/backlight → wind → fade), 그림자 정책(캐릭터/나무/오브젝트만 실시간 shadow, 잔디는 받기만·안 쏨 + ground contact AO로 그라운딩), terrain blending, GPU-driven은 *규모상* 보류.
+
+**그림자 떨림(shimmering)/acne 작업 (uncommitted):**
+- texel snapping: 라이트 직교 투영을 월드 원점 기준 텍셀 격자에 스냅(`VulkanContext_Frame.cpp`). translation 떨림 방지용 표준 stabilization. 단독 효과는 미미 — 잔디·돌 떨림의 주원인은 해상도/얇은 그림자였음.
+- light frustum 축소 **range 80→45**: fog(57) 밖은 안 보이므로 실효 해상도 ~1.8배. **나무 그림자 떨림 확실히 개선.**
+- soft PCF **3×3→5×5** (`chunk`/`grass`/`triangle.frag`, texel 1/2048 유지).
+- **grass shadow 캐스터 비활성화** (`kGrassCastsShadow=false`): 얇은 풀 그림자는 단일 shadow map에서 ~1텍셀이라 sun sweep에 깜빡임 + PCF로 못 잡음. AAA 2.5D 표준대로 잔디는 cast 안 하고 ground contact AO로 그라운딩하는 방향 결정. 파이프라인/셰이더 완전 제거는 cleanup 예정.
+- 빌드 관찰: 나무 그림자 개선 / 잔디·돌은 잔디 캐스터 제거로 떨림 사라짐(단 그라운딩이 휑함 → 다음 트랙에서 보강).
+
+**다음 세션:** 트랙 ① 잔디 리얼리즘(translucency/backlight + 색·gradient → ground contact AO) → ② 텍스처 mipmap/이방성/terrain blending → ③ 그림자 해상도 4096/CSM+soft·소품 contact shadow → ④ 흰 화면 → ⑤ post(bloom/SSAO). 상세는 `ARCHITECTURE` "렌더 품질 결함" + "2.5D 고품질 잔디·룩 레시피".
+
+### 2026-06-03 — 풀 텍스처, blade-field, grass shadow 실험
+- 풀 렌더링을 기존 절차 alpha texture 중심에서 외부 foliage atlas 기반으로 확장했다.
+  - 기본 경로: `assets/textures/vegetation/grass_blades/color.png`
+  - opacity mask 경로: `assets/textures/vegetation/grass_blades/opacity.png`
+  - 두 파일 중 하나만 있거나 크기가 다르면 런타임 에러로 처리한다.
+  - 파일이 없으면 기존 `assets/textures/grass.png` 또는 절차 fallback으로 동작한다.
+- grass descriptor를 Color/Opacity 분리 구조로 바꿨다.
+  - 기존 grass color sampler와 별개로 opacity sampler를 binding 4에 추가했다.
+  - 일반 grass fragment shader는 opacity mask로 alpha test를 수행한다.
+  - 향후 normal/roughness/AO 같은 foliage material map을 추가할 때 color atlas를 다시 repack하지 않아도 된다.
+- Foliage006 계열 atlas에 맞춰 grass card UV rect를 직접 지정했다.
+  - 큰 clump 반복감을 줄이기 위해 낮고 촘촘한 blade-field cluster 형태를 유지한다.
+  - 풀 scale/density를 한 차례 낮춰 과한 해초 느낌을 완화했다.
+  - shader tint, root darkening, wind sway, distance fade도 함께 조정했다.
+- 시각 실험 중 풀 아래 fake contact patch를 잠깐 추가했으나 실패로 판단하고 제거했다.
+  - 별도 `grassContact` 메쉬/버퍼/렌더링은 화면에서 그림자가 아니라 동그란 얼룩처럼 보여 부적합했다.
+  - 이 경로는 현재 코드에 남기지 않았다.
+- 풀 카드 자체를 shadow pass에 넣는 실험을 추가했다.
+  - 새 셰이더: `shaders/shadow_grass.vert`, `shaders/shadow_grass.frag`
+  - CMake shader 목록과 post-build copy에 `shadow_grass.*`를 등록했다.
+  - grass shadow pipeline은 opacity mask를 샘플해 투명 부분을 `discard`하고, 가까운 청크만 shadow map에 depth를 쓴다.
+  - 현재 결과는 실제 그림자이긴 하지만, 화면에서는 길쭉한 붓자국/얼룩처럼 읽혀 어색하다.
+  - 다음 세션에서 1순위로 판단할 것: grass shadow를 강하게 제한할지, 풀 전체 shadow caster를 끄고 바닥/풀 셰이딩 쪽으로 우회할지.
+- 빌드는 사용자 담당이라 이 세션에서는 실행하지 않았다. 정적 확인으로 `git diff --check`만 통과했다.
+
+다음 세션 권장 판단:
+- 현재 `shadow_grass` 실험은 그대로 두고 먼저 높이/알파/거리/확률 제한을 강하게 걸어 본다.
+- 그래도 길쭉한 얼룩이 남으면 grass shadow pass를 제거하고, grass root shading + ground grass texture/detail + 낮은 대비 material breakup으로 방향을 바꾼다.
+- GTX 1660 Super 권장 사양 기준으로 풀은 품질 투자처지만, 화면에 티 나는 가짜 얼룩이나 과도한 개별 풀 그림자는 목표 스타일과 맞지 않는다.
+
 ### Vulkan 초기화 + 첫 삼각형
 - GLFW 창 생성 (`Window` 클래스, RAII 방식)
 - Vulkan Instance, Validation Layer, Surface, Physical/Logical Device 초기화
@@ -930,6 +975,16 @@ Vulkan 공부 겸 엔진 개발 기록.
 - `buildGrassDressingBuffer()`에서 grass 배치 확률을 `0.06 + density * 0.40` → `0.08 + density * 0.48`로 올리고, scale/jitter/variant 범위를 조금 넓혀 빈 잔디 바닥을 card가 더 채우게 했다.
 - 유저 빌드/스크린샷 검증 결과: grass가 이전보다 풍성해졌고, DevUI 기준 scene GPU 시간이 약 1.0ms 수준으로 유지됐다. 일부 균등 배치 느낌은 남아 있으므로 다음 개선은 density patch 대비, wind sway, 거리 LOD/fade, card/tint variant로 본다.
 
+### Reference grass blade-field 1차 (Task #5b)
+- 레퍼런스 스크린샷 기준으로 기존 3-card clump는 "큰 풀 오브젝트를 반복 배치한" 느낌이 강해 최종 방향으로 부적합하다고 판단했다. grass 전용 파이프라인, alpha test, instance buffer, density field, dirty gate는 유지하고, **아트 모델**만 낮고 촘촘한 blade-field로 전환했다.
+- `FrameRenderData`와 UBO에 `gameTime`/`animationParams.x`를 추가해 grass shader가 시간 기반 wind sway를 쓸 수 있게 했다. 다른 렌더 경로는 기존 UBO 필드를 그대로 사용한다.
+- `m_grassCardMesh`를 큰 3-card clump에서 여러 개의 작고 얇은 blade card cluster로 교체했다. 첫 시도는 너무 가늘고 어두워 거의 보이지 않았고, 후속 보정에서 card 폭/높이/개수, texture alpha, tint, density를 키워 화면에서 풀밭으로 읽히게 조정했다.
+- `createGrassTexture()`의 절차 RGBA mask를 두꺼운 tuft 중심에서 얇은 grass blade 중심으로 다시 그렸다. base/tip 색 대비와 alpha를 올려 현재 카메라 거리에서도 사라지지 않게 했다.
+- `buildGrassDressingBuffer()`는 dense patch에서 한 타일에 여러 작은 cluster를 만들 수 있게 바꿨다. sparse 구간은 여전히 비워 전체가 균일한 도장처럼 보이지 않게 유지한다.
+- `grass.vert`는 짧은 blade에 맞춰 약한 wind sway, per-instance tint, 거리 fade 값을 계산한다. `grass.frag`는 fade 기반 alpha cutoff를 사용하되, 가까운 풀은 충분히 남도록 cutoff를 낮췄다.
+- 유저 빌드/스크린샷 검증 결과: 첫 blade-field 시도는 거의 보이지 않았으나, 2차 보정 후 이전보다 풀밭 면으로 읽히는 결과가 나왔다. DevUI 기준 scene GPU 시간은 약 0.56ms 수준으로 여유가 있다. 다음 격차는 grass 자체보다 바닥 grass material, ground breakup, material-lite(AO/roughness/normal 선별 사용), 조명/후처리 쪽에서 줄인다.
+- 에셋 맵 운용 판단: `Color`는 즉시 바닥 material에 유효하고, `AmbientOcclusion`/`Roughness`는 material-lite에서 약하게 쓰는 후보. `Normal`은 로우폴리/플랫 셰이딩과 충돌할 수 있어 약한 강도로 검토한다. `Displacement`는 현재 구조에서 실제 변위로 바로 쓰지 않고, height mask/ground detail/density 보조 데이터로 검토한다.
+
 ---
 
 ## 게임 설계 메모
@@ -954,13 +1009,13 @@ World
 ├─ Terrain    32×32×8 청크 기반 voxel 지형
 ├─ TileState  growthStage / lastUpdatedDay / watered
 ├─ StaticProp ObjectType(tree/rock/workbench/fence/stone fence)
-└─ Dressing   grass alpha card 등 저장하지 않는 시각 레이어
+└─ Dressing   grass blade-field alpha card 등 저장하지 않는 시각 레이어
 ```
 
 - 청크는 스트리밍 단위이며, 현재 지형은 FBM 기반 절차 생성이다.
 - save v2는 수정 청크의 타일, TileState 일부, 오브젝트를 저장한다.
 - 렌더러는 청크 메시, 오브젝트 인스턴싱, grass alpha card, player/drop, post pass(FXAA/SMAA 1x), post 이후 UI overlay를 분리해 그린다.
-- 다음 비주얼 개선은 material-lite, 실제 texture file loading/authored texture, high-quality grass(wind/LOD/variant), ground dressing 텍스처화, water 전용 표현이 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
+- 다음 비주얼 개선은 ground grass texture/detail, material-lite(AO/roughness/normal 선별), grass density/색/LOD 후속 튜닝, ground dressing 텍스처화, water 전용 표현이 핵심이다. 필요하면 SMAA T2x/S2x나 MSAA/alpha-to-coverage는 별도 품질 작업으로 분리한다.
 
 ---
 

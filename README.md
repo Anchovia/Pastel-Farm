@@ -21,7 +21,8 @@
 
 ## 목표
 
-- **성능 기준**: 최소 GTX 1050 Ti / 1080p / 60fps, 권장 GTX 1660 Super급
+- **성능 기준**: 최소 GTX 1050 Ti / 1080p / 60fps, **권장 GTX 1660 Super급 — 비주얼/렌더링 작업의 기준은 권장 사양(1660 Super)이다.** 1050 Ti는 하한선이지 품질 상한이 아니다
+- **품질 기본값(저사양 워크어라운드 금지)**: 렌더링 문제를 고칠 땐 *제대로 된 고품질 기법*(고해상도/CSM 그림자, 밉맵+이방성, 실제 authored 텍스처, soft shadow, material-lite)을 1660 Super 예산 안에서 **기본값**으로 택한다. 기능 제거·가짜·축소는 최후 수단이며 임의로 택하지 않는다. 현재 미니멀해 보이는 코드(64² 텍스처, 2048 그림자맵 등)는 placeholder이지 목표가 아니다
 - **고품질 스타일라이즈드 그래픽**: 로우폴리·플랫 셰이딩은 미학적 기반이며, 저품질/초저사양 제약이 아님
 - **Vulkan 직접 사용**: 낮은 CPU 오버헤드, 렌더링 제어권 확보
 - **최적화된 최신 기법 사용**: 텍스처 매핑, 고품질 식생, AA, 그림자 품질 옵션, material-lite를 적극 검토
@@ -77,7 +78,7 @@
 - day/night 기반 sky/fog/light 변화, hemisphere ambient
 - offscreen scene → post pass tone/color grading(exposure/contrast/saturation/split-tone/vignette) + FXAA/SMAA
 - 자체 게임 UI는 post AA 이후 스왑체인에 직접 렌더링해 픽셀 폰트 선명도 유지
-- grass alpha card dressing: 절차 RGBA grass texture + 3-card clump + alpha test + density field + 청크별 dirty gate
+- grass alpha card dressing: 절차 RGBA grass texture + 낮은 blade-field cluster + alpha test + density field + shader wind/fade/tint + 청크별 dirty gate
 - authored texture loading: `assets/textures` post-build 복사 + `stb_image` RGBA8 로딩 + terrain layer별 파일 override + `grass.png` 선택적 파일 텍스처 fallback
 - DevUI(ImGui, `PASTEL_DEV_BUILD`) + GPU timestamp(total/shadow/scene/post/imgui)
 
@@ -87,7 +88,7 @@
 
 ## 다음 방향 (중간점검 후) — 상세는 `ARCHITECTURE.md` Tier
 - **Tier 1**: ✅ DevUI(ImGui) + GPU 프로파일링 · ✅ `FrameRenderData` 스냅샷 · ✅ `GpuBuffer` RAII · App-state(✅ MainMenu 클릭 UI · ✅ Settings 클릭 UI(+VSync 적용/AA 데이터) · ✅ Loading 1차 · ✅ Pause 클릭 메뉴 / 추가 옵션 예정)
-- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · ✅ high-quality grass 1차 · ✅ FXAA · ✅ SMAA 1x 1차 · ✅ terrain texture array 1차 · ✅ object texture mapping 1차 · ✅ authored texture loading 토대 · ✅ authored terrain texture override 1차 · height fog · material-lite · grass wind/LOD/variant · ground dressing texture · shadow quality options · LUT
+- **Tier 2 (비주얼)**: ✅ 카메라 댐핑 · ✅ hemisphere ambient(warm/cool) · ✅ vegetation alpha card/density/variation 1차 · ✅ reference grass blade-field 1차 · ✅ FXAA · ✅ SMAA 1x 1차 · ✅ terrain texture array 1차 · ✅ object texture mapping 1차 · ✅ authored texture loading 토대 · ✅ authored terrain texture override 1차 · height fog · material-lite(AO/roughness/normal 선별) · ground grass texture/detail · ground dressing texture · shadow quality options · LUT
 - ✅ **즉시 작은 완성도**: 오브젝트 충돌(`canOccupy` 한 줄) — 완료
 - **비목표**(당분간 X): ECS rewrite · full render graph · material node graph · RTX/full GI · full PBR 전면 전환 · mesh shader/bindless 대규모 시스템
 
@@ -171,7 +172,7 @@ pastelfarm/
 ### 렌더링 전략
 - **청크 메시 생성** — 청크별로 보이는 면만 골라 버텍스+인덱스 버퍼 직접 생성 (Hidden Face Culling), 면별 UV/layer로 terrain texture array 샘플링
 - **오브젝트 인스턴싱** — `ObjectType`별 공유 메시 + 청크별 인스턴스 그룹
-- **grass alpha card** — 절차 텍스처 + 3-card clump mesh + 청크별 인스턴스 버퍼 + density/tint/card variation
+- **grass alpha card** — 절차 텍스처 + 낮은 blade-field cluster mesh + 청크별 인스턴스 버퍼 + density/tint/wind/fade variation
 - **authored texture loading** — `assets/textures`를 실행 파일 옆으로 복사하고, `stb_image`로 RGBA8 파일 텍스처를 업로드. `assets/textures/terrain/*.png`가 있으면 terrain texture array의 해당 layer를 override
 - **플랫 셰이딩** — 면마다 단색 + 디렉셔널 라이트로 명암
 - **top/side 색상 분기** — 지형 윗면과 옆면 색상 분리
