@@ -130,6 +130,9 @@ private:
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     void transitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+    // Builds the full mip chain from level 0 via vkCmdBlitImage; leaves all levels SHADER_READ_ONLY.
+    void generateMipmaps(VkImage image, VkFormat format, int32_t width, int32_t height,
+        uint32_t mipLevels, uint32_t layerCount);
     void createInstance();
     void setupDebugMessenger();
     void createSurface();
@@ -184,10 +187,10 @@ private:
     void updateSmaaDescriptors();
     // Generic uploaded-texture helper: staging upload + image + view (+ optional sampler).
     TextureResource createTexture(uint32_t width, uint32_t height, VkFormat format,
-        const void* bytes, VkDeviceSize size, bool withSampler);
+        const void* bytes, VkDeviceSize size, bool withSampler, bool mipmapped = false);
     // Layered variant for a sampler2DArray (bytes laid out layer-major, all same size).
     TextureResource createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
-        VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler);
+        VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler, bool mipmapped = false);
     void createObjectMeshes();
     void createGrassTexture();
     void createTerrainTextureArray();
@@ -211,7 +214,8 @@ private:
     void createShadowGrassDescriptors();
     void createImage(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
-        VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory);
+        VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& memory,
+        uint32_t mipLevels = 1);
     VkFormat findDepthFormat();
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
         VkImageTiling tiling, VkFormatFeatureFlags features);
@@ -251,6 +255,8 @@ private:
     VkDebugUtilsMessengerEXT m_debugMessenger   = VK_NULL_HANDLE;
     VkSurfaceKHR             m_surface          = VK_NULL_HANDLE;
     VkPhysicalDevice         m_physicalDevice   = VK_NULL_HANDLE;
+    bool                     m_anisotropyEnabled = false; // samplerAnisotropy device feature available
+    float                    m_maxAnisotropy     = 1.0f;  // clamped to device limit (set at device creation)
     VkDevice                 m_device           = VK_NULL_HANDLE;
     VkQueue                  m_graphicsQueue    = VK_NULL_HANDLE;
     VkQueue                  m_presentQueue     = VK_NULL_HANDLE;

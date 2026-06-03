@@ -20,6 +20,7 @@ layout(location = 3)      in float fragViewDepth;
 layout(location = 4)      in vec3 fragTint;
 layout(location = 5)      in float fragFade;
 layout(location = 6)      in float fragRootShade;
+layout(location = 7)      in vec3 fragViewPos;
 layout(location = 0) out vec4 outColor;
 
 void main() {
@@ -58,6 +59,16 @@ void main() {
     vec3 direct  = vec3(diff * 0.7 * dayFactor * shadowFactor);
     vec3 litColor = texel * fragTint * (ambient + direct);
     litColor = mix(litColor, litColor * vec3(0.50, 0.58, 0.38), fragRootShade * 0.42);
+
+    // Translucency / back-light: thin blades glow warm when viewed toward the sun.
+    // Strongest looking into the light, biased to the blade tips, gated by sun + shadow.
+    vec3  Lview     = normalize((ubo.view * vec4(ubo.lightDir.xyz, 0.0)).xyz);
+    vec3  viewDir   = normalize(fragViewPos);          // eye -> fragment (view space)
+    float backlight = pow(max(dot(viewDir, Lview), 0.0), 3.0); // strongest looking toward the sun
+    float tip       = 1.0 - fragRootShade;
+    float dayGate   = smoothstep(0.0, 0.15, dayFactor);        // off only near night, keeps golden hour
+    vec3  transTint = vec3(0.95, 1.05, 0.45);
+    litColor += transTint * fragTint * backlight * tip * dayGate * shadowFactor * 0.5;
 
     // Fog
     const float FOG_START = 27.0;

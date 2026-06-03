@@ -319,3 +319,11 @@ void GameState::setTime(float t) {
     m_prevDay   = m_day; // suppress immediate growthTick on load
     m_timeOfDay = std::fmod(m_time, DAY_DURATION) / DAY_DURATION;
 }
+
+void GameState::setInventory(const std::array<ItemStack, INV_SLOTS>& inv) {
+    m_inventory = inv;
+}
+
+void GameState::setDrops(const std::vector<DroppedItem>& drops) {
+    m_drops = drops;
+}

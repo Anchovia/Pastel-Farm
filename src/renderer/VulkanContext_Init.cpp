@@ -204,7 +204,16 @@ void VulkanContext::createLogicalDevice() {
         queueInfos.push_back(qi);
     }
 
+    VkPhysicalDeviceFeatures supported{};
+    vkGetPhysicalDeviceFeatures(m_physicalDevice, &supported);
     VkPhysicalDeviceFeatures features{};
+    if (supported.samplerAnisotropy) {
+        features.samplerAnisotropy = VK_TRUE;
+        m_anisotropyEnabled = true;
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
+        m_maxAnisotropy = std::min(16.0f, props.limits.maxSamplerAnisotropy);
+    }
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -908,10 +917,12 @@ void VulkanContext::createObjectMeshes() {
 //  Grass blade textures
 // ============================================================
 void VulkanContext::createGrassTexture() {
-    auto uploadImage = [&](const LoadedImageRGBA8& image) {
+    // Color/albedo uploads as sRGB (hardware linearizes on sample); the opacity mask
+    // uploads as UNORM (raw coverage value, no gamma).
+    auto uploadImage = [&](const LoadedImageRGBA8& image, VkFormat format, bool mip) {
         const VkDeviceSize imgSize = (VkDeviceSize)image.width * (VkDeviceSize)image.height * 4;
         return createTexture((uint32_t)image.width, (uint32_t)image.height,
-            VK_FORMAT_R8G8B8A8_UNORM, image.pixels.data(), imgSize, /*withSampler=*/true);
+            format, image.pixels.data(), imgSize, /*withSampler=*/true, mip);
     };
     auto makeOpacityFromAlpha = [](const LoadedImageRGBA8& source) {
         LoadedImageRGBA8 opacity;
@@ -943,16 +954,16 @@ void VulkanContext::createGrassTexture() {
             throw std::runtime_error("Grass blade color/opacity texture size mismatch");
         }
 
-        m_grassTex = uploadImage(colorImage);
-        m_grassOpacityTex = uploadImage(opacityImage);
+        m_grassTex = uploadImage(colorImage, VK_FORMAT_R8G8B8A8_SRGB, /*mipmapped=*/true);
+        m_grassOpacityTex = uploadImage(opacityImage, VK_FORMAT_R8G8B8A8_UNORM, /*mipmapped=*/false);
         return;
     }
 
     const std::string authoredGrassPath = "assets/textures/grass.png";
     if (fileExists(authoredGrassPath)) {
         LoadedImageRGBA8 image = loadImageRGBA8(authoredGrassPath);
-        m_grassTex = uploadImage(image);
-        m_grassOpacityTex = uploadImage(makeOpacityFromAlpha(image));
+        m_grassTex = uploadImage(image, VK_FORMAT_R8G8B8A8_SRGB, /*mipmapped=*/true);
+        m_grassOpacityTex = uploadImage(makeOpacityFromAlpha(image), VK_FORMAT_R8G8B8A8_UNORM, /*mipmapped=*/false);
         return;
     }
 
@@ -1028,12 +1039,12 @@ void VulkanContext::createGrassTexture() {
     // Upload the procedural pixels through the shared texture helper. The grass card
     // pipeline samples these with their own LINEAR/CLAMP samplers (withSampler=true).
     const VkDeviceSize imgSize = (VkDeviceSize)W * H * 4;
-    m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), imgSize, /*withSampler=*/true);
+    m_grassTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_SRGB, pixels.data(), imgSize, /*withSampler=*/true, /*mipmapped=*/true);
     m_grassOpacityTex = createTexture(W, H, VK_FORMAT_R8G8B8A8_UNORM, opacityPixels.data(), imgSize, /*withSampler=*/true);
 }
 
 TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t height, uint32_t layerCount,
-    VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler)
+    VkFormat format, const void* bytes, VkDeviceSize size, bool withSampler, bool mipmapped)
 {
     TextureResource tex;
     tex.device = m_device;
@@ -1045,17 +1056,22 @@ TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t heigh
     memcpy(mapped, bytes, (size_t)size);
     vkUnmapMemory(m_device, staging.memory);
 
+    const uint32_t mipLevels = mipmapped
+        ? (uint32_t)std::floor(std::log2((float)std::max(width, height))) + 1u
+        : 1u;
+
     // createImage hardcodes arrayLayers=1, so build the array image inline here.
     VkImageCreateInfo imageInfo{};
     imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType     = VK_IMAGE_TYPE_2D;
     imageInfo.extent        = {width, height, 1};
-    imageInfo.mipLevels     = 1;
+    imageInfo.mipLevels     = mipLevels;
     imageInfo.arrayLayers   = layerCount;
     imageInfo.format        = format;
     imageInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                              (mipmapped ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0);
     imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
     if (vkCreateImage(m_device, &imageInfo, nullptr, &tex.image) != VK_SUCCESS)
@@ -1106,12 +1122,15 @@ TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t heigh
     region.imageExtent                 = {width, height, 1};
     vkCmdCopyBufferToImage(cmd, staging.buffer, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-    barrier.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        0, 0, nullptr, 0, nullptr, 1, &barrier);
+    // For mipmapped arrays, generateMipmaps() below transitions every level to SHADER_READ.
+    if (!mipmapped) {
+        barrier.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+    }
 
     vkEndCommandBuffer(cmd);
     VkSubmitInfo submit{};
@@ -1128,13 +1147,16 @@ TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t heigh
     vkFreeCommandBuffers(m_device, m_commandPool, 1, &cmd);
     // staging frees here (GpuBuffer RAII); the fence already waited on all transfers.
 
+    if (mipmapped)
+        generateMipmaps(tex.image, format, (int32_t)width, (int32_t)height, mipLevels, layerCount);
+
     VkImageViewCreateInfo vi{};
     vi.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     vi.image                       = tex.image;
     vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
     vi.format                      = format;
     vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    vi.subresourceRange.levelCount = 1;
+    vi.subresourceRange.levelCount = mipLevels;
     vi.subresourceRange.layerCount = layerCount;
     if (vkCreateImageView(m_device, &vi, nullptr, &tex.view) != VK_SUCCESS)
         throw std::runtime_error("Failed to create texture array view");
@@ -1147,7 +1169,11 @@ TextureResource VulkanContext::createTextureArray(uint32_t width, uint32_t heigh
         si.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         si.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         si.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_LINEAR; // trilinear
+        si.minLod       = 0.0f;
+        si.maxLod       = (float)mipLevels;
+        si.anisotropyEnable = m_anisotropyEnabled ? VK_TRUE : VK_FALSE;
+        si.maxAnisotropy    = m_maxAnisotropy;
         if (vkCreateSampler(m_device, &si, nullptr, &tex.sampler) != VK_SUCCESS)
             throw std::runtime_error("Failed to create texture array sampler");
     }
@@ -1324,7 +1350,7 @@ void VulkanContext::createTerrainTextureArray() {
     }
 
     const VkDeviceSize size = (VkDeviceSize)W * H * 4 * L;
-    m_terrainTex = createTextureArray(W, H, L, VK_FORMAT_R8G8B8A8_UNORM, pixels.data(), size, /*withSampler=*/true);
+    m_terrainTex = createTextureArray(W, H, L, VK_FORMAT_R8G8B8A8_SRGB, pixels.data(), size, /*withSampler=*/true, /*mipmapped=*/true);
 }
 
 // ============================================================
@@ -1534,7 +1560,7 @@ void VulkanContext::createSmaaResources() {
 }
 
 TextureResource VulkanContext::createTexture(uint32_t width, uint32_t height, VkFormat format,
-    const void* bytes, VkDeviceSize size, bool withSampler)
+    const void* bytes, VkDeviceSize size, bool withSampler, bool mipmapped)
 {
     TextureResource tex;
     tex.device = m_device;
@@ -1546,13 +1572,20 @@ TextureResource VulkanContext::createTexture(uint32_t width, uint32_t height, Vk
     memcpy(mapped, bytes, (size_t)size);
     vkUnmapMemory(m_device, staging.memory);
 
-    createImage(width, height, format, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tex.image, tex.memory);
+    const uint32_t mipLevels = mipmapped
+        ? (uint32_t)std::floor(std::log2((float)std::max(width, height))) + 1u
+        : 1u;
+    VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    if (mipmapped) usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // blit source for mip generation
+    createImage(width, height, format, VK_IMAGE_TILING_OPTIMAL, usage,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tex.image, tex.memory, mipLevels);
 
-    transitionImageLayout(tex.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    transitionImageLayout(tex.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL); // mip 0
     copyBufferToImage(staging.buffer, tex.image, width, height);
-    transitionImageLayout(tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    if (mipmapped)
+        generateMipmaps(tex.image, format, (int32_t)width, (int32_t)height, mipLevels, 1);
+    else
+        transitionImageLayout(tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     // staging frees here (GpuBuffer RAII); all transfers already waited on a fence.
 
     VkImageViewCreateInfo vi{};
@@ -1561,7 +1594,7 @@ TextureResource VulkanContext::createTexture(uint32_t width, uint32_t height, Vk
     vi.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
     vi.format                      = format;
     vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    vi.subresourceRange.levelCount = 1;
+    vi.subresourceRange.levelCount = mipLevels;
     vi.subresourceRange.layerCount = 1;
     if (vkCreateImageView(m_device, &vi, nullptr, &tex.view) != VK_SUCCESS)
         throw std::runtime_error("Failed to create texture view");
@@ -1574,7 +1607,11 @@ TextureResource VulkanContext::createTexture(uint32_t width, uint32_t height, Vk
         si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        si.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_LINEAR; // trilinear
+        si.minLod       = 0.0f;
+        si.maxLod       = (float)mipLevels;
+        si.anisotropyEnable = m_anisotropyEnabled ? VK_TRUE : VK_FALSE;
+        si.maxAnisotropy    = m_maxAnisotropy;
         if (vkCreateSampler(m_device, &si, nullptr, &tex.sampler) != VK_SUCCESS)
             throw std::runtime_error("Failed to create texture sampler");
     }

@@ -67,7 +67,7 @@
 - 제작: 작업대, 울타리, 작업대 근처 고급 레시피(돌담)
 - 오브젝트 채집/설치/철거: tree, rock, workbench, fence, stone fence
 - 오브젝트 충돌: 나무·돌·울타리·작업대 등 통과 차단
-- save v2: 수정 청크의 타일, TileState 일부, 오브젝트 직렬화
+- save v3: 수정 청크(타일·growthStage·lastUpdatedDay·watered·오브젝트) + 인벤토리 + 드롭 직렬화, atomic write(temp→rename), 로드 시 범위/enum 검증
 
 ### 렌더링 / 비주얼
 - Vulkan swapchain, depth, descriptor, sync, dynamic viewport/scissor

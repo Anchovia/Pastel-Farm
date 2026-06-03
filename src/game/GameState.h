@@ -56,6 +56,8 @@ public:
 
     void setPlayerPosition(const glm::vec3& pos);
     void setTime(float t);
+    void setInventory(const std::array<ItemStack, INV_SLOTS>& inv);
+    void setDrops(const std::vector<DroppedItem>& drops);
 
 private:
     // Adds count items of the given type to the inventory: fills an existing
